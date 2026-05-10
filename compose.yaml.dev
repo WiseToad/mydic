@@ -1,0 +1,70 @@
+services:
+  mydic-db:
+    image: postgres:17-alpine
+    container_name: mydic-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - mydic-db:/var/lib/postgresql/data
+    networks:
+      - mydic
+    ports:
+      - "${POSTGRES_EXPOSE}:5432"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  libretranslate:
+    image: libretranslate/libretranslate:latest 
+    container_name: libretranslate
+    environment:
+      LT_HOST: "0.0.0.0"
+      LT_LOAD_ONLY: ${LT_LOAD_ONLY}
+    volumes:
+      - libretranslate-data:/home/libretranslate/.local
+    networks:
+      - mydic
+    ports:
+      - "${LT_EXPOSE}:5000"
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']
+      interval: 10s
+      timeout: 4s
+      retries: 4
+      start_period: 5s
+
+  kokoro:
+    # Use the `-gpu` tag instead of `-cpu` if an NVIDIA GPU is available; the CPU image is sufficient for typical sentence-level use.
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    container_name: kokoro
+    volumes:
+      - kokoro-data:/app/api/src/models
+    networks:
+      - mydic
+    ports:
+      - "${KOKORO_EXPOSE}:8880"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0) if urllib.request.urlopen(\"http://localhost:8880/health\", timeout=2).status==200 else sys.exit(1)'"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 30s
+
+volumes:
+  mydic-db:
+  libretranslate-data:
+  kokoro-data:
+
+networks:
+  mydic:
+    name: mydic
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.name: mydic

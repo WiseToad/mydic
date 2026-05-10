@@ -1,0 +1,85 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-surface-950 text-gray-100 antialiased;
+    font-feature-settings: 'cv02', 'cv03', 'cv04';
+    cursor: default;
+  }
+
+  * {
+    cursor: inherit;
+  }
+
+  input, textarea, [contenteditable] {
+    cursor: text;
+  }
+
+  ::selection {
+    @apply bg-primary-600/40 text-white;
+  }
+
+  /* Subtle dark scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { @apply bg-surface-950; }
+  ::-webkit-scrollbar-thumb { @apply bg-surface-600 rounded-full; }
+  ::-webkit-scrollbar-thumb:hover { @apply bg-surface-600/80; }
+}
+
+@layer components {
+  /* Reusable dark card */
+  .card {
+    @apply bg-surface-900 border border-surface-700 rounded-2xl;
+  }
+
+  /* Dark form input */
+  .input {
+    @apply w-full bg-surface-800 border border-surface-700 rounded-xl px-3 py-2
+           text-sm text-gray-100 placeholder:text-gray-600
+           focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500
+           transition-colors;
+  }
+
+  /* Primary button */
+  .btn-primary {
+    @apply bg-primary-600 hover:bg-primary-500 text-white rounded-xl px-4 py-2
+           text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  /* Ghost button */
+  .btn-ghost {
+    @apply bg-surface-800 hover:bg-surface-700 text-gray-300 rounded-xl px-3 py-1.5
+           text-sm transition-colors;
+  }
+}
+
+@layer utilities {
+  /*
+   * Wordbook card highlight flash. ADSR-style envelope over 0.85s:
+   *   0–9 %   (~ 80 ms): attack / ignition
+   *   9–41 %  (~270 ms): sustain at full intensity
+   *   41–100% (~500 ms): release / fade-out
+   * Duration must stay in sync with HIGHLIGHT_MS in stores/wordbookUi.ts.
+   * Colors use the primary palette (primary-400 = 129,140,248;
+   * primary-500 = 99,102,241) so it matches the rest of the UI.
+   */
+  @keyframes wordbook-flash {
+    0%, 100% {
+      box-shadow:
+        0 0 0 0 rgba(129, 140, 248, 0),
+        0 0 0 0 rgba(99, 102, 241, 0);
+    }
+    9%, 41% {
+      box-shadow:
+        0 0 0 2px rgba(129, 140, 248, 1),
+        0 10px 15px -3px rgba(99, 102, 241, 0.45),
+        0 4px 6px -4px rgba(99, 102, 241, 0.45);
+    }
+  }
+
+  .wordbook-flash {
+    animation: wordbook-flash 0.85s ease-out;
+  }
+}

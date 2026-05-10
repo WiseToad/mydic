@@ -1,0 +1,27 @@
+# Web framework
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+python-multipart==0.0.18
+
+# Database
+sqlalchemy[asyncio]==2.0.48  # 2.0.40+ required for Python 3.14
+alembic==1.14.0
+asyncpg==0.30.0
+
+# Config & validation
+pydantic-settings==2.6.1
+
+# Auth
+argon2-cffi==23.1.0
+python-jose[cryptography]==3.3.0
+
+# HTTP client (for LibreTranslate, dictionary APIs)
+httpx==0.28.0
+
+# Context examples
+reverso-context-api==0.5
+
+# TTS: piper CLI installed as a Python wheel (abi3, works with Python 3.9+).
+# Provides the 'piper' entry point used by services/tts.py via subprocess.
+pathvalidate==3.2.1  # required by piper's __main__.py
+piper-tts @ https://github.com/OHF-Voice/piper1-gpl/releases/download/v1.4.1/piper_tts-1.4.1-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.manylinux_2_28_x86_64.whl

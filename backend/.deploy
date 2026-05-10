@@ -1,0 +1,9 @@
+alembic/
+app/
+.dockerignore
+Dockerfile
+alembic.ini
+encode-tts.py
+requirements.txt
+start.sh
+users.py

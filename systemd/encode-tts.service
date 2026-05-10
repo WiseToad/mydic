@@ -1,0 +1,15 @@
+[Unit]
+Description=MyDic TTS cache encoder
+Wants=network-online.target docker.service
+After=network-online.target docker.service
+
+# Kick alerter on failure, if any
+#OnFailure=alert@.service
+
+[Service]
+Type=oneshot
+ExecStart=docker exec -it mydic-backend /app/encode-tts.py
+
+# ffmpeg can occasionally hang on a corrupt wav
+# So add a guard to kill any run that takes longer than specified timeout
+TimeoutStartSec=3min

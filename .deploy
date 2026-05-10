@@ -1,0 +1,5 @@
+.env.sample
+README.md
+VERSION.txt
+compose.yaml.prod
+nginx.conf
