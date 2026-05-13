@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
-"""Encode cached TTS clips from wav to mp3 to reclaim disk space.
+"""
+Encode cached TTS clips from wav to mp3 to reclaim disk space.
 
 Usage:
     encode-tts.py             # one batch (default 50)

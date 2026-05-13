@@ -27,7 +27,7 @@ services:
       LT_HOST: "0.0.0.0"
       LT_LOAD_ONLY: ${LT_LOAD_ONLY}
     volumes:
-      - ./data/lt:/home/libretranslate/.local
+      - ./data/lt:/home/libretranslate
     networks:
       - mydic
     user: "${UID}:${GID}"
@@ -44,7 +44,8 @@ services:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
     container_name: kokoro
     volumes:
-      - ./data/tts/kokoro:/app/api/src/models
+      - ./data/tts/kokoro/models:/app/api/src/models
+      - ./data/tts/kokoro/cache:/.cache
     networks:
       - mydic
     user: "${UID}:${GID}"
@@ -69,24 +70,24 @@ services:
       JWT_ALGORITHM: ${JWT_ALGORITHM}
       ACCESS_TOKEN_EXPIRY_MINUTES: ${ACCESS_TOKEN_EXPIRY_MINUTES}
       REGISTRATION_ENABLED: ${REGISTRATION_ENABLED}
-      SUPPORTED_LANGS=${SUPPORTED_LANGS}
-      LIBRE_TRANSLATE_ENABLED=${LIBRE_TRANSLATE_ENABLED}
-      LIBRE_TRANSLATE_URL=http://libretranslate:5000
-      YANDEX_TRANSLATE_ENABLED=${YANDEX_TRANSLATE_ENABLED}
-      YANDEX_TRANSLATE_API_KEY=${YANDEX_TRANSLATE_API_KEY}
-      REVERSO_ENABLED=${REVERSO_ENABLED}
-      FREEDICT_ENABLED=${FREEDICT_ENABLED}
-      WIKITIONARY_ENABLED=${WIKITIONARY_ENABLED}
-      TATOEBA_ENABLED=${TATOEBA_ENABLED}
-      PIPER_ENABLED=${PIPER_ENABLED}
-      PIPER_VOICES_DIR=/app/tts/piper/voices
-      PIPER_SLOW_RATIO=${PIPER_SLOW_RATIO}
-      KOKORO_ENABLED=${KOKORO_ENABLED}
-      KOKORO_URL=http://kokoro:8880
-      #KOKORO_SLOW_RATIO=${KOKORO_SLOW_RATIO}
-      TTS_CACHE_DIR=/app/tts/cache
-      TTS_SLOW_RATIO=${TTS_SLOW_RATIO}
-      API_FAILURE_RETRY_SECONDS=${API_FAILURE_RETRY_SECONDS}
+      SUPPORTED_LANGS: ${SUPPORTED_LANGS}
+      LIBRE_TRANSLATE_ENABLED: ${LIBRE_TRANSLATE_ENABLED}
+      LIBRE_TRANSLATE_URL: http://libretranslate:5000
+      YANDEX_TRANSLATE_ENABLED: ${YANDEX_TRANSLATE_ENABLED}
+      YANDEX_TRANSLATE_API_KEY: ${YANDEX_TRANSLATE_API_KEY}
+      REVERSO_ENABLED: ${REVERSO_ENABLED}
+      FREEDICT_ENABLED: ${FREEDICT_ENABLED}
+      WIKITIONARY_ENABLED: ${WIKITIONARY_ENABLED}
+      TATOEBA_ENABLED: ${TATOEBA_ENABLED}
+      PIPER_ENABLED: ${PIPER_ENABLED}
+      PIPER_VOICES_DIR: /app/tts/piper/voices
+      PIPER_SLOW_RATIO: ${PIPER_SLOW_RATIO}
+      KOKORO_ENABLED: ${KOKORO_ENABLED}
+      KOKORO_URL: http://kokoro:8880
+      #KOKORO_SLOW_RATIO: ${KOKORO_SLOW_RATIO}
+      TTS_CACHE_DIR: /app/tts/cache
+      TTS_SLOW_RATIO: ${TTS_SLOW_RATIO}
+      API_FAILURE_RETRY_SECONDS: ${API_FAILURE_RETRY_SECONDS}
     volumes:
       - ./data/tts:/app/tts
     networks:

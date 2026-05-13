@@ -1,5 +1,17 @@
 - Add about dialog with version info
-- Leverage Kokoro TTS option of lozzy encoding initially (on pronunciation request)
+- Leverage Kokoro TTS option of lozzy encoding initially (on pronunciation request)?
+- Leverage Websockets to update UI on data change on other devices
+- Implement Android app
+- Login page by default should disallow new user registering, now it allows even if api call was failed
+- Check service endpoints (health, apidoc, etc)-  whether they exposed to Internet, and disable if it's the case
+- Fix piper-voices.toml for prod environment
+- Add wrappers in scripts dir for scripts that sit in backend docker container (user mgmt, tts-encode, etc); fix README and systemd units
+- Describe setup for background TTS encoder worker in README
+- On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
+- On audio button press, add visual spinner while generating a speech on the server (may take some noticeable time), before it gets actually played back 
+- LibreTranslate didn't loaded, investigate reasons and give instructions how to fix
+- Add icons for app
+- on Android device browser, when some translation history entry is displayed in the translator, then there is no possibility to ever type something in input panel. If cursor is placed in, then Android keyboard slides in as well, but then it immediately slides out. User is forced to clear history to be able to type or paste something in.
 
 Tests:
 - Cover all code with unit tests

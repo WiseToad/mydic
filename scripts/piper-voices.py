@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+
 """
 Manage Piper TTS voice models.
 
@@ -21,6 +22,7 @@ Usage:
     piper-voices.py download --voices KEY ...
         Download explicitly specified voice keys.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -260,10 +262,7 @@ def cmd_download(args: argparse.Namespace) -> None:
 # ---------------------------------------------------------------------------
 
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="Manage Piper TTS voice models.",
-        epilog="Run a subcommand with -h for details.",
-    )
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="command", metavar="COMMAND")
 
     p_list = sub.add_parser(

@@ -6,7 +6,7 @@ python-multipart==0.0.18
 # Database
 sqlalchemy[asyncio]==2.0.48  # 2.0.40+ required for Python 3.14
 alembic==1.14.0
-asyncpg==0.30.0
+asyncpg==0.31.0
 
 # Config & validation
 pydantic-settings==2.6.1

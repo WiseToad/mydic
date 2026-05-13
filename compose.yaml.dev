@@ -26,7 +26,7 @@ services:
       LT_HOST: "0.0.0.0"
       LT_LOAD_ONLY: ${LT_LOAD_ONLY}
     volumes:
-      - libretranslate-data:/home/libretranslate/.local
+      - libretranslate-data:/home/libretranslate
     networks:
       - mydic
     ports:
