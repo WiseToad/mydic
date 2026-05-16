@@ -2,7 +2,6 @@
 
 MyDic, your personal language companion.
 
-
 ## INSTALLATION AND USAGE
 
 Add a new user and prepare app dirs:
@@ -34,20 +33,101 @@ Start:
 docker compose up -d
 ```
 
-Download voices for piper TTS:  
-_(sudo with -u and -g options is needed for file ownership consistency within data directory)_
+At first startip, it takes some time to download Libre Translate models, Kokoro TTS voices, etc.  
+
+### Nginx Configuration
+
+Setup reverse proxy with WebSocket support:
+```nginx
+...
+client_max_body_size 10M;
+
+location / {
+    proxy_pass http://localhost:8080; # from FRONTEND_EXPOSE in app's .env
+
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+}
+...
+```
+
+### Application Users
+
+If self-registration is disabled (see `REGISTRATION_ENABLED` variable in `.env` file), then add users by hand:
+
 ```sh
-# for help, run: scripts/piper-voices.py [COMMAND] -h
-# or, see the descriptin at the top of scripts/piper-voices.py file
+/opt/mydic/scripts/users.sh add USER [--password PASS]
+```
+
+### Piper TTS voices
+
+Download voices for piper TTS:  
+```sh
+# For help, run: scripts/piper-voices.py [COMMAND] -h
+# or, see the description at the top of scripts/piper-voices.py file
+cd /opt/mydic
 sudo -u mydic -g mydic scripts/piper-voices.py list --update
 sudo -u mydic -g mydic scripts/piper-voices.py download --langs LANG ... [--type {all,medium,high}]
 ```
+sudo options -u and -g are required for file ownership consistency within `data` directory
 
-Add users:
+### TTS encode service
+
+Install background TTS encoder service:
 ```sh
-docker exec -it mydic-backend /app/users.py add USER [--password PASS]
+cd /etc/systemd/system
+sudo ln -s /opt/mydic/systemd/encode-tts.service
+sudo ln -s /opt/mydic/systemd/encode-tts.timer
+
+sudo systemctl daemon-reload
+sudo systemctl enable encode-tts.timer --now
+
+# Inspect status and logs:
+sudo systemctl status encode-tts
+sudo journalctl -u encode-tts
 ```
 
-Setup background TTS encoder worker:
+### Applying Updates
 
-==TODO==
+In order to rebuild backend container after source has been updated, do:
+```sh
+cd /opt/mydic
+docker compose build
+docker compose up -d
+```
+
+## DEVELOPMENT
+
+### Project Setup
+
+```sh
+cp .env.dev-sample .env
+cp compose.yaml.dev-sample compose.yaml
+```
+
+Edit all TODOs in `.env` file. The `compose.yaml` file typically doesn't require changes.
+
+```sh
+docker compose up -d
+```
+
+Download Piper TTS voices, if needed, as described above in installation instructions.
+
+Follow setup instructions from README in `backend` and `frontend` subdirs.
+
+### Startup and Usage
+
+Follow startup and usage instructions from README in `backend` and `frontend` subdirs.  
+Starting backend and frontend in separate consoles will cleanly provide their logs in runtime.
+
+## RELEASE
+
+First, do not forget to change version number in `VERSION.txt` file before release!
+
+Then, in order to build release package, do:
+```sh
+./build.sh
+```
+
+Target archive is in `build` subdir.

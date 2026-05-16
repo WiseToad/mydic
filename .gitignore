@@ -1,6 +1,6 @@
 /build/
 /local/
-/tts/
+/data/
 /voices/
 /.env
 /compose.yaml

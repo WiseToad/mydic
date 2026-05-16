@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 
 TARGET=mydic.tar.gz
-ANDROID_TARGET=mydic.apk
 
 cd "$(dirname "$0")"
 
@@ -22,11 +21,6 @@ rsync -ar --files-from=backend/.deploy --exclude-from=backend/.deployignore back
 mkdir -p build/target/frontend && \
 npm run build --prefix frontend && \
 cp -r frontend/dist/* build/target/frontend || exit 1
-
-# Android app
-#mkdir -p build/target/android && \
-#cp android/app/build/outputs/apk/release/${ANDROID_TARGET} "build/target/android/${ANDROID_TARGET}" &&
-#cp android/VERSION.txt build/target/android || exit 1
 
 # Target package
 tar --owner=root --group=root -czf "build/${TARGET}" -C build/target . || exit 1

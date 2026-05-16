@@ -1,31 +1,53 @@
+Deployment and maintenance:
+- Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
+
+Bugs:
+- On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
+- Pressing green checkmark in translator for word in wordbook do not scrolls to word that needs to be highlighted
+
+Bugs encountered when running in Android device browser:
+- When some translation history entry is displayed in the translator, then there is no possibility to ever type something in input panel. If cursor is placed in, then Android keyboard slides in as well, but then it immediately slides out. User is forced to clear history to be able to type or paste something in.
+- In wordbook, it's impossible to change voice by long press on audio button. Instead, the card itself is enetering dragging mode.
+- It's impossible to translate selection - the translate button do not appears. Instead, there is standard android toolbvar appeared.
+
+Not-so-critical bugs:
+- Re-translate button should be disabled in wordbook card edit mode, if translation provider is reset (translation was edited by hand)
+- Login page by default should disallow new user registering, now it allows even if api call was failed
+- On def/ctx fetch error (recoverable in advance via cache ttl), do not display "No definition/examples found" in panel. Show "Fetch error" instead
+- Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer.
+- On narrow screens (Android) shrink translation and lexical provider names
+- after individual restarting kokoro tts container, its voices become unavailable
+
+Features:
+- On audio button press, add visual spinner while generating a speech on the server (may take some noticeable time), before it gets actually played back 
+- When audio played, stop button should be redish (now there is inconsistency in stop button color - it flickers with red then becomes bluish)
+- Independent scrolling of main field and side panel in wordbook; top bar also stays at the top and not scrolls past the top of the screen
+- Add swapped display mode for wordbook
+- Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
+- Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
+- Proactive speech generation for wordbook items by separate worker job
+- A concept of currently selected card(s) in wordbook - to help find it/them when changing density, or to delete group; items lost when changing filter are excluded from list 
+- "Ephemeral details" in wordbook - clicking outside details panel closes this sub-panel; dragging detail panel selects text inside it and do not lead to dragging word card
+- clicking on detected lang in translator sets this lang as current, if it in list of enabled langs (by system and by user)
+- On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
+
+Presentation:
 - Add about dialog with version info
-- Leverage Kokoro TTS option of lozzy encoding initially (on pronunciation request)?
+- Add icons for the app
+
+Architectural:
 - Leverage Websockets to update UI on data change on other devices
 - Implement Android app
-- Login page by default should disallow new user registering, now it allows even if api call was failed
-- Check service endpoints (health, apidoc, etc)-  whether they exposed to Internet, and disable if it's the case
-- Fix piper-voices.toml for prod environment
-- Add wrappers in scripts dir for scripts that sit in backend docker container (user mgmt, tts-encode, etc); fix README and systemd units
-- Describe setup for background TTS encoder worker in README
-- On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
-- On audio button press, add visual spinner while generating a speech on the server (may take some noticeable time), before it gets actually played back 
-- LibreTranslate didn't loaded, investigate reasons and give instructions how to fix
-- Add icons for app
-- on Android device browser, when some translation history entry is displayed in the translator, then there is no possibility to ever type something in input panel. If cursor is placed in, then Android keyboard slides in as well, but then it immediately slides out. User is forced to clear history to be able to type or paste something in.
 
 Tests:
 - Cover all code with unit tests
 - Make test set for disabled, unavailable, filtered out providers and influences in frontend if provider state changes back and forth
 
-Not-so-critical:
-- Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer.
-- On def/ctx fetch error, do not display "No definition/examples found" in panel. Show "Fetch error" instead
-
 Questionable:
 - Add a list view for translation history
-- Independent scrolling of main field and side panel in wordbook (though, it's better to not hold large groups of words)
 - Search in wordbook by typing a text (though, the counterpoint is the same as above)
 - Multi-select wordbook entries for batch delete or for assigning a group or a color
+- Leverage Kokoro TTS option of lozzy encoding initially (on pronunciation request)?
 
 Distant future:
 - Metrics for inner and external api calls

@@ -45,7 +45,7 @@ services:
     container_name: kokoro
     volumes:
       - ./data/tts/kokoro/models:/app/api/src/models
-      - ./data/tts/kokoro/cache:/.cache
+      - ./data/tts/kokoro/.cache:/.cache
     networks:
       - mydic
     user: "${UID}:${GID}"
@@ -110,7 +110,6 @@ services:
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
       - ./frontend:/usr/share/nginx/html:ro
-      #- ./android:/app/android:ro
     networks:
       - mydic
     user: "${UID}:${GID}"

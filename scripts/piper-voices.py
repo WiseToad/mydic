@@ -49,7 +49,7 @@ if CONFIG_FILE.exists():
 DATA_DIR = (
     SCRIPT_DIR / config["PIPER_DATA_DIR"]
     if "PIPER_DATA_DIR" in config
-    else SCRIPT_DIR.parent / "tts" / "piper"
+    else SCRIPT_DIR.parent / "data" / "tts" / "piper"
 )
 VOICES_DIR = DATA_DIR / "voices"
 CATALOG_FILE = DATA_DIR / "voices.json"

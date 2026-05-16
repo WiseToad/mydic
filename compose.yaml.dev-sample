@@ -26,7 +26,7 @@ services:
       LT_HOST: "0.0.0.0"
       LT_LOAD_ONLY: ${LT_LOAD_ONLY}
     volumes:
-      - libretranslate-data:/home/libretranslate
+      - libretranslate:/home/libretranslate
     networks:
       - mydic
     ports:
@@ -44,7 +44,7 @@ services:
     image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
     container_name: kokoro
     volumes:
-      - kokoro-data:/app/api/src/models
+      - kokoro-models:/app/api/src/models
     networks:
       - mydic
     ports:
@@ -59,8 +59,8 @@ services:
 
 volumes:
   mydic-db:
-  libretranslate-data:
-  kokoro-data:
+  libretranslate:
+  kokoro-models:
 
 networks:
   mydic:
