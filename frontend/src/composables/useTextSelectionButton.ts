@@ -66,12 +66,36 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     }
   }
 
+  /**
+   * Hide the button and cancel the timer, but do NOT clear the selection.
+   * Used by scroll and resize handlers so that the Android virtual keyboard
+   * is not dismissed: on Android Chrome, calling removeAllRanges() while an
+   * input is focused causes the browser to drop focus and close the keyboard.
+   * The resize event fires when the keyboard itself opens (viewport shrinks),
+   * so we must avoid removeAllRanges() in that path.
+   */
+  function dismissSilently() {
+    clearTimer()
+    buttonVisible.value = false
+    selectedText.value = ''
+  }
+
+  /**
+   * Hide the button AND clear the text selection. Only called for explicit
+   * user-initiated actions (e.g. clicking the floating translate button)
+   * where deselecting the highlighted text is intentional.
+   */
+  function dismiss() {
+    dismissSilently()
+    window.getSelection()?.removeAllRanges()
+  }
+
   onMounted(() => {
     document.addEventListener('selectionchange', onSelectionChange)
     document.addEventListener('mouseup', onPointerUp)
     document.addEventListener('touchend', onPointerUp)
-    window.addEventListener('scroll', dismiss, { passive: true })
-    window.addEventListener('resize', dismiss)
+    window.addEventListener('scroll', dismissSilently, { passive: true })
+    window.addEventListener('resize', dismissSilently)
   })
 
   onUnmounted(() => {
@@ -79,16 +103,9 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     document.removeEventListener('selectionchange', onSelectionChange)
     document.removeEventListener('mouseup', onPointerUp)
     document.removeEventListener('touchend', onPointerUp)
-    window.removeEventListener('scroll', dismiss)
-    window.removeEventListener('resize', dismiss)
+    window.removeEventListener('scroll', dismissSilently)
+    window.removeEventListener('resize', dismissSilently)
   })
-
-  function dismiss() {
-    clearTimer()
-    buttonVisible.value = false
-    selectedText.value = ''
-    window.getSelection()?.removeAllRanges()
-  }
 
   return { selectedText, buttonVisible, buttonLeft, buttonTop, dismiss }
 }
