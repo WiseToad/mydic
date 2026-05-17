@@ -19,10 +19,13 @@ Not-so-critical bugs:
 - after individual restarting kokoro tts container, its voices become unavailable
 
 Features:
+- Libre Translate API key support
+- "Pluggable" docker compose files for resource-consuming containers
 - On audio button press, add visual spinner while generating a speech on the server (may take some noticeable time), before it gets actually played back 
-- When audio played, stop button should be redish (now there is inconsistency in stop button color - it flickers with red then becomes bluish)
+- When audio played, stop button should be always redish (now there is inconsistency - button flickers with red then quickly becomes bluish)
 - Independent scrolling of main field and side panel in wordbook; top bar also stays at the top and not scrolls past the top of the screen
 - Add swapped display mode for wordbook
+- dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
 - Proactive speech generation for wordbook items by separate worker job
@@ -30,6 +33,7 @@ Features:
 - "Ephemeral details" in wordbook - clicking outside details panel closes this sub-panel; dragging detail panel selects text inside it and do not lead to dragging word card
 - clicking on detected lang in translator sets this lang as current, if it in list of enabled langs (by system and by user)
 - On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
+- Search for correlations between word cards woth llm using cached definitions
 
 Presentation:
 - Add about dialog with version info

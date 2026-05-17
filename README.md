@@ -11,7 +11,7 @@ sudo useradd -r -d /opt/mydic -s /usr/sbin/nologin mydic
 sudo mkdir -p /opt/mydic
 cd /opt/mydic
 
-sudo mkdir -p data/db data/lt data/tts/cache data/tts/piper/voices data/tts/kokoro/cache data/tts/kokoro/models
+sudo mkdir -p data/db data/lt data/tts/cache data/tts/piper/voices data/tts/kokoro/.cache data/tts/kokoro/models
 sudo chown -R mydic:mydic data/db data/lt data/tts
 ```
 
@@ -19,7 +19,10 @@ Obtain and deploy package:
 ```sh
 wget -q -O - https://github.com/WiseToad/mydic/releases/latest/download/mydic.tar.gz | sudo tar -xzf -
 
-sudo chgrp mydic scripts/piper-voices.py
+sudo chgrp mydic scripts/piper-voices.py scripts/piper-voices.py
+
+# optional, but desirable
+sudo usermod -aG mydic {YOURUSER}
 ```
 
 Configure:
@@ -33,7 +36,7 @@ Start:
 docker compose up -d
 ```
 
-At first startip, it takes some time to download Libre Translate models, Kokoro TTS voices, etc.  
+At first startip, it takes some time to download models, build backend, etc.
 
 ### Nginx Configuration
 
@@ -72,7 +75,7 @@ sudo -u mydic -g mydic scripts/piper-voices.py download --langs LANG ... [--type
 ```
 sudo options -u and -g are required for file ownership consistency within `data` directory
 
-### TTS encode service
+### TTS encoder service
 
 Install background TTS encoder service:
 ```sh

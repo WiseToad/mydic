@@ -8,7 +8,7 @@ After=network-online.target docker.service
 
 [Service]
 Type=oneshot
-ExecStart=docker exec -it mydic-backend /app/encode-tts.py
+ExecStart=docker exec mydic-backend /app/encode-tts.py
 
 # ffmpeg can occasionally hang on a corrupt wav
 # So add a guard to kill any run that takes longer than specified timeout
