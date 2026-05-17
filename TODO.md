@@ -17,6 +17,7 @@ Not-so-critical bugs:
 - Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer.
 - On narrow screens (Android) shrink translation and lexical provider names
 - after individual restarting kokoro tts container, its voices become unavailable
+- in narrow layouts, when translation and translated panels are rearranged vertically, they should: 1) reduce their heights a bit to occupy less space; 2) be of equal heights (now the translated panel is less in height than input panel in such a layout)
 
 Features:
 - Libre Translate API key support
@@ -34,6 +35,8 @@ Features:
 - clicking on detected lang in translator sets this lang as current, if it in list of enabled langs (by system and by user)
 - On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
 - Search for correlations between word cards woth llm using cached definitions
+- After cleaning up translation text by button, incl/ long press on swap button, focus should be moved directly into edit box
+- clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 
 Presentation:
 - Add about dialog with version info

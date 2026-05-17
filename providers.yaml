@@ -1,0 +1,39 @@
+services:
+  libretranslate:
+    container_name: libretranslate
+    image: libretranslate/libretranslate:latest
+    profiles:
+      - libretranslate
+    environment:
+      LT_HOST: "0.0.0.0"
+      LT_LOAD_ONLY: ${LT_LOAD_ONLY}
+    volumes:
+      - ${LT_DATA_DIR:-libretranslate}:/home/libretranslate
+    networks:
+      - mydic
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', './venv/bin/python scripts/healthcheck.py']
+      interval: 10s
+      timeout: 4s
+      retries: 4
+      start_period: 5s
+
+  kokoro:
+    container_name: kokoro
+    # Use the `-gpu` tag instead of `-cpu` if an NVIDIA GPU is available; the CPU image is sufficient for typical sentence-level use
+    image: ghcr.io/remsky/kokoro-fastapi-cpu:latest
+    profiles:
+      - kokoro
+    volumes:
+      - ${KOKORO_MODELS_DIR:-kokoro-models}:/app/api/src/models
+      - ${KOKORO_CACHE_DIR:-kokoro-cache}:/.cache
+    networks:
+      - mydic
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; sys.exit(0) if urllib.request.urlopen(\"http://localhost:8880/health\", timeout=2).status==200 else sys.exit(1)'"]
+      interval: 10s
+      timeout: 4s
+      retries: 5
+      start_period: 30s

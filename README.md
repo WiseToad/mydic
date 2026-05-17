@@ -2,7 +2,7 @@
 
 MyDic, your personal language companion.
 
-## INSTALLATION AND USAGE
+## INSTALLATION
 
 Add a new user and prepare app dirs:
 ```sh
@@ -11,18 +11,24 @@ sudo useradd -r -d /opt/mydic -s /usr/sbin/nologin mydic
 sudo mkdir -p /opt/mydic
 cd /opt/mydic
 
-sudo mkdir -p data/db data/lt data/tts/cache data/tts/piper/voices data/tts/kokoro/.cache data/tts/kokoro/models
+sudo mkdir -p data/db data/lt data/tts/cache
+sudo mkdir -p data/tts/piper/voices
+sudo mkdir -p data/tts/kokoro/.cache data/tts/kokoro/models
+
 sudo chown -R mydic:mydic data/db data/lt data/tts
 ```
 
-Obtain and deploy package:
+Optional, but desirable step for running some maintenance scripts without `sudo`:
 ```sh
-wget -q -O - https://github.com/WiseToad/mydic/releases/latest/download/mydic.tar.gz | sudo tar -xzf -
-
-sudo chgrp mydic scripts/piper-voices.py scripts/piper-voices.py
-
-# optional, but desirable
 sudo usermod -aG mydic {YOURUSER}
+```
+
+Deploy package:
+```sh
+wget -qO - https://github.com/WiseToad/mydic/releases/latest/download/mydic.tar.gz \
+| sudo tar -xzf -
+
+sudo chgrp mydic scripts/piper-voices.py scripts/users.sh
 ```
 
 Configure:
@@ -31,12 +37,12 @@ sudo cp .env.sample .env
 ```
 Edit all TODOs in `.env` file.
 
-Start:
+Start services:
 ```sh
 docker compose up -d
 ```
 
-At first startip, it takes some time to download models, build backend, etc.
+At first startip, it takes some time to build backend and download models.
 
 ### Nginx Configuration
 
@@ -63,7 +69,7 @@ If self-registration is disabled (see `REGISTRATION_ENABLED` variable in `.env` 
 /opt/mydic/scripts/users.sh add USER [--password PASS]
 ```
 
-### Piper TTS voices
+### Piper TTS Voices
 
 Download voices for piper TTS:  
 ```sh
@@ -75,9 +81,9 @@ sudo -u mydic -g mydic scripts/piper-voices.py download --langs LANG ... [--type
 ```
 sudo options -u and -g are required for file ownership consistency within `data` directory
 
-### TTS encoder service
+### TTS Encoder Service
 
-Install background TTS encoder service:
+Install background TTS encoder systemd service:
 ```sh
 cd /etc/systemd/system
 sudo ln -s /opt/mydic/systemd/encode-tts.service
@@ -86,18 +92,42 @@ sudo ln -s /opt/mydic/systemd/encode-tts.timer
 sudo systemctl daemon-reload
 sudo systemctl enable encode-tts.timer --now
 
-# Inspect status and logs:
+# Inspect job status and logs:
 sudo systemctl status encode-tts
 sudo journalctl -u encode-tts
 ```
 
-### Applying Updates
+## UPGRADE
+
+In order to upgrade to a new version, do the following.
+
+Stop services:
+```sh
+cd /opt/mydic
+docker compose down
+```
+
+Then:
+- deploy package as described in installation instructions above
+- apply migration instructions, if any
+- start services, as described above
+
+Below there are some common instructions for actions that need to be done depending on changes been made in update.
+
+### Backend
 
 In order to rebuild backend container after source has been updated, do:
 ```sh
 cd /opt/mydic
 docker compose build
-docker compose up -d
+```
+
+### Systemd Services
+
+If systemd unit files was changed, do:
+
+```sh
+sudo systemctl daemon-reload
 ```
 
 ## DEVELOPMENT
