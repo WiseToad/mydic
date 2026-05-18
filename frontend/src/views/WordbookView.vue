@@ -368,7 +368,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookUiStore, type DensityLevel } from '@/stores/wordbookUi'
 import { useWordbookGroupsStore, type WordGroup } from '@/stores/wordbookGroups'
@@ -1073,8 +1073,13 @@ function onDragEnd() {
 }
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
+// True while this view is the active route. Used to prevent the
+// pendingHighlightId watcher from consuming the ID before the kept-alive view
+// has actually been activated and is ready to scroll.
+const viewIsActive = ref(false)
 
 onMounted(async () => {
+  viewIsActive.value = true
   await Promise.all([store.fetchEntries(), groupsStore.fetchGroups()])
   uiStore.prune(store.entries.map((e) => e.id))
   await handlePendingHighlight()
@@ -1099,13 +1104,20 @@ onBeforeUnmount(() => {
 // Re-activated from <KeepAlive> when the user navigates back to this view
 // (e.g. from TranslatorView via the “already in wordbook” checkmark).
 onActivated(() => {
+  viewIsActive.value = true
   handlePendingHighlight()
 })
 
+onDeactivated(() => {
+  viewIsActive.value = false
+})
+
 // Defensive: if a pending highlight is set while the view is already active,
-// react to it without waiting for the next activation.
+// react to it without waiting for the next activation. The active-view guard
+// prevents the ID from being consumed during navigation before this view is
+// ready to perform the scroll.
 watch(
   () => uiStore.pendingHighlightId,
-  (id) => { if (id !== null) handlePendingHighlight() },
+  (id) => { if (id !== null && viewIsActive.value) handlePendingHighlight() },
 )
 </script>

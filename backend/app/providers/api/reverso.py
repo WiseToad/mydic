@@ -109,6 +109,8 @@ class ReversoProvider(Provider, LexicalProvider, ContextProvider):
         if self._cache and key is not None:
             cached = await self._cache.get_context(key)
             if cached is not None:
+                if cached.failed:
+                    raise RuntimeError("Fetch error, please try later")
                 return cached.value if cached.value is not None else []
 
         try:
@@ -166,6 +168,8 @@ class ReversoProvider(Provider, LexicalProvider, ContextProvider):
         if self._cache and key is not None:
             cached = await self._cache.get_lexical(key)
             if cached is not None:
+                if cached.failed:
+                    raise RuntimeError("Fetch error, please try later")
                 return cached.value if cached.value is not None else []
 
         try:

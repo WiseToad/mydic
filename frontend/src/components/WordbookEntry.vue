@@ -97,7 +97,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
               </div>
               <button
                 title="Re-translate"
-                :disabled="!editSource.trim() || retranslating || selectedProviderUnusable"
+                :disabled="!editSource.trim() || retranslating || !editProviderCode || selectedProviderUnusable"
                 class="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-primary-400 hover:bg-primary-500/10 disabled:opacity-40 transition-colors"
                 @click="retranslateEdit"
               >

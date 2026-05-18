@@ -4,13 +4,16 @@
       :title="buttonTitle"
       :disabled="!text"
       :class="[
-        'inline-flex items-center justify-center rounded-full transition-colors disabled:opacity-30 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center rounded-full disabled:opacity-30 disabled:cursor-not-allowed',
+        isPlaying ? '' : 'transition-colors',
         size === 'sm' ? 'w-6 h-6' : 'w-8 h-8',
-        isPlaying
-          ? 'text-primary-400 hover:text-red-400 hover:bg-red-500/10'
-          : isSlow
-            ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
-            : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
+        isGenerating
+          ? 'text-gray-400 hover:text-gray-300'
+          : isPlaying
+            ? 'text-red-400 hover:text-red-300 hover:bg-red-500/10'
+            : isSlow
+              ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
+              : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
       ]"
       @click.stop="onClick"
       @pointerdown.stop="onPointerDown"
@@ -19,8 +22,13 @@
       @pointercancel="onPointerUp"
       @contextmenu.prevent
     >
+      <!-- Spinner while server is generating audio -->
+      <svg v-if="isGenerating" xmlns="http://www.w3.org/2000/svg" :class="['animate-spin', size === 'sm' ? 'w-4 h-4' : 'w-5 h-5']" viewBox="0 0 24 24" fill="none">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+      </svg>
       <!-- Stop icon when playing -->
-      <svg v-if="isPlaying" xmlns="http://www.w3.org/2000/svg" :class="size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'" viewBox="0 0 24 24" fill="currentColor">
+      <svg v-else-if="isPlaying" xmlns="http://www.w3.org/2000/svg" :class="size === 'sm' ? 'w-4 h-4' : 'w-5 h-5'" viewBox="0 0 24 24" fill="currentColor">
         <path d="M6 6h12v12H6z"/>
       </svg>
       <!-- Speaker icon when idle (color shifts to amber while in slow-on-repeat mode). -->
@@ -116,6 +124,7 @@ const toast = useToastStore()
 const rootRef = ref<HTMLElement | null>(null)
 const popupRef = ref<HTMLElement | null>(null)
 const isPlaying = ref(false)
+const isGenerating = ref(false)
 
 const popupVisible = ref(false)
 const popupLeft = ref(0)
@@ -144,6 +153,7 @@ function isCurrentDefault(choice: { provider: ProviderItem; voice: TtsVoiceItem 
 }
 
 const buttonTitle = computed(() => {
+  if (isGenerating.value) return 'Generating… (click to cancel)'
   if (isPlaying.value) return 'Stop'
   return isSlow.value ? `${props.title} (slow)` : props.title
 })
@@ -170,7 +180,7 @@ async function _play(
   override?: { provider: string; voice: string; forceSpeed?: TtsSpeed },
 ) {
   if (!props.text) return
-  if (isPlaying.value) {
+  if (isPlaying.value || isGenerating.value) {
     stopTts()
     return
   }
@@ -194,14 +204,23 @@ async function _play(
   // cannot infer that, so we narrow explicitly.
   if (!resolvedProvider) return
 
-  isPlaying.value = true
+  isGenerating.value = true
   let result: PlaybackResult
   try {
-    result = await playTts(props.text, props.lang, { speed, provider: resolvedProvider, voice: resolvedVoice })
+    result = await playTts(
+      props.text, props.lang,
+      { speed, provider: resolvedProvider, voice: resolvedVoice },
+      () => {
+        // Audio has started playing — transition from spinner to stop-button.
+        isGenerating.value = false
+        isPlaying.value = true
+      },
+    )
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Could not play audio'))
     return
   } finally {
+    isGenerating.value = false
     isPlaying.value = false
   }
 
@@ -328,7 +347,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   // #4: a button being unmounted (e.g. wordbook card filtered out) must
   // stop any playback it initiated and release any slow ownership it held.
-  if (isPlaying.value) stopTts()
+  if (isPlaying.value || isGenerating.value) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()
 })
 </script>

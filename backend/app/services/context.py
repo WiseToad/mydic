@@ -33,7 +33,4 @@ async def get_context_examples(
         return []
     if not isinstance(p, ContextProvider):
         return []
-    try:
-        return await p.get_context_examples(text, source_lang, target_lang)
-    except Exception:
-        return []
+    return await p.get_context_examples(text, source_lang, target_lang)

@@ -1,7 +1,7 @@
 services:
   db:
     extends:
-      file: db.yaml
+      file: core.yaml
       service: db
     ports:
       - "${POSTGRES_EXPOSE}:5432"

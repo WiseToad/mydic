@@ -33,7 +33,4 @@ async def get_lexical_matches(
         source_lang, target_lang
     ):
         return []
-    try:
-        return await p.get_lexical_matches(word, source_lang, target_lang)
-    except Exception:
-        return []
+    return await p.get_lexical_matches(word, source_lang, target_lang)

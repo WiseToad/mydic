@@ -434,7 +434,7 @@ async function fetchMatches() {
     emit('providerChanged', usedCode)
   } catch (e: unknown) {
     if (seq !== _fetchSeq) return  // a newer fetch superseded this one
-    errorMsg.value = extractErrorMessage(e, 'Failed to fetch matches')
+    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try later')
     state.value = 'error'
   } finally {
     if (seq === _fetchSeq) emit('fetched', matches.value)

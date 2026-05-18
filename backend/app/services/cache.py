@@ -28,12 +28,15 @@ T = TypeVar("T")
 class Cached(Generic[T]):
     """Wraps a single cached value.
 
-    ``value`` may be ``None`` for a valid 'not found' result or to represent
-    a within-retry-window failed entry.  Callers distinguish "use this value"
-    from "go fetch" solely by whether this wrapper is returned at all.
+    ``value`` may be ``None`` for a valid 'not found' result.
+    ``failed=True`` indicates the cache entry represents a within-retry-window
+    provider failure — callers should raise an error rather than return empty.
+    Callers distinguish "use this value" from "go fetch" solely by whether
+    this wrapper is returned at all.
     """
 
     value: T | None
+    failed: bool = False
 
 
 # ---------------------------------------------------------------------------

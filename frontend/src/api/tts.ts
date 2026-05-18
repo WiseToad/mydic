@@ -138,11 +138,17 @@ export function stopTts(): void {
  * Resolves with ``'completed'`` when the audio reaches its natural end,
  * or ``'interrupted'`` when stopped externally.  Rejects on fetch / playback
  * errors so the caller can surface a toast.
+ *
+ * @param onPlaybackStarted  Optional callback invoked the moment audio
+ *   playback actually begins (i.e. after the server-side synthesis is done
+ *   and the browser starts playing).  Useful for transitioning spinner →
+ *   stop-button indicators in the caller.
  */
 export async function playTts(
   text: string,
   lang: string,
   options: TtsOptions,
+  onPlaybackStarted?: () => void,
 ): Promise<PlaybackResult> {
   _stopCurrent()
 
@@ -196,6 +202,7 @@ export async function playTts(
 
     audio.onended = () => settleOk('completed')
     audio.onerror = () => settleError(new Error('Audio playback failed'))
-    audio.play().catch((e) => settleError(e instanceof Error ? e : new Error(String(e))))
+    const playPromise = audio.play()
+    playPromise.then(() => onPlaybackStarted?.()).catch((e) => settleError(e instanceof Error ? e : new Error(String(e))))
   })
 }

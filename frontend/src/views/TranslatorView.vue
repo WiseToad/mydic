@@ -63,13 +63,21 @@
       </button>
     </div>
 
-    <!-- Single unified card. Sub-panels share the card background;
+      <!-- Single unified card. Sub-panels share the card background;
          thin dividers separate columns and rows instead of color difference. -->
     <div class="card overflow-hidden">
       <!-- Input / Result row -->
-      <div class="flex flex-col md:flex-row">
+      <!--
+        On mobile the two panels stack vertically and must be equal height.
+        A CSS grid with `grid-template-rows: minmax(0,1fr) auto minmax(0,1fr)`
+        and a fixed container height achieves this: both panel rows get exactly
+        half the available height regardless of content length. On desktop
+        (md:) the layout switches to a single-row three-column grid so panels
+        sit side-by-side and stretch to equal height automatically.
+      -->
+      <div class="grid h-96 md:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] md:[grid-template-rows:auto] md:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <!-- Source panel -->
-        <div class="flex-1 p-4 flex flex-col gap-2">
+        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto md:overflow-visible">
           <div class="flex items-center gap-2 h-8">
             <select v-model="store.sourceLang" class="bg-surface-800 border border-surface-700 text-gray-200 rounded-lg px-2.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-colors" @change="retranslate">
               <option value="auto">Auto-detect</option>
@@ -124,10 +132,11 @@
             </button>
           </div>
           <textarea
+            ref="inputTextareaRef"
             v-model="store.inputText"
             placeholder="Enter text to translate…"
-            rows="5"
-            class="w-full resize-none font-medium text-gray-100 placeholder:text-gray-600 bg-transparent focus:outline-none leading-relaxed"
+            rows="4"
+            class="w-full flex-1 resize-none font-medium text-gray-100 placeholder:text-gray-600 bg-transparent focus:outline-none leading-relaxed overflow-y-auto"
             @input="onInput"
             @keydown.ctrl.enter.prevent="onCtrlEnter"
           />
@@ -137,12 +146,11 @@
           </div>
         </div>
 
-        <!-- Vertical divider (desktop) / horizontal divider (mobile) -->
-        <div :class="['hidden md:block w-px bg-surface-700 mt-4', { 'mb-4': !store.result }]" />
-        <div class="md:hidden h-px bg-surface-700" />
+        <!-- Unified divider: horizontal on mobile, vertical on desktop -->
+        <div class="h-px md:h-auto md:w-px bg-surface-700 md:mt-4" :class="{ 'md:mb-4': !store.result }" />
 
         <!-- Result panel -->
-        <div class="flex-1 p-4 flex flex-col gap-2">
+        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto md:overflow-visible">
           <div class="flex items-center gap-2 h-8">
             <!-- Target lang select hidden when no enabled langs exist and no history entry to display -->
             <select
@@ -239,7 +247,7 @@
           <p v-else-if="translationProvidersLoaded && translationDropdownVisible && !effectiveTranslationCode" class="flex-1 font-medium text-gray-500 italic">Provider unavailable.</p>
           <!-- API error (red): only shown when no passive condition applies -->
           <div v-else-if="store.error" class="flex-1 text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{{ store.error }}</div>
-          <p v-else-if="store.result && translationProvidersLoaded" ref="resultContainerRef" class="text-medium leading-relaxed whitespace-pre-wrap flex-1">
+          <p v-else-if="store.result && translationProvidersLoaded" ref="resultContainerRef" class="text-medium leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto">
             {{ store.result.translated_text }}
           </p>
           <!-- <p v-else class="flex-1 font-medium text-gray-600">Translation will appear here…</p> -->
@@ -410,7 +418,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
 import { useLanguageSettingsStore } from '@/stores/languageSettings'
@@ -511,6 +519,7 @@ const isAlreadyInWordbook = computed(() => {
 })
 
 const ctxExamplesRef = ref<InstanceType<typeof ContextExamples> | null>(null)
+const inputTextareaRef = ref<HTMLTextAreaElement | null>(null)
 const detailsVisible = ref(false)
 const showClearHistoryDialog = ref(false)
 
@@ -1077,6 +1086,7 @@ function clearInput() {
     clearTimeout(debounceTimer)
     debounceTimer = null
   }
+  nextTick(() => inputTextareaRef.value?.focus())
 }
 
 /**

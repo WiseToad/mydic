@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth.dependencies import get_current_user
@@ -42,10 +42,15 @@ async def lexical_matches(
     Backed by Reverso Context's bilingual word index (corpus-frequency ranked).
     Results are cached in the DB per-provider after the first fetch.
     """
-    matches = await get_lexical_matches(
-        word.strip(),
-        source_lang,
-        target_lang,
-        provider_code=provider_code,
-    )
+    try:
+        matches = await get_lexical_matches(
+            word.strip(),
+            source_lang,
+            target_lang,
+            provider_code=provider_code,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Fetch error, please try later")
     return {"matches": matches}

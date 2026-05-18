@@ -6,7 +6,7 @@ import type { User } from '@/types'
 export const useAuthStore = defineStore('auth', () => {
   const token = ref<string | null>(localStorage.getItem('mydicToken'))
   const user = ref<User | null>(null)
-  const registrationEnabled = ref(true)
+  const registrationEnabled = ref(false)
 
   const isLoggedIn = computed(() => token.value !== null)
 
@@ -29,7 +29,7 @@ export const useAuthStore = defineStore('auth', () => {
       const cfg = await authApi.getAppConfig()
       registrationEnabled.value = cfg.registration_enabled
     } catch {
-      // keep the default (true) on network error
+      // keep the default (false) on network error — fail-safe, disallow registration
     }
   }
 

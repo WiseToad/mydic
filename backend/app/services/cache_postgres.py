@@ -72,7 +72,7 @@ class PostgresCacheService(CacheService):
             return None
         if row.failed:
             if not self._is_stale(row.fetched_at):
-                return Cached(None)  # within retry window — suppress API call
+                return Cached(None, failed=True)  # within retry window — suppress API call
             return None  # window expired — trigger re-fetch
         return Cached({
             "translated_text": row.translated_text,
@@ -145,7 +145,7 @@ class PostgresCacheService(CacheService):
             return None
         if row.failed:
             if not self._is_stale(row.fetched_at):
-                return Cached(None)
+                return Cached(None, failed=True)
             return None
         # Treat the not-found sentinel (or legacy empty-dict entries) as a
         # valid "not found" result without re-fetching.
@@ -213,7 +213,7 @@ class PostgresCacheService(CacheService):
             return None
         if row.failed:
             if not self._is_stale(row.fetched_at):
-                return Cached(None)
+                return Cached(None, failed=True)
             return None
         return Cached(row.examples)
 
@@ -273,7 +273,7 @@ class PostgresCacheService(CacheService):
             return None
         if row.failed:
             if not self._is_stale(row.fetched_at):
-                return Cached(None)
+                return Cached(None, failed=True)
             return None
         return Cached(row.matches)
 

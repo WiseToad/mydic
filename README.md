@@ -31,13 +31,17 @@ wget -qO - https://github.com/WiseToad/mydic/releases/latest/download/mydic.tar.
 sudo chgrp mydic scripts/piper-voices.py scripts/users.sh
 ```
 
-Configure:
+### Service Configuration
+
 ```sh
 sudo cp .env.sample .env
 ```
 Edit all TODOs in `.env` file.
 
-Start services:
+Some containerized providers are quite resource consuming. If you deploy your services onto a resource-limited environment, you may disable launch of such containers. To do so, remove these providers from `COMPOSE_PROFILES` comma-separated list in the `.env` file. And set corresponding `{PROVIDER}_ENABLED` variables for these providers to `false` as well.
+
+### Service Startup
+
 ```sh
 docker compose up -d
 ```
@@ -110,13 +114,18 @@ docker compose down
 Then:
 - deploy package as described in installation instructions above
 - apply migration instructions, if any
-- start services, as described above
 
-Below there are some common instructions for actions that need to be done depending on changes been made in update.
+Finaly, start the services:
+```sh
+cd /opt/mydic
+docker compose up -d
+```
+
+Below there are some common instructions that need to be done during update, depending on changes been made in update.
 
 ### Backend
 
-In order to rebuild backend container after source has been updated, do:
+If backend source code was changed, do:
 ```sh
 cd /opt/mydic
 docker compose build

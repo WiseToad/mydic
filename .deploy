@@ -2,4 +2,6 @@
 README.md
 VERSION.txt
 compose.yaml.prod
+core.yaml
 nginx.conf
+providers.yaml

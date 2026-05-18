@@ -48,9 +48,14 @@ async def definition(
     provider_code: str = Query(..., max_length=50),
     current_user: User = Depends(get_current_user),
 ):
-    result = await get_definition(
-        word.strip(), lang, provider_code=provider_code
-    )
+    try:
+        result = await get_definition(
+            word.strip(), lang, provider_code=provider_code
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Fetch error, please try later")
     if result is None:
         raise HTTPException(status_code=404, detail="No definition found")
     return result
@@ -64,10 +69,15 @@ async def context_examples(
     provider_code: str = Query(..., max_length=50),
     current_user: User = Depends(get_current_user),
 ):
-    examples = await get_context_examples(
-        text.strip(),
-        source_lang,
-        target_lang,
-        provider_code=provider_code,
-    )
+    try:
+        examples = await get_context_examples(
+            text.strip(),
+            source_lang,
+            target_lang,
+            provider_code=provider_code,
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=503, detail="Fetch error, please try later")
     return {"examples": examples}
