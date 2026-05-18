@@ -72,12 +72,12 @@
         A CSS grid with `grid-template-rows: minmax(0,1fr) auto minmax(0,1fr)`
         and a fixed container height achieves this: both panel rows get exactly
         half the available height regardless of content length. On desktop
-        (md:) the layout switches to a single-row three-column grid so panels
+        (desk:) the layout switches to a single-row three-column grid so panels
         sit side-by-side and stretch to equal height automatically.
       -->
-      <div class="grid h-96 md:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] md:[grid-template-rows:auto] md:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <div class="grid h-96 desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <!-- Source panel -->
-        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto md:overflow-visible">
+        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto desk:overflow-visible">
           <div class="flex items-center gap-2 h-8">
             <select v-model="store.sourceLang" class="bg-surface-800 border border-surface-700 text-gray-200 rounded-lg px-2.5 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-colors" @change="retranslate">
               <option value="auto">Auto-detect</option>
@@ -147,10 +147,10 @@
         </div>
 
         <!-- Unified divider: horizontal on mobile, vertical on desktop -->
-        <div class="h-px md:h-auto md:w-px bg-surface-700 md:mt-4" :class="{ 'md:mb-4': !store.result }" />
+        <div class="h-px desk:h-auto desk:w-px bg-surface-700 desk:mt-4" :class="{ 'desk:mb-4': !store.result }" />
 
         <!-- Result panel -->
-        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto md:overflow-visible">
+        <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto desk:overflow-visible">
           <div class="flex items-center gap-2 h-8">
             <!-- Target lang select hidden when no enabled langs exist and no history entry to display -->
             <select
@@ -272,8 +272,8 @@
             @provider-changed="store.saveLexProvider($event)"
           />
 
-          <div class="flex items-center h-8">
-            <AudioButton v-if="store.result && hasEnabledAvailableTranslationProvider" :text="store.result.translated_text" :lang="store.targetLang" title="Listen to translation" />
+          <div v-if="store.result && hasEnabledAvailableTranslationProvider && (!settingsStore.loaded || settingsStore.ttsChoicesForLang(store.targetLang).length > 0)" class="flex items-center h-8">
+            <AudioButton :text="store.result.translated_text" :lang="store.targetLang" title="Listen to translation" />
           </div>
         </div>
       </div>

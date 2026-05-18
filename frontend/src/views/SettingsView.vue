@@ -160,39 +160,65 @@ watch(activeTab, (v) => {
   } catch { /* quota */ }
 })
 
+// Tracks which sample is in-flight independently of the reactive
+// `activeSample` so the click-to-stop guard works within the spinner delay
+// window and so the delay timer can be cancelled when audio starts early.
+interface SampleKey { providerCode: string; voiceId: string; lang: string }
+let _sampleInFlight: SampleKey | null = null
+let _sampleSpinnerTimer: ReturnType<typeof setTimeout> | null = null
+function _cancelSampleSpinnerTimer() {
+  if (_sampleSpinnerTimer !== null) { clearTimeout(_sampleSpinnerTimer); _sampleSpinnerTimer = null }
+}
+
 /**
  * Play a short sample sentence in *lang* through the given (provider, voice).
- * Shows a spinner while the server generates audio and a stop button during
- * playback. Clicking a currently-playing/generating sample stops it.
+ * The spinner is shown only after a short delay so cached/fast responses
+ * skip it entirely; clicking a currently-active sample stops it.
  */
 async function playVoiceSample(
   provider: ProviderItem,
   voice: TtsVoiceItem,
   lang: string,
 ) {
-  // If clicking the active sample — stop it.
+  // If clicking the in-flight sample — stop it.
   if (
-    activeSample.value?.providerCode === provider.code &&
-    activeSample.value?.voiceId === voice.id &&
-    activeSample.value?.lang === lang
+    _sampleInFlight?.providerCode === provider.code &&
+    _sampleInFlight?.voiceId === voice.id &&
+    _sampleInFlight?.lang === lang
   ) {
     stopTts()
+    _cancelSampleSpinnerTimer()
+    _sampleInFlight = null
     activeSample.value = null
     return
   }
-  // Stop any other ongoing playback and start new.
+  // Stop any other ongoing playback and arm the new request.
   stopTts()
-  activeSample.value = { providerCode: provider.code, voiceId: voice.id, lang, phase: 'generating' }
+  _cancelSampleSpinnerTimer()
+  _sampleInFlight = { providerCode: provider.code, voiceId: voice.id, lang }
+  activeSample.value = null
+  // Delay spinner to avoid flicker for fast / cached responses.
+  _sampleSpinnerTimer = setTimeout(() => {
+    _sampleSpinnerTimer = null
+    if (
+      _sampleInFlight?.providerCode === provider.code &&
+      _sampleInFlight?.voiceId === voice.id &&
+      _sampleInFlight?.lang === lang
+    ) {
+      activeSample.value = { providerCode: provider.code, voiceId: voice.id, lang, phase: 'generating' }
+    }
+  }, 150)
   try {
     await playTts(
       ttsSampleFor(lang), lang,
       { speed: 'NORMAL', provider: provider.code, voice: voice.id },
       () => {
-        // Audio has started — switch from spinner to stop-button.
+        // Audio has started — cancel pending spinner and switch to stop-button.
+        _cancelSampleSpinnerTimer()
         if (
-          activeSample.value?.providerCode === provider.code &&
-          activeSample.value?.voiceId === voice.id &&
-          activeSample.value?.lang === lang
+          _sampleInFlight?.providerCode === provider.code &&
+          _sampleInFlight?.voiceId === voice.id &&
+          _sampleInFlight?.lang === lang
         ) {
           activeSample.value = { providerCode: provider.code, voiceId: voice.id, lang, phase: 'playing' }
         }
@@ -201,12 +227,13 @@ async function playVoiceSample(
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Could not play sample'))
   } finally {
-    // Only clear if we're still the active sample (don't clobber a newer one).
+    _cancelSampleSpinnerTimer()
     if (
-      activeSample.value?.providerCode === provider.code &&
-      activeSample.value?.voiceId === voice.id &&
-      activeSample.value?.lang === lang
+      _sampleInFlight?.providerCode === provider.code &&
+      _sampleInFlight?.voiceId === voice.id &&
+      _sampleInFlight?.lang === lang
     ) {
+      _sampleInFlight = null
       activeSample.value = null
     }
   }
@@ -607,26 +634,21 @@ const TtsList = defineComponent({
     function renderVoiceLangs(provider: ProviderItem, voice: TtsVoiceItem) {
       const blocked = !provider.available
       const blockedReason = provider.unavailable_reason ?? 'Not available'
-      const children: ReturnType<typeof h>[] = []
-      children.push(h('span', { class: 'text-sm text-gray-500' }, '('))
-      voice.languages.forEach((lang, i) => {
-        if (i > 0) children.push(h('span', { class: 'text-sm text-gray-500' }, ', '))
+      const buttons = voice.languages.map(lang => {
         const sample = activeSample.value
         const isActive =
           sample?.providerCode === provider.code &&
           sample?.voiceId === voice.id &&
           sample?.lang === lang
         const phase = isActive ? sample!.phase : null
-        // Determine button appearance based on playback phase.
-        let btnContent: ReturnType<typeof h>
         let btnClass: string
         let btnTitle: string
+        let icon: ReturnType<typeof h> | null = null
         if (blocked) {
-          btnContent = h('span', {}, lang)
-          btnClass = 'text-sm text-gray-600 cursor-not-allowed'
+          btnClass = 'relative inline-flex items-center justify-center w-7 text-sm text-gray-600 cursor-not-allowed'
           btnTitle = `Cannot play sample in ${lang}: ${blockedReason}`
         } else if (phase === 'generating') {
-          btnContent = h('svg', {
+          icon = h('svg', {
             xmlns: 'http://www.w3.org/2000/svg',
             class: 'animate-spin w-3.5 h-3.5',
             viewBox: '0 0 24 24',
@@ -635,29 +657,29 @@ const TtsList = defineComponent({
             h('circle', { class: 'opacity-25', cx: '12', cy: '12', r: '10', stroke: 'currentColor', 'stroke-width': '4' }),
             h('path', { class: 'opacity-75', fill: 'currentColor', d: 'M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z' }),
           ])
-          btnClass = 'text-gray-400 cursor-pointer'
+          btnClass = 'relative inline-flex items-center justify-center w-7 text-sm text-gray-400 cursor-pointer'
           btnTitle = `Generating sample in ${lang}… (click to cancel)`
         } else if (phase === 'playing') {
-          btnContent = h('svg', {
+          icon = h('svg', {
             xmlns: 'http://www.w3.org/2000/svg',
             class: 'w-3.5 h-3.5',
             viewBox: '0 0 24 24',
             fill: 'currentColor',
           }, h('path', { d: 'M6 6h12v12H6z' }))
-          btnClass = 'text-red-400 hover:text-red-300 cursor-pointer'
+          btnClass = 'relative inline-flex items-center justify-center w-7 text-sm text-red-400 hover:text-red-300 cursor-pointer'
           btnTitle = `Stop sample in ${lang}`
         } else {
-          btnContent = h('span', {}, lang)
-          btnClass = 'text-sm text-gray-400 hover:text-primary-400 transition-colors cursor-pointer'
+          btnClass = 'relative inline-flex items-center justify-center w-7 text-sm text-gray-400 hover:text-primary-400 transition-colors cursor-pointer'
           btnTitle = `Play sample in ${lang}`
         }
-        children.push(h('button', {
+        // The lang text is always rendered (to hold the natural text width of the
+        // button), but made invisible when an icon is overlaid.  The icon is
+        // absolutely centred so it never affects the button's layout box.
+        return h('button', {
           type: 'button',
           disabled: blocked,
           class: btnClass,
           title: btnTitle,
-          // Stop drag/drop and parent click handlers so the abbrev acts as a
-          // proper button independent of the surrounding list-item DnD wiring.
           onPointerdown: (e: PointerEvent) => e.stopPropagation(),
           onMousedown: (e: MouseEvent) => e.stopPropagation(),
           onClick: (e: MouseEvent) => {
@@ -665,10 +687,12 @@ const TtsList = defineComponent({
             if (blocked) return
             void playVoiceSample(provider, voice, lang)
           },
-        }, btnContent))
+        }, [
+          h('span', { class: icon ? 'invisible' : '' }, lang),
+          icon ? h('span', { class: 'absolute inset-0 flex items-center justify-center' }, icon) : null,
+        ])
       })
-      children.push(h('span', { class: 'text-sm text-gray-500' }, ')'))
-      return h('span', { class: 'flex items-center gap-1 shrink-0' }, children)
+      return h('span', { class: 'flex items-center gap-1 shrink-0' }, buttons)
     }
 
     function renderProvider(provider: ProviderItem, providerIndex: number) {

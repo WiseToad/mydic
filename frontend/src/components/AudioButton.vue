@@ -126,6 +126,17 @@ const popupRef = ref<HTMLElement | null>(null)
 const isPlaying = ref(false)
 const isGenerating = ref(false)
 
+/** Whether a TTS request is currently in-flight.  Set immediately (unlike
+ *  `isGenerating` which is delayed) so concurrent clicks are blocked and
+ *  unmount teardown can stop a pending request. */
+let _inFlight = false
+/** Timer that delays the spinner; cancelled when audio starts before the
+ *  delay expires so the spinner never appears for fast/cached responses. */
+let _spinnerTimer: ReturnType<typeof setTimeout> | null = null
+function _cancelSpinnerTimer() {
+  if (_spinnerTimer !== null) { clearTimeout(_spinnerTimer); _spinnerTimer = null }
+}
+
 const popupVisible = ref(false)
 const popupLeft = ref(0)
 const popupTop = ref(0)
@@ -180,7 +191,7 @@ async function _play(
   override?: { provider: string; voice: string; forceSpeed?: TtsSpeed },
 ) {
   if (!props.text) return
-  if (isPlaying.value || isGenerating.value) {
+  if (isPlaying.value || _inFlight) {
     stopTts()
     return
   }
@@ -204,22 +215,31 @@ async function _play(
   // cannot infer that, so we narrow explicitly.
   if (!resolvedProvider) return
 
-  isGenerating.value = true
+  _inFlight = true
+  // Delay spinner to avoid flicker for fast / cached responses.
+  _spinnerTimer = setTimeout(() => {
+    _spinnerTimer = null
+    if (_inFlight) isGenerating.value = true
+  }, 150)
   let result: PlaybackResult
   try {
     result = await playTts(
       props.text, props.lang,
       { speed, provider: resolvedProvider, voice: resolvedVoice },
       () => {
-        // Audio has started playing — transition from spinner to stop-button.
+        // Audio has started — cancel pending spinner and switch to stop-button.
+        _cancelSpinnerTimer()
         isGenerating.value = false
         isPlaying.value = true
       },
     )
   } catch (e: unknown) {
+    _cancelSpinnerTimer()
     toast.error(extractErrorMessage(e, 'Could not play audio'))
     return
   } finally {
+    _cancelSpinnerTimer()
+    _inFlight = false
     isGenerating.value = false
     isPlaying.value = false
   }
@@ -344,10 +364,11 @@ function onChoosePopup(providerCode: string, voiceId: string) {
 
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
+  _cancelSpinnerTimer()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   // #4: a button being unmounted (e.g. wordbook card filtered out) must
   // stop any playback it initiated and release any slow ownership it held.
-  if (isPlaying.value || isGenerating.value) stopTts()
+  if (isPlaying.value || _inFlight) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()
 })
 </script>
