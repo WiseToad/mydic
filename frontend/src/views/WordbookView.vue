@@ -570,18 +570,23 @@ async function scrollToEntry(id: number) {
     return
   }
 
-  // Card was off-screen: wait for the smooth scroll to settle before
-  // starting the flash so the full animation plays while the card is visible.
-  // `scrollend` (Chrome 111+, Firefox 109+, Safari 17+) fires when the
-  // scroll animation ends; the timeout is a fallback for older browsers.
+  // Card was off-screen. Start the flash as soon as ~30 % of the card
+  // scrolls into view (mid-scroll, not after the scroll finishes) so the
+  // animation feels immediate while the card is still visibly arriving.
+  // IntersectionObserver fires reactively during the smooth scroll;
+  // the timeout is a safety net for edge cases.
   let done = false
   const triggerHighlight = () => {
     if (done) return
     done = true
-    window.removeEventListener('scrollend', triggerHighlight)
+    observer.disconnect()
     uiStore.highlightEntry(id)
   }
-  window.addEventListener('scrollend', triggerHighlight, { once: true })
+  const observer = new IntersectionObserver(
+    (entries) => { if (entries[0].isIntersecting) triggerHighlight() },
+    { threshold: 0.3 },
+  )
+  observer.observe(el)
   setTimeout(triggerHighlight, 800)
 }
 
