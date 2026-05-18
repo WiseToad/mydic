@@ -553,10 +553,36 @@ async function scrollToEntry(id: number) {
   }
   await nextTick()
   const el = document.querySelector(`[data-entry-id="${id}"]`) as HTMLElement | null
-  if (el) {
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  if (!el) {
+    uiStore.highlightEntry(id)
+    return
   }
-  uiStore.highlightEntry(id)
+
+  // Check whether the card is already within the viewport.
+  const rect = el.getBoundingClientRect()
+  const offScreen = rect.bottom < 0 || rect.top > window.innerHeight
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+  if (!offScreen) {
+    // Card was already visible — any centering scroll is tiny; highlight now.
+    uiStore.highlightEntry(id)
+    return
+  }
+
+  // Card was off-screen: wait for the smooth scroll to settle before
+  // starting the flash so the full animation plays while the card is visible.
+  // `scrollend` (Chrome 111+, Firefox 109+, Safari 17+) fires when the
+  // scroll animation ends; the timeout is a fallback for older browsers.
+  let done = false
+  const triggerHighlight = () => {
+    if (done) return
+    done = true
+    window.removeEventListener('scrollend', triggerHighlight)
+    uiStore.highlightEntry(id)
+  }
+  window.addEventListener('scrollend', triggerHighlight, { once: true })
+  setTimeout(triggerHighlight, 800)
 }
 
 /**
