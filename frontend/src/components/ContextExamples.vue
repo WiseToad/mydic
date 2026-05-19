@@ -504,12 +504,14 @@ async function fetchExamples() {
     examples.value = result
     state.value = 'done'
     emit('providerChanged', usedCode)
+    emit('fetched', examples.value)
   } catch (e: unknown) {
     if (seq !== _fetchSeq) return  // a newer fetch superseded this one
-    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try later')
+    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try again later')
     state.value = 'error'
-  } finally {
-    if (seq === _fetchSeq) emit('fetched', examples.value)
+    // Do not emit 'fetched' on error: emitting [] would cache a false
+    // "no examples" result in the history entry, causing navigation back
+    // to show "No examples found" instead of the actual error.
   }
 }
 

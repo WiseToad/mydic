@@ -436,7 +436,7 @@ async function fetch() {
     emit('providerChanged', usedCode)
   } catch (e: unknown) {
     if (seq !== _fetchSeq) return  // a newer fetch superseded this one
-    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try later')
+    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try again later')
     state.value = 'error'
   }
 }

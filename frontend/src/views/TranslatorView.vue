@@ -51,11 +51,11 @@
         :disabled="isSwapDisabled"
         :title="isSwapDisabled ? 'Cannot swap: detected language is disabled' : 'Swap languages (long press to clear & swap)'"
         class="absolute left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-primary-400 hover:bg-surface-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-        @mousedown="onSwapPointerDown"
+      @mousedown="onSwapPointerDown"
         @touchstart.prevent="onSwapPointerDown"
         @mouseup="onSwapPointerUp"
         @mouseleave="onSwapPointerUp"
-        @touchend="onSwapPointerUp"
+        @touchend="onSwapTouchEnd"
         @touchcancel="onSwapPointerUp"
         @click="onSwapClick"
       >
@@ -96,8 +96,22 @@
                 :title="!lang.enabled ? 'Excluded' : undefined"
               >{{ !lang.enabled ? `🛇 ${lang.name}` : lang.name }}</option>
             </select>
+            <!--
+              Detected lang badge: clickable when the detected language is
+              enabled in the user's preferences (i.e. it appears as a
+              selectable option in the source-language dropdown). Clicking
+              "pins" the source to that language and re-translates.
+            -->
+            <button
+              v-if="store.sourceLang === 'auto' && store.result?.detected_lang && detectedLangIsEnabled"
+              class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
+              :title="`Pin source language to ${langStore.enabledLangs.find(l => l.code === store.result!.detected_lang)?.name ?? store.result!.detected_lang}`"
+              @click="onDetectedLangClick"
+            >
+              {{ store.result.detected_lang }}
+            </button>
             <span
-              v-if="store.sourceLang === 'auto' && store.result?.detected_lang"
+              v-else-if="store.sourceLang === 'auto' && store.result?.detected_lang"
               class="text-sm text-gray-400"
               :title="store.result!.detected_lang_name ?? langStore.languages.find(l => l.code === store.result!.detected_lang)?.name"
             >
@@ -496,6 +510,22 @@ const isTargetLangDisabled = computed(() =>
   langStore.languages.some(l => l.code === store.targetLang) &&
   !langStore.enabledLangs.some(l => l.code === store.targetLang)
 )
+
+// True when the auto-detected language is enabled in the user's settings,
+// meaning it appears as a legitimate selectable option in the source dropdown.
+const detectedLangIsEnabled = computed(() => {
+  const detected = store.result?.detected_lang
+  if (!detected) return false
+  return langStore.enabledLangs.some(l => l.code === detected)
+})
+
+// Pin the detected language as the explicit source and retranslate.
+function onDetectedLangClick() {
+  const detected = store.result?.detected_lang
+  if (!detected || !detectedLangIsEnabled.value) return
+  store.sourceLang = detected
+  retranslate()
+}
 
 // Swap is disabled when source is auto-detect and the detected language is
 // not in the user's enabled list — swapping would produce a disabled target.
@@ -1058,6 +1088,13 @@ function onSwapPointerUp() {
     clearTimeout(longPressTimer)
     longPressTimer = null
   }
+}
+
+// On touch devices @touchstart.prevent suppresses the synthetic click event,
+// so the tap action is handled here instead of in onSwapClick.
+async function onSwapTouchEnd() {
+  onSwapPointerUp()
+  await onSwapClick()
 }
 
 async function onSwapClick() {

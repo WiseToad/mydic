@@ -72,7 +72,7 @@ class FreeDictionaryProvider(Provider, DefinitionProvider):
             cached = await self._cache.get_definition(key)
             if cached is not None:
                 if cached.failed:
-                    raise RuntimeError("Fetch error, please try later")
+                    raise RuntimeError("Fetch error, please try again later")
                 return cached.value
 
         try:

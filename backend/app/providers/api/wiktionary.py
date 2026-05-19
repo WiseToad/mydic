@@ -117,7 +117,7 @@ class WiktionaryProvider(Provider, DefinitionProvider, ContextProvider):
             cached = await self._cache.get_definition(key)
             if cached is not None:
                 if cached.failed:
-                    raise RuntimeError("Fetch error, please try later")
+                    raise RuntimeError("Fetch error, please try again later")
                 return cached.value
 
         try:
@@ -200,7 +200,7 @@ class WiktionaryProvider(Provider, DefinitionProvider, ContextProvider):
             cached = await self._cache.get_context(key)
             if cached is not None:
                 if cached.failed:
-                    raise RuntimeError("Fetch error, please try later")
+                    raise RuntimeError("Fetch error, please try again later")
                 return cached.value if cached.value is not None else []
             # Fall back to the language-agnostic pre-cached entry (target_lang="")
             # written by get_definition when it fetched the same word.
@@ -215,7 +215,7 @@ class WiktionaryProvider(Provider, DefinitionProvider, ContextProvider):
                 )
                 if mono_cached is not None:
                     if mono_cached.failed:
-                        raise RuntimeError("Fetch error, please try later")
+                        raise RuntimeError("Fetch error, please try again later")
                     return mono_cached.value if mono_cached.value is not None else []
 
         try:

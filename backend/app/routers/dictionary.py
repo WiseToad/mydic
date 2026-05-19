@@ -55,7 +55,7 @@ async def definition(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="Fetch error, please try later")
+        raise HTTPException(status_code=503, detail="Fetch error, please try again later")
     if result is None:
         raise HTTPException(status_code=404, detail="No definition found")
     return result
@@ -79,5 +79,5 @@ async def context_examples(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="Fetch error, please try later")
+        raise HTTPException(status_code=503, detail="Fetch error, please try again later")
     return {"examples": examples}

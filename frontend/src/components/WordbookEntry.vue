@@ -101,7 +101,13 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                 class="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-primary-400 hover:bg-primary-500/10 disabled:opacity-40 transition-colors"
                 @click="retranslateEdit"
               >
-                <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+                <!-- Spinner shown after 150 ms of ongoing retranslation -->
+                <svg v-if="showRetranslateSpinner" class="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="2.5" stroke-opacity="0.25"/>
+                  <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+                </svg>
+                <!-- Sync icon while idle -->
+                <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z"/>
                 </svg>
               </button>
@@ -522,6 +528,8 @@ const editNotes = ref('')
 const editProviderCode = ref<string | null>(null)
 const editProviders = ref<ProviderItem[]>([])
 const retranslating = ref(false)
+const showRetranslateSpinner = ref(false)
+let retranslateSpinnerTimer: ReturnType<typeof setTimeout> | null = null
 const showProviderPopup = ref(false)
 
 const showActionsMenu = computed({
@@ -652,6 +660,10 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
   document.removeEventListener('click', onActionsOutsideClick, true)
   stopDetailsResizeObserver()
+  if (retranslateSpinnerTimer !== null) {
+    clearTimeout(retranslateSpinnerTimer)
+    retranslateSpinnerTimer = null
+  }
 })
 
 watch(() => settingsStore.saveCount, async (count) => {
@@ -803,6 +815,7 @@ async function retranslateEdit() {
   const code = editProviderCode.value
   if (!code) return  // can't translate without an explicit provider
   retranslating.value = true
+  retranslateSpinnerTimer = setTimeout(() => { showRetranslateSpinner.value = true }, 150)
   try {
     const res = await translateApi.translate(
       editSource.value.trim(),
@@ -813,6 +826,11 @@ async function retranslateEdit() {
     editTarget.value = res.translated_text
   } finally {
     retranslating.value = false
+    if (retranslateSpinnerTimer !== null) {
+      clearTimeout(retranslateSpinnerTimer)
+      retranslateSpinnerTimer = null
+    }
+    showRetranslateSpinner.value = false
   }
 }
 

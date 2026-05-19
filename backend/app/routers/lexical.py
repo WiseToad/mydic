@@ -52,5 +52,5 @@ async def lexical_matches(
     except HTTPException:
         raise
     except Exception:
-        raise HTTPException(status_code=503, detail="Fetch error, please try later")
+        raise HTTPException(status_code=503, detail="Fetch error, please try again later")
     return {"matches": matches}

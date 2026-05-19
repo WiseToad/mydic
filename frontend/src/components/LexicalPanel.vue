@@ -432,12 +432,14 @@ async function fetchMatches() {
     matches.value = result
     state.value = 'done'
     emit('providerChanged', usedCode)
+    emit('fetched', matches.value)
   } catch (e: unknown) {
     if (seq !== _fetchSeq) return  // a newer fetch superseded this one
-    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try later')
+    errorMsg.value = extractErrorMessage(e, 'Fetch error, please try again later')
     state.value = 'error'
-  } finally {
-    if (seq === _fetchSeq) emit('fetched', matches.value)
+    // Do not emit 'fetched' on error: emitting [] would cache a false
+    // "no matches" result in the history entry, causing navigation back
+    // to show "No matches found" instead of the actual error.
   }
 }
 

@@ -68,7 +68,7 @@
             >{{ tab.name }}</span>
             <button
               data-delete-tab
-              class="pr-2 pl-1 py-1 text-gray-600 hover:text-red-400 transition-colors rounded-r-full text-xs leading-none"
+              class="pr-3 pl-1.5 py-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-r-full text-xs leading-none"
               title="Delete group"
             >×</button>
           </template>
@@ -90,12 +90,21 @@
           </template>
         </div>
 
-        <!-- Add group button -->
+        <!-- Add group button / Delete zone while dragging a group tab -->
         <button
+          v-if="!draggedTabId"
           class="px-2.5 py-1 text-xs text-gray-600 hover:text-gray-300 border border-dashed border-surface-700 hover:border-surface-500 rounded-full transition-colors"
           @click="addNewTab"
           title="Add word group"
         >+ group</button>
+        <div
+          v-else
+          data-delete-tab-zone
+          class="px-2.5 py-1 text-xs rounded-full border border-dashed transition-colors select-none"
+          :class="dragOverDeleteZone
+            ? 'text-red-400 bg-red-500/10 border-red-500/50'
+            : 'text-gray-500 border-surface-600'"
+        >Delete</div>
       </div>
 
       <!-- Right controls: translation toggle + lang filter + count + density -->
@@ -910,6 +919,7 @@ const cardDragSourceEl = ref<HTMLElement | null>(null)
 const draggedTabId = ref<number | null>(null)
 const dragOverId = ref<number | null>(null)
 const dragOverTabId = ref<number | null>(null)
+const dragOverDeleteZone = ref(false)
 
 const DRAG_THRESHOLD = 5
 const LONG_PRESS_DELAY = 500
@@ -991,8 +1001,9 @@ function onTabPointerMove(event: PointerEvent) {
       tabDragGhost.style.top = `${event.clientY - state.grabOffsetY}px`
     }
     const under = document.elementsFromPoint(event.clientX, event.clientY)
-    // Prefer another tab as drop target (→ reorder); fall back to a card
-    // (→ assign-to-group). Hovering over self is a no-op.
+    // Prefer another tab as drop target (→ reorder); fall back to the
+    // delete zone (→ delete group) or a card (→ assign-to-group).
+    // Hovering over self is a no-op.
     const tabEl = under.find(el => {
       const raw = el.getAttribute('data-tab-id')
       return raw !== null && Number(raw) !== state.tabId
@@ -1000,10 +1011,18 @@ function onTabPointerMove(event: PointerEvent) {
     if (tabEl) {
       dragOverTabId.value = Number(tabEl.getAttribute('data-tab-id'))
       dragOverId.value = null
+      dragOverDeleteZone.value = false
     } else {
       dragOverTabId.value = null
-      const cardEl = under.find(el => el.hasAttribute('data-entry-id'))
-      dragOverId.value = cardEl ? Number(cardEl.getAttribute('data-entry-id')) : null
+      const deleteZoneEl = under.find(el => el.hasAttribute('data-delete-tab-zone'))
+      if (deleteZoneEl) {
+        dragOverDeleteZone.value = true
+        dragOverId.value = null
+      } else {
+        dragOverDeleteZone.value = false
+        const cardEl = under.find(el => el.hasAttribute('data-entry-id'))
+        dragOverId.value = cardEl ? Number(cardEl.getAttribute('data-entry-id')) : null
+      }
     }
   }
 }
@@ -1015,7 +1034,9 @@ function onTabPointerUp(_event: PointerEvent) {
   tabInteraction.value = null
   if (!state) return
   if (state.isDragging) {
-    if (dragOverTabId.value !== null && dragOverTabId.value !== state.tabId) {
+    if (dragOverDeleteZone.value) {
+      deleteTab(state.tabId)
+    } else if (dragOverTabId.value !== null && dragOverTabId.value !== state.tabId) {
       // Reorder tabs: insert dragged tab at the target's position. Mirrors
       // the entry reorder logic in onCardDrop.
       const ids = groupsStore.tabs.map(t => t.id)
@@ -1036,6 +1057,7 @@ function onTabPointerUp(_event: PointerEvent) {
     draggedTabId.value = null
     dragOverId.value = null
     dragOverTabId.value = null
+    dragOverDeleteZone.value = false
     return
   }
   const elapsed = Date.now() - state.startTime
@@ -1056,6 +1078,7 @@ function onTabPointerCancel() {
   draggedTabId.value = null
   dragOverId.value = null
   dragOverTabId.value = null
+  dragOverDeleteZone.value = false
 }
 
 // Card reorder drag (HTML5)
