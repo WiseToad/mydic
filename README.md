@@ -1,10 +1,17 @@
 # MyDic
 
-MyDic, your personal language companion.
+MyDic, a tool for those who keen to dramatically improve their memorization of foreign words.
+
+![mydic](mydic.png)
+
+Some usage notes for languages, you do not familiar enough with:
+
+- Translation providers sometimes not so good for single word translation without context. So, always check the translation by switching to different translation providers. Or, read the word definition to grasp it's sence more clearly, in order to understand, whether the translation is suitable for you. The best option is to take some context examples as well.
+- The same is for TTS. Generated single-word speech outside it's context (especially on slower rates) may prodice artifacts. So, the best bet is to listen some context examples, in which your word of interest will be pronounced more properly and naturally.
 
 ## INSTALLATION
 
-Add a new user and prepare app dirs:
+#### Add a new user and dirs:
 ```sh
 sudo useradd -r -d /opt/mydic -s /usr/sbin/nologin mydic
 
@@ -23,7 +30,7 @@ Optional, but desirable step for running some maintenance scripts without `sudo`
 sudo usermod -aG mydic {YOURUSER}
 ```
 
-Deploy package:
+#### Deploy package:
 ```sh
 wget -qO - https://github.com/WiseToad/mydic/releases/latest/download/mydic.tar.gz \
 | sudo tar -xzf -
@@ -39,6 +46,8 @@ sudo cp .env.sample .env
 Edit all TODOs in `.env` file.
 
 Some containerized providers are quite resource consuming. If you deploy your services onto a resource-limited environment, you may disable launch of such containers. To do so, remove these providers from `COMPOSE_PROFILES` comma-separated list in the `.env` file. And set corresponding `{PROVIDER}_ENABLED` variables for these providers to `false` as well.
+
+To estimate resources needed for some specific provider, refer to it's documentation.
 
 ### Service Startup
 
@@ -105,38 +114,30 @@ sudo journalctl -u encode-tts
 
 In order to upgrade to a new version, do the following.
 
-Stop services:
+#### Stop services:
 ```sh
 cd /opt/mydic
 docker compose down
+
+sudo systemctl stop encode-tts.timer
 ```
 
-Then:
-- deploy package as described in installation instructions above
-- apply migration instructions, if any
+#### Cleanup:
+```sh
+sudo rm -rf backend frontend scripts systemd
+```
 
-Finaly, start the services:
+#### Deploy package:
+
+See "Deploy package" instructions in installation section above.
+
+#### Start services:
 ```sh
 cd /opt/mydic
-docker compose up -d
-```
+docker compose up -d --build
 
-Below there are some common instructions that need to be done during update, depending on changes been made in update.
-
-### Backend
-
-If backend source code was changed, do:
-```sh
-cd /opt/mydic
-docker compose build
-```
-
-### Systemd Services
-
-If systemd unit files was changed, do:
-
-```sh
 sudo systemctl daemon-reload
+sudo systemctl start encode-tts.timer
 ```
 
 ## DEVELOPMENT
@@ -145,10 +146,10 @@ sudo systemctl daemon-reload
 
 ```sh
 cp .env.dev-sample .env
-cp compose.yaml.dev-sample compose.yaml
+cp compose.yaml.dev compose.yaml
 ```
 
-Edit all TODOs in `.env` file. The `compose.yaml` file typically doesn't require changes.
+Edit all TODOs in `.env` file.
 
 ```sh
 docker compose up -d

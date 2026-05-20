@@ -305,6 +305,7 @@ function openPopup() {
   // Stop any current playback so the next one is the user's chosen voice.
   stopTts()
   document.addEventListener('pointerdown', onOutsidePointerDown, true)
+  document.addEventListener('dragstart', onDocumentDragStart, true)
   // Second-pass refinement: now that the popup is in the DOM, measure it
   // and apply viewport-aware adjustments.
   void nextTick(() => positionPopup(rect))
@@ -346,13 +347,22 @@ function onOutsidePointerDown(e: PointerEvent) {
   if (popupRef.value && popupRef.value.contains(e.target as Node)) return
   popupVisible.value = false
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+  document.removeEventListener('dragstart', onDocumentDragStart, true)
   // Don't fire a normal click after long-press dismissal.
   e.stopPropagation()
+}
+
+/** Close the voice popup when any HTML5 card drag starts. */
+function onDocumentDragStart() {
+  popupVisible.value = false
+  document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+  document.removeEventListener('dragstart', onDocumentDragStart, true)
 }
 
 function onChoosePopup(providerCode: string, voiceId: string) {
   popupVisible.value = false
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+  document.removeEventListener('dragstart', onDocumentDragStart, true)
   // Picking a voice from the popup also records it as the default for this
   // button's language (browser-local), so future plain clicks default to
   // the same voice without altering the user's settings-defined order.
@@ -366,6 +376,7 @@ onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
   _cancelSpinnerTimer()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+  document.removeEventListener('dragstart', onDocumentDragStart, true)
   // #4: a button being unmounted (e.g. wordbook card filtered out) must
   // stop any playback it initiated and release any slow ownership it held.
   if (isPlaying.value || _inFlight) stopTts()

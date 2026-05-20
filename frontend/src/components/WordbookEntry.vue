@@ -278,6 +278,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
             />
             <template v-if="!isCompact">
               <button
+                data-details-toggle
                 :title="expandedInfo ? 'Hide details' : 'Details'"
                 :class="[
                   'inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors',
@@ -338,6 +339,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
     <div
       v-if="expandedInfo && !editing"
       ref="overlayRef"
+      draggable="false"
       :data-entry-id="entry.id"
       class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b border-surface-700 rounded-b-2xl p-3"
       :class="[
@@ -615,7 +617,7 @@ function closeProviderPopup() { showProviderPopup.value = false }
  * the container leave the menu open so the trigger button can still
  * toggle and the popup items can still receive their click.
  */
-function onActionsOutsideClick(e: MouseEvent) {
+function onActionsOutsidePointerDown(e: PointerEvent) {
   const target = e.target as Node | null
   if (!target) return
   if (actionsContainerRef.value?.contains(target)) return
@@ -645,20 +647,18 @@ watch(showProviderPopup, async (open) => {
 
 watch(showActionsMenu, (open) => {
   if (open) {
-    // Recompute placement at the moment the popup opens so a recent scroll
-    // or window resize is reflected.
     recomputeActionsMenuPlacement()
-    document.addEventListener('click', onActionsOutsideClick, true)
+    document.addEventListener('pointerdown', onActionsOutsidePointerDown, true)
   } else {
-    document.removeEventListener('click', onActionsOutsideClick, true)
-    // Always collapse the color submenu when the parent menu closes.
+    document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
     showColorSubmenu.value = false
   }
 })
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
-  document.removeEventListener('click', onActionsOutsideClick, true)
+  document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
+  document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
   stopDetailsResizeObserver()
   if (retranslateSpinnerTimer !== null) {
     clearTimeout(retranslateSpinnerTimer)
@@ -767,6 +767,30 @@ watch(expandedInfo, (open) => {
     return
   }
   startDetailsAutoScroll()
+})
+
+// Close the details panel when a pointer interaction lands outside this card's
+// root element (covers both the card and its absolute overlay). This makes the
+// panel behave like an ephemeral popup — any interaction elsewhere dismisses it.
+function onDetailsOutsidePointerDown(e: PointerEvent) {
+  const target = e.target as Element | null
+  if (!target) return
+  // Keep the panel open when interacting inside the overlay itself.
+  if (overlayRef.value?.contains(target)) return
+  // Let THIS card's ⓘ toggle button's own click handler close the panel.
+  // Only exempt the button when it belongs to this card (inside entryRootRef);
+  // another card's ⓘ button should close this panel immediately on press,
+  // consistent with how the action-menu outside handler works.
+  if (entryRootRef.value?.contains(target) && target.closest('[data-details-toggle]')) return
+  uiStore.closeActive()
+}
+
+watch(expandedInfo, (open) => {
+  if (open) {
+    document.addEventListener('pointerdown', onDetailsOutsidePointerDown, true)
+  } else {
+    document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
+  }
 })
 
 // Switching tabs inside an open details panel can grow the overlay

@@ -957,6 +957,10 @@ function isEditing(entryId: number): boolean {
   return uiStore.activeCardId === entryId && uiStore.activeCardMode === 'editing'
 }
 
+function isDetailsOpen(entryId: number): boolean {
+  return uiStore.activeCardId === entryId && uiStore.activeCardMode === 'details'
+}
+
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
@@ -1087,6 +1091,11 @@ function onDragStart(event: DragEvent, entryId: number) {
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
   cardDragSourceEl.value = event.currentTarget as HTMLElement
   cardDragSourceEl.value.style.opacity = '0.4'
+  // Close any open per-card action menu or details panel when a card drag begins.
+  uiStore.activeMenuId = null
+  if (uiStore.activeCardId === entryId && uiStore.activeCardMode === 'details') {
+    uiStore.closeActive()
+  }
 }
 
 function onCardDragOver(entryId: number) {
