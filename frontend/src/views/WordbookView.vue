@@ -956,11 +956,6 @@ const tabInteraction = ref<TabInteraction | null>(null)
 function isEditing(entryId: number): boolean {
   return uiStore.activeCardId === entryId && uiStore.activeCardMode === 'editing'
 }
-
-function isDetailsOpen(entryId: number): boolean {
-  return uiStore.activeCardId === entryId && uiStore.activeCardMode === 'details'
-}
-
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)

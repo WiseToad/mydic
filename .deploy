@@ -3,5 +3,6 @@ README.md
 VERSION.txt
 compose.yaml.prod
 core.yaml
+mydic.png
 nginx.conf
 providers.yaml
