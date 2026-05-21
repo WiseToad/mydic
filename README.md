@@ -6,7 +6,7 @@ MyDic, a tool for those who keen to dramatically improve their memorization of f
 
 Some usage notes for languages, you do not familiar enough with:
 
-- Translation providers sometimes not so good for single word translation without context. So, always check the translation by switching to different translation providers. Or, read the word definition to grasp it's sence more clearly, in order to understand, whether the translation is suitable for you. The best option is to take some context examples as well.
+- Translation providers sometimes not so good for single word translation without context. So, always check the translation by switching to different translation providers. Or, read the word definition to grasp it's sense more clearly, in order to understand, whether the translation is suitable for you. The best option is to take some context examples as well.
 - The same is for TTS. Generated single-word speech outside it's context (especially on slower rates) may prodice artifacts. So, the best bet is to listen some context examples, in which your word of interest will be pronounced more properly and naturally.
 
 ## INSTALLATION

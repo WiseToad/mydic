@@ -130,6 +130,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
           <div class="flex-1 min-w-0">
             <p class="font-medium text-gray-100">
               <span
+                data-hint-toggle
                 class="cursor-pointer hover:text-primary-400 transition-colors"
                 @click="hintVisible = !hintVisible"
               >{{ entry.source_text }}</span>
@@ -659,6 +660,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
   document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
   document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
+  _clearPendingCardClose()
   stopDetailsResizeObserver()
   if (retranslateSpinnerTimer !== null) {
     clearTimeout(retranslateSpinnerTimer)
@@ -769,20 +771,72 @@ watch(expandedInfo, (open) => {
   startDetailsAutoScroll()
 })
 
-// Close the details panel when a pointer interaction lands outside this card's
-// root element (covers both the card and its absolute overlay). This makes the
-// panel behave like an ephemeral popup — any interaction elsewhere dismisses it.
+// ── Details panel close logic ────────────────────────────────────────────────
+//
+// Invariants (while this card's details panel is open):
+//  • Clicks inside the overlay itself           → never close.
+//  • ⓘ toggle button on THIS card               → never close (own handler runs).
+//  • Audio button  [data-audio-button] on THIS card → never close.
+//  • Source-text   [data-hint-toggle]  on THIS card → never close.
+//  • Actions area  (actionsContainerRef) on THIS card → close immediately.
+//  • Clicks outside entryRootRef (other cards, header, …) → close immediately.
+//  • Any other area of THIS card's body         → close on pointerup so a
+//    scroll drag starting on the card doesn't accidentally dismiss the panel.
+
+let _pendingCardClose = false
+
+function _clearPendingCardClose() {
+  if (!_pendingCardClose) return
+  _pendingCardClose = false
+  document.removeEventListener('pointerup', onDetailsCardPointerUp, true)
+  document.removeEventListener('pointercancel', onDetailsCardPointerCancel, true)
+}
+
+function onDetailsCardPointerUp(e: PointerEvent) {
+  const target = e.target as Element | null
+  _clearPendingCardClose()
+  // Released inside the overlay → user was scrolling within the panel, keep open.
+  if (target && overlayRef.value?.contains(target)) return
+  if (expandedInfo.value) uiStore.closeActive()
+}
+
+function onDetailsCardPointerCancel() {
+  // Native scroll/drag took over — do not close.
+  _clearPendingCardClose()
+}
+
 function onDetailsOutsidePointerDown(e: PointerEvent) {
   const target = e.target as Element | null
   if (!target) return
-  // Keep the panel open when interacting inside the overlay itself.
+  // Overlay itself: keep open.
   if (overlayRef.value?.contains(target)) return
-  // Let THIS card's ⓘ toggle button's own click handler close the panel.
-  // Only exempt the button when it belongs to this card (inside entryRootRef);
-  // another card's ⓘ button should close this panel immediately on press,
-  // consistent with how the action-menu outside handler works.
+  // ⓘ toggle on THIS card: let its own handler run.
   if (entryRootRef.value?.contains(target) && target.closest('[data-details-toggle]')) return
-  uiStore.closeActive()
+
+  // Outside this card entirely: close immediately.
+  if (!entryRootRef.value?.contains(target)) {
+    uiStore.closeActive()
+    return
+  }
+
+  // Inside this card — apply per-element rules:
+
+  // Audio button: don't close.
+  if (target.closest('[data-audio-button]')) return
+
+  // Source-text / hint-toggle: don't close.
+  if (target.closest('[data-hint-toggle]')) return
+
+  // Actions area (⋮ button + its popup): close immediately.
+  if (actionsContainerRef.value?.contains(target)) {
+    uiStore.closeActive()
+    return
+  }
+
+  // Card body: defer close to pointerup so scroll drags don't dismiss the panel.
+  _pendingCardClose = true
+  document.addEventListener('pointerup', onDetailsCardPointerUp, true)
+  document.addEventListener('pointercancel', onDetailsCardPointerCancel, true)
 }
 
 watch(expandedInfo, (open) => {
@@ -790,6 +844,7 @@ watch(expandedInfo, (open) => {
     document.addEventListener('pointerdown', onDetailsOutsidePointerDown, true)
   } else {
     document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
+    _clearPendingCardClose()
   }
 })
 
