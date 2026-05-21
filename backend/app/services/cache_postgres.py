@@ -49,8 +49,15 @@ class PostgresCacheService(CacheService):
     # ------------------------------------------------------------------
 
     def _is_stale(self, fetched_at: datetime) -> bool:
-        """Return True when a failed entry's retry window has expired."""
-        return (datetime.now(timezone.utc) - fetched_at).total_seconds() >= self._retry_seconds
+        """Return True when a failed entry's retry window has expired.
+
+        ``fetched_at`` comes from a ``TIMESTAMP WITHOUT TIME ZONE`` column so
+        asyncpg returns a naive datetime.  Treat it as UTC before comparing.
+        """
+        now = datetime.now(timezone.utc)
+        if fetched_at.tzinfo is None:
+            fetched_at = fetched_at.replace(tzinfo=timezone.utc)
+        return (now - fetched_at).total_seconds() >= self._retry_seconds
 
     # ------------------------------------------------------------------
     # Translation
@@ -110,7 +117,7 @@ class PostgresCacheService(CacheService):
                     row.translated_text = translated_text
                     row.detected_lang = detected_lang
                     row.failed = failed
-                    row.fetched_at = datetime.now(timezone.utc)
+                    row.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 else:
                     db.add(TranslationCache(
                         source_lang=key.source_lang,
@@ -179,7 +186,7 @@ class PostgresCacheService(CacheService):
                 if row is not None:
                     row.definition = stored_def
                     row.failed = failed
-                    row.fetched_at = datetime.now(timezone.utc)
+                    row.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 else:
                     db.add(DefinitionCache(
                         word=key.word,
@@ -238,7 +245,7 @@ class PostgresCacheService(CacheService):
                 if row is not None:
                     row.examples = data if data is not None else []
                     row.failed = failed
-                    row.fetched_at = datetime.now(timezone.utc)
+                    row.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 else:
                     db.add(ContextCache(
                         source_lang=key.source_lang,
@@ -298,7 +305,7 @@ class PostgresCacheService(CacheService):
                 if row is not None:
                     row.matches = data if data is not None else []
                     row.failed = failed
-                    row.fetched_at = datetime.now(timezone.utc)
+                    row.fetched_at = datetime.now(timezone.utc).replace(tzinfo=None)
                 else:
                     db.add(LexicalCache(
                         source_lang=key.source_lang,
