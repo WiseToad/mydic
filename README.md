@@ -4,10 +4,22 @@ MyDic, a tool for those who keen to dramatically improve their memorization of f
 
 ![mydic](mydic.png)
 
+Some non-obvious UI features:
+- Long-pressing the swap button clears the input text along with language swapping
+- Long-pressing an audio button pops up the voice selection menu
+- After the playback, the audio button switches to slow-pronunciation (yellow) mode
+- A small button appearing below selected text allows you to immediately translate it
+- You may tap the word in a card to show/hide translation hint
+- You may drag cards in the wordbook to reorder them
+- Long-pressing a group tab in the wordbook switches it to name editing mode
+- Dragging a group in the wordbook onto some word, (re)assigns this group to this word
+- Clicking the group label in a card activates filtering by this group
+
 Some usage notes for languages, you do not familiar enough with:
 
 - Translation providers sometimes not so good for single word translation without context. So, always check the translation by switching to different translation providers. Or, read the word definition to grasp it's sense more clearly, in order to understand, whether the translation is suitable for you. The best option is to take some context examples as well.
 - The same is for TTS. Generated single-word speech outside it's context (especially on slower rates) may prodice artifacts. So, the best bet is to listen some context examples, in which your word of interest will be pronounced more properly and naturally.
+
 
 ## INSTALLATION
 

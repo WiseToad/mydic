@@ -15,6 +15,7 @@
     -->
     <div
       ref="cardRef"
+      :draggable="!editing"
       class="group/provider h-full p-3 border border-surface-700"
       :class="[
         cardBgClass,
@@ -341,8 +342,10 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
       v-if="expandedInfo && !editing"
       ref="overlayRef"
       draggable="false"
+      data-details-overlay
       :data-entry-id="entry.id"
-      class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b border-surface-700 rounded-b-2xl p-3"
+      class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b border-surface-700 rounded-b-2xl p-3 select-text"
+      @pointerdown.stop
       :class="[
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
       ]"

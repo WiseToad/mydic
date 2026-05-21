@@ -293,7 +293,6 @@
             v-for="entry in filteredEntries"
             :key="entry.id"
             :data-entry-id="entry.id"
-            :draggable="!isEditing(entry.id)"
             @dragstart="onDragStart($event, entry.id)"
             @dragover.prevent="onCardDragOver(entry.id)"
             @dragleave="onCardDragLeave"
@@ -953,9 +952,6 @@ interface TabInteraction {
 }
 const tabInteraction = ref<TabInteraction | null>(null)
 
-function isEditing(entryId: number): boolean {
-  return uiStore.activeCardId === entryId && uiStore.activeCardMode === 'editing'
-}
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
@@ -1082,15 +1078,22 @@ function onTabPointerCancel() {
 
 // Card reorder drag (HTML5)
 function onDragStart(event: DragEvent, entryId: number) {
+  // If the gesture started inside the details overlay, cancel the card drag
+  // so the browser falls back to normal text-selection behaviour.
+  if (document.elementsFromPoint(event.clientX, event.clientY)
+      .some(el => el.hasAttribute('data-details-overlay'))) {
+    event.preventDefault()
+    return
+  }
   draggedId.value = entryId
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
   cardDragSourceEl.value = event.currentTarget as HTMLElement
   cardDragSourceEl.value.style.opacity = '0.4'
-  // Close any open per-card action menu or details panel when a card drag begins.
+  // Close any active overlay on this card (details panel) and its action menu.
+  // Editing is already prevented by the :draggable guard, so activeCardMode
+  // can only be 'details' here — no need to check the mode explicitly.
   uiStore.activeMenuId = null
-  if (uiStore.activeCardId === entryId && uiStore.activeCardMode === 'details') {
-    uiStore.closeActive()
-  }
+  if (uiStore.activeCardId === entryId) uiStore.closeActive()
 }
 
 function onCardDragOver(entryId: number) {
