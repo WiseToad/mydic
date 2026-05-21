@@ -220,7 +220,7 @@ async function _play(
   _spinnerTimer = setTimeout(() => {
     _spinnerTimer = null
     if (_inFlight) isGenerating.value = true
-  }, 150)
+  }, 200)
   let result: PlaybackResult
   try {
     result = await playTts(

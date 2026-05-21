@@ -152,6 +152,11 @@
             rows="4"
             class="w-full flex-1 resize-none font-medium text-gray-100 placeholder:text-gray-600 bg-transparent focus:outline-none leading-relaxed overflow-y-auto"
             @input="onInput"
+            @keydown="onInputActivity"
+            @pointerdown="onInputPointerDown"
+            @pointerup="onInputPointerUp"
+            @pointercancel="onInputPointerCancel"
+            @pointermove="onInputPointerMove"
             @keydown.ctrl.enter.prevent="onCtrlEnter"
           />
           <div class="flex items-center justify-between h-8">
@@ -1018,6 +1023,46 @@ async function retranslateExplicitTarget() {
 
 // Debounced auto-translate on input
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
+/**
+ * Resets the pending debounce timer whenever the user does anything in the
+ * input box (cursor movement, clicks, selection, etc.) without changing the
+ * text.  Has no effect when no debounce is pending.
+ */
+function onInputActivity() {
+  if (debounceTimer === null) return
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(() => {
+    const code = effectiveTranslationCode.value
+    if (code) store.translate(code, false, resolvedCarryLexCode.value, resolvedCarryDefCode.value, resolvedCarryCtxCode.value)
+  }, 1500)
+}
+
+/** True while a pointer button is held down inside the input textarea. */
+let _inputPointerDown = false
+
+function onInputPointerDown() {
+  _inputPointerDown = true
+  onInputActivity()
+}
+
+function onInputPointerUp() {
+  _inputPointerDown = false
+  onInputActivity()
+}
+
+function onInputPointerCancel() {
+  // Browser took over the pointer (e.g. native scroll) — clear the flag
+  // but don't reset the debounce since this wasn't a deliberate selection.
+  _inputPointerDown = false
+}
+
+function onInputPointerMove() {
+  // Only reset the debounce while a button is held (i.e. during a drag-
+  // selection). Idle hover movements should not interfere with the timer.
+  if (_inputPointerDown) onInputActivity()
+}
+
 function onInput() {
   if (debounceTimer) clearTimeout(debounceTimer)
   resetAudioContext()

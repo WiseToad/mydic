@@ -2,10 +2,8 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-- Change of source word in wordbook entry editor should reset translation provider as it done for translation result.
 - On add-to-wordbook clicking rapid enpough (or when server responded with delay), the same word can be added to wordbook multiple times
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
-- Backend logs show HTTP 503 for Reverso, if earlier was an error. Timeout is passed, but frontend still shows "Fetch error, please try again later". Tested for different times. From another location it's ok with this provider. Bug in retry code?
 
 Bugs encountered when running in Android device browser:
 - In wordbook, it's impossible to change voice by long press on audio button. Instead, the card itself is enetering dragging mode.
@@ -16,16 +14,15 @@ Not-so-critical bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-- Raise audio and re-rtranslate spinner timeout from 150 to 200 ms 
 - Independent scrolling of main field and side panel in wordbook; top bar also stays at the top and not scrolls past the top of the screen
-- Start translation timeout not from when an input word was actually changed, but from when user stops any action in this edit box (clicking, moving cursor, etc)
 - Add swapped-lang display mode in wordbook
+
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
+
 - ~~Dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)~~
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 - On narrow screens (Android) shrink translation and lexical provider names
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
-- Proactive speech generation for wordbook items by separate worker job
 - A concept of currently selected card(s) in wordbook - to help find it/them when changing density, or to delete group; items lost when changing filter are excluded from list 
 - On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
 
@@ -34,6 +31,7 @@ Presentation:
 - Add icons for the app
 
 Architectural:
+- Proactive speech generation for wordbook items by separate worker job
 - Search for correlations between word cards woth llm using cached definitions
 - Leverage Websockets to update UI on data change on other devices
 - Implement Android app

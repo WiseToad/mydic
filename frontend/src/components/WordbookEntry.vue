@@ -30,7 +30,7 @@
           <!-- Row 1: original word -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editSource" class="input w-full py-1 pr-9" placeholder="Original" />
+              <input v-model="editSource" class="input w-full py-1 pr-9" placeholder="Original" @input="onEditSourceInput" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.source_lang }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -883,6 +883,10 @@ function selectEditProvider(p: ProviderItem) {
   retranslateEdit()
 }
 
+function onEditSourceInput() {
+  editProviderCode.value = null
+}
+
 function onEditTargetInput() {
   editProviderCode.value = null
 }
@@ -897,7 +901,7 @@ async function retranslateEdit() {
   const code = editProviderCode.value
   if (!code) return  // can't translate without an explicit provider
   retranslating.value = true
-  retranslateSpinnerTimer = setTimeout(() => { showRetranslateSpinner.value = true }, 150)
+  retranslateSpinnerTimer = setTimeout(() => { showRetranslateSpinner.value = true }, 200)
   try {
     const res = await translateApi.translate(
       editSource.value.trim(),
