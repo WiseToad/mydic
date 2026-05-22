@@ -476,6 +476,9 @@ if (props.inline) {
 }
 
 function onWordClick(word: string) {
+  // Skip if the user drag-selected text (non-collapsed selection = floating
+  // translate button is appearing; don't also navigate as a side-effect).
+  if (!(window.getSelection()?.isCollapsed ?? true)) return
   translatorStore.translateWord(word)
   router.push('/translator')
 }

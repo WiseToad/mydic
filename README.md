@@ -11,8 +11,8 @@ Some non-obvious UI features:
 - A small button appearing below selected text allows you to immediately translate it
 - You may tap the word in a card to show/hide translation hint
 - You may drag cards in the wordbook to reorder them
-- Long-pressing a group tab in the wordbook switches it to name editing mode
-- Dragging a group in the wordbook onto some word, (re)assigns this group to this word
+- Long-pressing a group tab in the wordbook allows you to change it's name
+- Dragging a group in the wordbook onto some word adds this word in the group
 - Clicking the group label in a card activates filtering by this group
 
 Some usage notes for languages, you do not familiar enough with:
@@ -128,10 +128,10 @@ In order to upgrade to a new version, do the following.
 
 #### Stop services:
 ```sh
+sudo systemctl stop encode-tts.timer
+
 cd /opt/mydic
 docker compose down
-
-sudo systemctl stop encode-tts.timer
 ```
 
 #### Cleanup:

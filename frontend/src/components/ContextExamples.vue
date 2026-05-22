@@ -452,6 +452,10 @@ const hasTargets = computed(() => examples.value.some(e => !!e.target))
 defineExpose({ toggleAllVisible, anyVisible, state, hasTargets })
 
 function toggleExample(i: number) {
+  // Skip if the user drag-selected text inside this container: a non-collapsed
+  // selection means the floating translate button is about to appear and the
+  // click is a drag-end, not a deliberate hint-toggle tap.
+  if (!(window.getSelection()?.isCollapsed ?? true)) return
   const visible = allVisible.value || revealed.has(i)
   if (visible) {
     if (allVisible.value) {

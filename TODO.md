@@ -25,6 +25,8 @@ Features:
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
 - A concept of currently selected card(s) in wordbook - to help find it/them when changing density, or to delete group; items lost when changing filter are excluded from list 
 - On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
+- If group filter activated in wordbook, and when highlighting a word from trasnslator, set a new group filter, instead of resetting it, as now is implemented. Find other cases where filter of different types get reset and work with them too
+- Typing a word in translator suggest words found in wordbook
 
 Presentation:
 - Add about dialog with version info
@@ -33,6 +35,7 @@ Presentation:
 Architectural:
 - Proactive speech generation for wordbook items by separate worker job
 - Search for correlations between word cards woth llm using cached definitions
+- A voice repetitor, spelling the words from wordbook one-by-one and checking STT response from the user 
 - Leverage Websockets to update UI on data change on other devices
 - Implement Android app
 

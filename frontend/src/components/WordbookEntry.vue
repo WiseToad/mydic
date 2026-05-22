@@ -532,6 +532,7 @@ const editSource = ref('')
 const editTarget = ref('')
 const editNotes = ref('')
 const editProviderCode = ref<string | null>(null)
+const translationDirty = ref(false)
 const editProviders = ref<ProviderItem[]>([])
 const retranslating = ref(false)
 const showRetranslateSpinner = ref(false)
@@ -865,6 +866,7 @@ async function startEdit() {
   editTarget.value = props.entry.target_text
   editNotes.value = props.entry.notes ?? ''
   editProviderCode.value = props.entry.provider_code ?? null
+  translationDirty.value = false
   editProviders.value = []
   showProviderPopup.value = false
   uiStore.openEditing(props.entry.id)
@@ -884,15 +886,16 @@ function selectEditProvider(p: ProviderItem) {
 }
 
 function onEditSourceInput() {
-  editProviderCode.value = null
+  translationDirty.value = true
 }
 
 function onEditTargetInput() {
-  editProviderCode.value = null
+  translationDirty.value = true
 }
 
 function cancelEdit() {
   showProviderPopup.value = false
+  translationDirty.value = false
   uiStore.closeActive()
 }
 
@@ -910,6 +913,7 @@ async function retranslateEdit() {
       code,
     )
     editTarget.value = res.translated_text
+    translationDirty.value = false
   } finally {
     retranslating.value = false
     if (retranslateSpinnerTimer !== null) {
@@ -934,8 +938,9 @@ function saveEdit() {
     source_text: editSource.value,
     target_text: editTarget.value,
     notes: editNotes.value,
-    provider_code: editProviderCode.value,
+    provider_code: translationDirty.value ? null : editProviderCode.value,
   })
+  translationDirty.value = false
   uiStore.closeActive()
 }
 

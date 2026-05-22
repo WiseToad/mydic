@@ -483,6 +483,9 @@ if (props.inline) {
 /** Open the translator with the clicked match as input, reversing direction
  *  so the target-lang match is translated back into source-lang. */
 function onMatchClick(match: string) {
+  // Skip if the user drag-selected text (non-collapsed selection = floating
+  // translate button is appearing; don't also navigate as a side-effect).
+  if (!(window.getSelection()?.isCollapsed ?? true)) return
   translatorStore.translateWord(match, props.targetLang, props.sourceLang)
   router.push('/translator')
 }
