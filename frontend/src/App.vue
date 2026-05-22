@@ -1,5 +1,5 @@
 <template>
-  <div class="min-h-screen flex flex-col">
+  <div class="h-screen flex flex-col overflow-hidden">
     <!-- Navigation -->
     <header v-if="authStore.isLoggedIn" class="sticky top-0 z-40 bg-surface-900/80 backdrop-blur-md border-b border-surface-700 px-6 py-3 flex items-center gap-6">
       <span class="font-bold text-primary-400 text-lg tracking-tight">MyDic</span>
@@ -55,7 +55,7 @@
       </div>
     </header>
 
-    <main class="flex-1 px-4 py-8">
+    <main class="flex-1 px-4 flex flex-col min-h-0">
       <!-- KeepAlive preserves component state (translation, open panels, etc.)
            when the user switches between Translator and Wordbook tabs.
            LoginView is deliberately excluded — form state should reset. -->

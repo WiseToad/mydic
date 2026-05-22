@@ -1,5 +1,5 @@
 <template>
-  <div class="flex min-h-[70vh] items-center justify-center">
+  <div class="flex flex-1 min-h-0 items-center justify-center py-8">
     <div class="w-full max-w-sm card p-8 shadow-2xl">
       <div class="text-center mb-8">
         <span class="text-2xl font-bold text-primary-400 tracking-tight">MyDic</span>

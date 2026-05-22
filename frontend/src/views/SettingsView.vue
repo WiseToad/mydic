@@ -1,99 +1,98 @@
 <template>
-  <div class="max-w-2xl mx-auto space-y-6">
-    <div class="flex items-start gap-3">
-      <button
-        type="button"
-        class="shrink-0 mt-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-800 transition-colors"
-        :title="canGoBack ? 'Back' : 'Close'"
-        :aria-label="canGoBack ? 'Back' : 'Close'"
-        @click="goBack"
-      >
-        <svg v-if="canGoBack" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-        </svg>
-        <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-        </svg>
-      </button>
-      <div>
-        <h1 class="text-xl font-semibold text-gray-100">Preferences</h1>
-        <p class="text-sm text-gray-500 mt-1">Drag items to reorder priority</p>
+  <div class="max-w-2xl mx-auto w-full flex-1 min-h-0 flex flex-col pb-3">
+    <!-- Fixed header: back/close button + title + tab strip (non-scrollable) -->
+    <div class="flex-none pt-8 pb-6 space-y-6">
+      <div class="flex items-start gap-3">
+        <button
+          type="button"
+          class="shrink-0 mt-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-800 transition-colors"
+          :title="canGoBack ? 'Back' : 'Close'"
+          :aria-label="canGoBack ? 'Back' : 'Close'"
+          @click="goBack"
+        >
+          <svg v-if="canGoBack" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
+          </svg>
+          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+          </svg>
+        </button>
+        <div>
+          <h1 class="text-xl font-semibold text-gray-100">Preferences</h1>
+          <p class="text-sm text-gray-500 mt-1">Drag items to reorder priority</p>
+        </div>
+      </div>
+      <div class="flex items-center border-b border-surface-700">
+        <button
+          v-for="tab in tabs"
+          :key="tab.id"
+          type="button"
+          :class="[
+            'px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px',
+            activeTab === tab.id
+              ? 'border-primary-500 text-primary-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300',
+          ]"
+          @click="activeTab = tab.id"
+        >{{ tab.label }}</button>
       </div>
     </div>
 
-    <!--
-      Tab strip splits the previously single-column scroll into three
-      logically-grouped panes: Languages (cross-cutting), Providers
-      (translation/definition/context/lexical capabilities), and TTS.
-      Mirrors the underline-tab style used by the wordbook details panel.
-    -->
-    <div class="flex items-center border-b border-surface-700">
-      <button
-        v-for="tab in tabs"
-        :key="tab.id"
-        type="button"
-        :class="[
-          'px-3 py-1.5 text-sm font-medium transition-colors border-b-2 -mb-px',
-          activeTab === tab.id
-            ? 'border-primary-500 text-primary-400'
-            : 'border-transparent text-gray-500 hover:text-gray-300',
-        ]"
-        @click="activeTab = tab.id"
-      >{{ tab.label }}</button>
-    </div>
-
-    <!-- Languages tab -->
-    <template v-if="activeTab === 'languages'">
-      <section class="card p-5 space-y-3">
-        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Languages</h2>
-        <div v-if="!langStore.isLoaded" class="text-gray-500 text-sm">Loading…</div>
-        <LangList v-else :items="langStore.languages" @toggle="handleLangToggle" @reorder="handleLangReorder" />
-      </section>
-    </template>
-
-    <!-- Providers tab: translation + definition + context + lexical -->
-    <template v-else-if="activeTab === 'providers'">
-      <div v-if="!store.loaded && !store.error" class="text-gray-500 text-sm">Loading…</div>
-      <div v-else-if="!store.loaded && store.error" class="text-sm text-red-400">{{ store.error }}</div>
-      <template v-else>
+    <!-- Scrollable tab content -->
+    <div class="flex-1 min-h-0 overflow-y-auto space-y-6" style="scrollbar-gutter: stable">
+      <!-- Languages tab -->
+      <template v-if="activeTab === 'languages'">
         <section class="card p-5 space-y-3">
-          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Translation</h2>
-          <ProviderList capability="translation" :items="store.translation" @toggle="handleToggle" @reorder="handleReorder" />
+          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Languages</h2>
+          <div v-if="!langStore.isLoaded" class="text-gray-500 text-sm">Loading…</div>
+          <LangList v-else :items="langStore.languages" @toggle="handleLangToggle" @reorder="handleLangReorder" />
         </section>
-        <section class="card p-5 space-y-3">
-          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Lexical</h2>
-          <ProviderList capability="lexical" :items="store.lexical" @toggle="handleToggle" @reorder="handleReorder" />
-        </section>
-        <section class="card p-5 space-y-3">
-          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Definition</h2>
-          <ProviderList capability="definition" :items="store.definition" @toggle="handleToggle" @reorder="handleReorder" />
-        </section>
-        <section class="card p-5 space-y-3">
-          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Context Examples</h2>
-          <ProviderList capability="context" :items="store.context" @toggle="handleToggle" @reorder="handleReorder" />
-        </section>
-        <p v-if="store.error" class="text-sm text-red-400">{{ store.error }}</p>
       </template>
-    </template>
 
-    <!-- TTS tab -->
-    <template v-else>
-      <div v-if="!store.loaded && !store.error" class="text-gray-500 text-sm">Loading…</div>
-      <div v-else-if="!store.loaded && store.error" class="text-sm text-red-400">{{ store.error }}</div>
-      <section v-else class="card p-5 space-y-3">
-        <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Text-to-speech</h2>
-        <p class="text-xs text-gray-500">Each provider expands to its voices. Voices show the languages they can pronounce.<br>
-          Click language to hear the sample.</p>
-        <TtsList
-          :items="store.tts"
-          @toggle="handleTtsToggle"
-          @reorder="handleTtsReorder"
-          @voice-toggle="handleVoiceToggle"
-          @voice-reorder="handleVoiceReorder"
-        />
-        <p v-if="store.error" class="text-sm text-red-400">{{ store.error }}</p>
-      </section>
-    </template>
+      <!-- Providers tab: translation + definition + context + lexical -->
+      <template v-else-if="activeTab === 'providers'">
+        <div v-if="!store.loaded && !store.error" class="text-gray-500 text-sm">Loading…</div>
+        <div v-else-if="!store.loaded && store.error" class="text-sm text-red-400">{{ store.error }}</div>
+        <template v-else>
+          <section class="card p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Translation</h2>
+            <ProviderList capability="translation" :items="store.translation" @toggle="handleToggle" @reorder="handleReorder" />
+          </section>
+          <section class="card p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Lexical</h2>
+            <ProviderList capability="lexical" :items="store.lexical" @toggle="handleToggle" @reorder="handleReorder" />
+          </section>
+          <section class="card p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Definition</h2>
+            <ProviderList capability="definition" :items="store.definition" @toggle="handleToggle" @reorder="handleReorder" />
+          </section>
+          <section class="card p-5 space-y-3">
+            <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Context Examples</h2>
+            <ProviderList capability="context" :items="store.context" @toggle="handleToggle" @reorder="handleReorder" />
+          </section>
+          <p v-if="store.error" class="text-sm text-red-400">{{ store.error }}</p>
+        </template>
+      </template>
+
+      <!-- TTS tab -->
+      <template v-else>
+        <div v-if="!store.loaded && !store.error" class="text-gray-500 text-sm">Loading…</div>
+        <div v-else-if="!store.loaded && store.error" class="text-sm text-red-400">{{ store.error }}</div>
+        <section v-else class="card p-5 space-y-3">
+          <h2 class="text-sm font-semibold text-gray-300 uppercase tracking-wide">Text-to-speech</h2>
+          <p class="text-xs text-gray-500">Each provider expands to its voices. Voices show the languages they can pronounce.<br>
+            Click language to hear the sample.</p>
+          <TtsList
+            :items="store.tts"
+            @toggle="handleTtsToggle"
+            @reorder="handleTtsReorder"
+            @voice-toggle="handleVoiceToggle"
+            @voice-reorder="handleVoiceReorder"
+          />
+          <p v-if="store.error" class="text-sm text-red-400">{{ store.error }}</p>
+        </section>
+      </template>
+    </div>
   </div>
 </template>
 

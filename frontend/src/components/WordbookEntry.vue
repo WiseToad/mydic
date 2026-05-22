@@ -575,11 +575,25 @@ const submenuPlacement = ref<'left' | 'right'>('right')
 // viewport. Tuned to fit the longest label ("No color") at the current font.
 const SUBMENU_RIGHT_RESERVE_PX = 148
 
+/** Right edge of the nearest overflow-clipping ancestor, falling back to the viewport. */
+function _clipRight(el: HTMLElement): number {
+  let parent = el.parentElement
+  while (parent && parent !== document.body) {
+    const { overflow, overflowX } = window.getComputedStyle(parent)
+    if (/auto|hidden|scroll/.test(overflow) || /auto|hidden|scroll/.test(overflowX)) {
+      return parent.getBoundingClientRect().right
+    }
+    parent = parent.parentElement
+  }
+  return window.innerWidth
+}
+
 function toggleColorSubmenu() {
   if (!showColorSubmenu.value) {
     const rect = actionsContainerRef.value?.getBoundingClientRect()
+    const clipRight = actionsContainerRef.value ? _clipRight(actionsContainerRef.value) : window.innerWidth
     submenuPlacement.value =
-      rect && rect.right + SUBMENU_RIGHT_RESERVE_PX <= window.innerWidth
+      rect && rect.right + SUBMENU_RIGHT_RESERVE_PX <= clipRight
         ? 'right'
         : 'left'
   }

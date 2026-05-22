@@ -1,5 +1,6 @@
 <template>
-  <div class="max-w-5xl mx-auto">
+  <div class="max-w-5xl mx-auto w-full flex-1 min-h-0 flex flex-col py-3">
+  <div class="flex-1 min-h-0 overflow-y-auto">
   <div class="space-y-2">
     <!-- History navigation + language selectors -->
     <div class="relative flex items-center gap-3 flex-wrap">
@@ -408,6 +409,7 @@
         </div>
       </div>
     </div>
+  </div>
   </div>
   </div>
 

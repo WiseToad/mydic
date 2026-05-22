@@ -1,16 +1,6 @@
 <template>
-  <!--
-    The negative top margin in `with-controls` mode reclaims the empty
-    space above the title that is normally reserved for the absolutely
-    positioned `X entries` badge above the right controls. In this mode
-    the controls (and the badge) move down to row 2, so the slot above
-    the title is no longer needed.
-  -->
-  <div
-    class="space-y-3"
-    :class="headerLayout === 'with-controls' ? '-mt-6' : ''"
-  >
-    <!-- Header row: title + tab bar + right controls -->
+  <div class="flex-1 min-h-0 flex flex-col">
+    <!-- Header row: title + tab bar + right controls (fixed, does not scroll) -->
     <!--
       Layout switches between three modes via JS measurement (see
       `checkGroupsFit` in script):
@@ -23,6 +13,10 @@
       flex-wrap break: a 100%-wide item leaves no room for its siblings,
       so groups + controls wrap together to the next row.
     -->
+    <div
+      class="flex-none overflow-visible"
+      :class="headerLayout === 'with-controls' ? 'pt-2 pb-3' : 'pt-8 pb-3'"
+    >
     <div ref="headerRowEl" class="flex items-center gap-3 flex-wrap">
 
       <h1
@@ -118,8 +112,8 @@
         <div class="relative flex items-center gap-2">
           <span class="absolute bottom-full right-0 mb-1.5 text-xs text-gray-500 whitespace-nowrap text-center">{{ filteredEntries.length }} entries</span>
 
-          <!-- Language filter chips (only when multiple source langs present) -->
-          <div v-if="availableLangs.length > 1" class="flex items-center gap-1">
+          <!-- Language filter chips (only when at least one source lang present) -->
+          <div v-if="availableLangs.length > 0" class="flex items-center gap-1">
             <button
               v-for="lang in availableLangs"
               :key="lang"
@@ -136,12 +130,15 @@
           </div>
 
           <!-- Filter by color (icon + popup) -->
-          <div v-if="availableColors.length > 0" class="relative" ref="colorFilterContainerRef">
+          <div class="relative" ref="colorFilterContainerRef">
             <button
               class="p-1.5 transition-colors rounded-lg border border-surface-700"
-              :class="uiStore.activeColors.length > 0 ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+              :class="availableColors.length === 0
+                ? 'text-gray-700 cursor-not-allowed'
+                : uiStore.activeColors.length > 0 ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+              :disabled="availableColors.length === 0"
               @click.stop="showColorFilter = !showColorFilter"
-              :title="uiStore.activeColors.length > 0 ? 'Color filter active' : 'Filter by color'"
+              :title="availableColors.length === 0 ? 'No colored entries' : uiStore.activeColors.length > 0 ? 'Color filter active' : 'Filter by color'"
             >
               <!-- Three overlapping circles — evokes a color palette / filter -->
               <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.3">
@@ -180,11 +177,13 @@
 
           <!-- Translation toggle (icon) -->
           <button
-            v-if="store.entries.length > 0"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="anyHintVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :class="store.entries.length === 0
+              ? 'text-gray-700 cursor-not-allowed'
+              : anyHintVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="store.entries.length === 0"
             @click="toggleAllHints"
-            :title="anyHintVisible ? 'Hide all translations' : 'Show all translations'"
+            :title="store.entries.length === 0 ? 'No entries' : anyHintVisible ? 'Hide all translations' : 'Show all translations'"
           >
             <svg v-if="anyHintVisible" viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z"/>
@@ -197,10 +196,11 @@
 
           <!-- Batch delete filtered entries (icon) -->
           <button
-            v-if="filteredEntries.length > 0"
-            class="p-1.5 transition-colors rounded-lg border border-surface-700 text-gray-500 hover:text-red-400 hover:border-red-500/40"
+            class="p-1.5 transition-colors rounded-lg border border-surface-700"
+            :class="filteredEntries.length === 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-red-400 hover:border-red-500/40'"
+            :disabled="filteredEntries.length === 0"
             @click="handleBatchDelete"
-            :title="`Delete ${filteredEntries.length} filtered ${filteredEntries.length === 1 ? 'entry' : 'entries'}`"
+            :title="filteredEntries.length === 0 ? 'No entries to delete' : `Delete ${filteredEntries.length} filtered ${filteredEntries.length === 1 ? 'entry' : 'entries'}`"
           >
             <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2.5 4.5h11"/>
@@ -213,11 +213,13 @@
 
           <!-- Side word-list panel toggle (icon) -->
           <button
-            v-if="store.entries.length > 0"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="uiStore.sidePanelVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :class="store.entries.length === 0
+              ? 'text-gray-700 cursor-not-allowed'
+              : uiStore.sidePanelVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="store.entries.length === 0"
             @click="uiStore.sidePanelVisible = !uiStore.sidePanelVisible"
-            :title="uiStore.sidePanelVisible ? 'Hide word list' : 'Show word list'"
+            :title="store.entries.length === 0 ? 'No entries' : uiStore.sidePanelVisible ? 'Hide word list' : 'Show word list'"
           >
             <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
@@ -266,10 +268,11 @@
         </div>
       </div>
     </div>
+    </div>
 
-    <!-- Content row: main grid + optional right word-list panel -->
-    <div class="flex gap-3 items-start">
-      <div class="flex-1 min-w-0">
+    <!-- Content row: main grid + optional right word-list panel (fills remaining height) -->
+    <div class="flex-1 min-h-0 flex gap-3 pb-3">
+      <div class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
         <!-- Loading skeleton -->
         <div v-if="store.isLoading" class="grid gap-3" :style="gridStyle">
           <div v-for="i in 6" :key="i" class="h-16 bg-surface-800 rounded-2xl animate-pulse" />
@@ -316,27 +319,26 @@
 
       <!--
         Right-side vertical word-list panel.
-        Alphabetical list of the currently filtered cards; clicking a word
-        scrolls to + briefly highlights the corresponding card.
+        Shrinks to fit when few words; caps at available height with internal
+        scroll when many words. pt-3/pb-3 on the parent provides equal top/bottom
+        spacing so the panel never touches the screen edges.
       -->
       <aside
         v-if="uiStore.sidePanelVisible && filteredEntries.length > 0"
-        class="shrink-0 w-44 sm:w-56"
+        class="shrink-0 w-44 sm:w-56 self-start max-h-full overflow-y-auto card p-2"
       >
-        <div class="sticky top-20 card p-2 max-h-[calc(100vh-6rem)] overflow-y-auto">
-          <ul class="space-y-0.5">
-            <li v-for="entry in sortedPanelWords" :key="entry.id">
-              <button
-                class="w-full text-left px-2 py-1 text-xs rounded truncate transition-colors"
-                :class="uiStore.highlightId === entry.id
-                  ? 'text-primary-300 bg-primary-500/10'
-                  : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
-                :title="entry.source_text"
-                @click="scrollToEntry(entry.id)"
-              >{{ entry.source_text }}</button>
-            </li>
-          </ul>
-        </div>
+        <ul class="space-y-0.5">
+          <li v-for="entry in sortedPanelWords" :key="entry.id">
+            <button
+              class="w-full text-left px-2 py-1 text-xs rounded truncate transition-colors"
+              :class="uiStore.highlightId === entry.id
+                ? 'text-primary-300 bg-primary-500/10'
+                : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
+              :title="entry.source_text"
+              @click="scrollToEntry(entry.id)"
+            >{{ entry.source_text }}</button>
+          </li>
+        </ul>
       </aside>
     </div>
 
