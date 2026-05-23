@@ -43,46 +43,49 @@
         v-if="popupVisible"
         ref="popupRef"
         :style="{ left: popupLeft + 'px', top: popupTop + 'px' }"
-        class="fixed z-50 max-h-72 overflow-auto bg-surface-900 border border-surface-700 rounded-lg shadow-2xl py-1 min-w-[180px]"
+        class="fixed z-50 max-h-72 bg-surface-900 border border-surface-700 rounded-lg shadow-2xl min-w-[180px] flex flex-col"
         @pointerdown.stop
         @click.stop
       >
-        <div v-if="choices.length === 0" class="px-3 py-2 text-xs text-gray-500">
-          No TTS voices available for this language.
-        </div>
-        <button
-          v-for="c in choices"
-          :key="c.provider.code + ':' + c.voice.id"
-          type="button"
-          class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
-          :class="isCurrentDefault(c)
-            ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
-            : 'text-gray-200 hover:bg-surface-700'"
-          :title="isCurrentDefault(c) ? 'Current default voice' : undefined"
-          @click="onChoosePopup(c.provider.code, c.voice.id)"
-        >
-          <!--
-            The current default for this lang gets a leading check so the
-            highlight is unambiguous (the bg tint alone could be misread as
-            a focus/hover style on touch devices).
-          -->
-          <svg
-            v-if="isCurrentDefault(c)"
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-3.5 h-3.5 text-primary-400 shrink-0"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
+        <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Select voice</p>
+        <div class="overflow-auto py-1">
+          <div v-if="choices.length === 0" class="px-3 py-2 text-xs text-gray-500">
+            No TTS voices available for this language.
+          </div>
+          <button
+            v-for="c in choices"
+            :key="c.provider.code + ':' + c.voice.id"
+            type="button"
+            class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
+            :class="isCurrentDefault(c)
+              ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
+              : 'text-gray-200 hover:bg-surface-700'"
+            :title="isCurrentDefault(c) ? 'Current default voice' : undefined"
+            @click="onChoosePopup(c.provider.code, c.voice.id)"
           >
-            <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
-          </svg>
-          <span class="w-3.5 h-3.5 shrink-0" v-else aria-hidden="true" />
-          <span
-            class="text-xs uppercase shrink-0"
-            :class="isCurrentDefault(c) ? 'text-primary-300' : 'text-primary-400'"
-          >{{ c.provider.abbrev || c.provider.code }}</span>
-          <span class="truncate">{{ c.voice.name || c.voice.id }}</span>
-        </button>
+            <!--
+              The current default for this lang gets a leading check so the
+              highlight is unambiguous (the bg tint alone could be misread as
+              a focus/hover style on touch devices).
+            -->
+            <svg
+              v-if="isCurrentDefault(c)"
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-3.5 h-3.5 text-primary-400 shrink-0"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+            </svg>
+            <span class="w-3.5 h-3.5 shrink-0" v-else aria-hidden="true" />
+            <span
+              class="text-xs uppercase shrink-0"
+              :class="isCurrentDefault(c) ? 'text-primary-300' : 'text-primary-400'"
+            >{{ c.provider.abbrev || c.provider.code }}</span>
+            <span class="truncate">{{ c.voice.name || c.voice.id }}</span>
+          </button>
+        </div>
       </div>
     </Teleport>
   </div>

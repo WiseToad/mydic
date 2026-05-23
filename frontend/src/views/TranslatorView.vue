@@ -128,12 +128,18 @@
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
             </button>
-            <!-- Not yet saved: add button -->
+            <!-- Not yet saved: add button (long-press to pick a group) -->
             <button
               v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled"
-              title="Add to Wordbook"
+              ref="addToWordbookBtnRef"
+              title="Add to Wordbook (long-press to pick group)"
               class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors"
-              @click="addToWordbook"
+              @pointerdown.stop="onAddWordbookPointerDown"
+              @pointerup.stop="onAddWordbookPointerUp"
+              @pointerleave="onAddWordbookPointerUp"
+              @pointercancel="onAddWordbookPointerUp"
+              @click="onAddWordbookClick"
+              @contextmenu.prevent
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
             </button>
@@ -437,10 +443,48 @@
       </svg>
     </button>
   </Teleport>
+
+  <!-- Group picker popup for long-press on "add to wordbook" -->
+  <Teleport to="body">
+    <div
+      v-if="groupMenuVisible"
+      ref="groupMenuPopupRef"
+      :style="{ left: groupMenuLeft + 'px', top: groupMenuTop + 'px' }"
+      class="fixed z-50 max-h-72 bg-surface-900 border border-surface-700 rounded-xl shadow-2xl min-w-[160px] flex flex-col"
+      @pointerdown.stop
+      @click.stop
+    >
+      <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Add to group</p>
+      <div class="overflow-auto py-1">
+        <button
+          v-for="group in wordbookGroupsStore.tabs"
+          :key="group.id"
+          type="button"
+          class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
+          :class="wordbookUiStore.activeGroupId === group.id
+            ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
+            : 'text-gray-200 hover:bg-surface-700'"
+          @click="addToWordbookInGroup(group.id)"
+        >
+          <svg
+            v-if="wordbookUiStore.activeGroupId === group.id"
+            xmlns="http://www.w3.org/2000/svg"
+            class="w-3.5 h-3.5 text-primary-400 shrink-0"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            aria-hidden="true"
+          ><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span v-else class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+          {{ group.name }}
+        </button>
+        <p v-if="wordbookGroupsStore.tabs.length === 0" class="px-3 py-1.5 text-sm text-gray-500 italic">No groups yet</p>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
 import { useLanguageSettingsStore } from '@/stores/languageSettings'
@@ -1220,4 +1264,94 @@ async function addToWordbook() {
     toast.error(extractErrorMessage(e, 'Failed to save to wordbook'))
   }
 }
+
+// ─── Add-to-wordbook long-press: group picker ────────────────────
+const addToWordbookBtnRef = ref<HTMLButtonElement | null>(null)
+const groupMenuPopupRef = ref<HTMLElement | null>(null)
+const groupMenuVisible = ref(false)
+const groupMenuLeft = ref(0)
+const groupMenuTop = ref(0)
+let _addWbLongPressTimer: ReturnType<typeof setTimeout> | null = null
+let _addWbLongPressDidFire = false
+
+function onAddWordbookPointerDown(e: PointerEvent) {
+  if (e.button !== 0) return
+  _addWbLongPressDidFire = false
+  if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
+  _addWbLongPressTimer = setTimeout(async () => {
+    _addWbLongPressDidFire = true
+    _addWbLongPressTimer = null
+    if (wordbookGroupsStore.tabs.length === 0) {
+      try { await wordbookGroupsStore.fetchGroups() } catch { /* non-critical */ }
+    }
+    _openGroupMenu()
+  }, 600)
+}
+
+function onAddWordbookPointerUp() {
+  if (_addWbLongPressTimer) {
+    clearTimeout(_addWbLongPressTimer)
+    _addWbLongPressTimer = null
+  }
+}
+
+async function onAddWordbookClick() {
+  if (_addWbLongPressDidFire) {
+    _addWbLongPressDidFire = false
+    return
+  }
+  await addToWordbook()
+}
+
+function _openGroupMenu() {
+  const btn = addToWordbookBtnRef.value
+  if (!btn) return
+  const rect = btn.getBoundingClientRect()
+  // First-pass: right-align below the button
+  groupMenuLeft.value = Math.max(8, rect.right - 160)
+  groupMenuTop.value = rect.bottom + 4
+  groupMenuVisible.value = true
+  document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  nextTick(() => _repositionGroupMenu(rect))
+}
+
+function _repositionGroupMenu(buttonRect: DOMRect) {
+  const popup = groupMenuPopupRef.value
+  if (!popup) return
+  const popupRect = popup.getBoundingClientRect()
+  const margin = 4
+  // Vertical: prefer below; flip above when there is more space
+  const spaceBelow = window.innerHeight - buttonRect.bottom
+  const spaceAbove = buttonRect.top
+  if (spaceBelow < popupRect.height + margin && spaceAbove > spaceBelow) {
+    groupMenuTop.value = Math.max(margin, buttonRect.top - popupRect.height - margin)
+  } else {
+    groupMenuTop.value = buttonRect.bottom + margin
+  }
+  // Horizontal: right-align to the button; flip left-align when near the left edge
+  if (buttonRect.right - popupRect.width < margin) {
+    groupMenuLeft.value = Math.max(margin, buttonRect.left)
+  } else {
+    groupMenuLeft.value = buttonRect.right - popupRect.width
+  }
+}
+
+function _onGroupMenuOutsidePointerDown(e: PointerEvent) {
+  if (groupMenuPopupRef.value?.contains(e.target as Node)) return
+  groupMenuVisible.value = false
+  document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  e.stopPropagation()
+}
+
+async function addToWordbookInGroup(groupId: number) {
+  groupMenuVisible.value = false
+  document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  wordbookUiStore.activeGroupId = groupId
+  await addToWordbook()
+}
+
+onUnmounted(() => {
+  document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
+})
 </script>

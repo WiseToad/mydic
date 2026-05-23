@@ -6,6 +6,7 @@ MyDic, a tool for those who keen to dramatically improve their memorization of f
 
 Some non-obvious UI features:
 - Long-pressing the swap button clears the input text along with language swapping
+- Long-pressing the "Add to wordbook" button allows you to select a group
 - Long-pressing an audio button pops up the voice selection menu
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
 - A small button appearing below selected text allows you to immediately translate it
