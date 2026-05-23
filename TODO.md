@@ -14,7 +14,6 @@ Not-so-critical bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-+ For translator in very narrow screens (android phone in portrait) - strech stacked panel block overall the screen height and display short translation provider codes
 * Optimize api for card movement - do not issue multiple PUTs, make a batch one
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - DB: Store user requested provider along with cached results in db

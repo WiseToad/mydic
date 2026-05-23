@@ -92,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref } from 'vue'
 import {
   claimSlow,
   clearSlow,
@@ -374,6 +374,21 @@ function onChoosePopup(providerCode: string, voiceId: string) {
   // this button currently owns slow mode.
   void _play({ provider: providerCode, voice: voiceId, forceSpeed: 'NORMAL' })
 }
+
+// When the parent KeepAlive view is navigated away from, the component is
+// deactivated (not destroyed). Teleported popups stay in <body> in that case,
+// so we must close them explicitly.
+onDeactivated(() => {
+  if (popupVisible.value) {
+    popupVisible.value = false
+    document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+    document.removeEventListener('dragstart', onDocumentDragStart, true)
+  }
+  if (pressTimer) {
+    clearTimeout(pressTimer)
+    pressTimer = null
+  }
+})
 
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)

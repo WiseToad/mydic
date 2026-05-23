@@ -1199,6 +1199,10 @@ onActivated(() => {
 
 onDeactivated(() => {
   viewIsActive.value = false
+  // Close transient overlays so they don't linger when navigating away and back.
+  showColorFilter.value = false
+  uiStore.closeActive()
+  uiStore.activeMenuId = null
 })
 
 // Defensive: if a pending highlight is set while the view is already active,

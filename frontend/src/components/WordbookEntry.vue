@@ -23,6 +23,7 @@
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
       ]"
       @animationend.self="onFlashEnd"
+      @pointerdown.capture="onCardPointerDownCapture"
     >
       <!-- Edit mode: unified form (replaces entire card content) -->
       <template v-if="editing">
@@ -682,11 +683,39 @@ watch(showActionsMenu, (open) => {
   }
 })
 
+// ── Audio-button drag guard ───────────────────────────────────────────────────
+// On Android, the browser initiates HTML5 drag (firing pointercancel) for a
+// long-press on any draggable element, which cancels the AudioButton's 500 ms
+// long-press timer before the voice-picker popup can open.
+// Fix: on any touch that starts over an AudioButton, immediately set
+// draggable=false on the card so the browser never starts a drag for that
+// touch.  We use the capture phase so we see the event before the AudioButton's
+// @pointerdown.stop swallows it.  draggable is restored on pointer release.
+let _restoreCardDraggable: (() => void) | null = null
+
+function onCardPointerDownCapture(e: PointerEvent) {
+  if (editing.value) return
+  if (!(e.target as Element | null)?.closest('[data-audio-button]')) return
+  const card = cardRef.value
+  if (!card) return
+  card.draggable = false
+  const restore = () => {
+    card.draggable = !editing.value
+    document.removeEventListener('pointerup', restore, true)
+    document.removeEventListener('pointercancel', restore, true)
+    _restoreCardDraggable = null
+  }
+  _restoreCardDraggable = restore
+  document.addEventListener('pointerup', restore, true)
+  document.addEventListener('pointercancel', restore, true)
+}
+
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
   document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
   document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
   _clearPendingCardClose()
+  _restoreCardDraggable?.()
   stopDetailsResizeObserver()
   if (retranslateSpinnerTimer !== null) {
     clearTimeout(retranslateSpinnerTimer)

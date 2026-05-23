@@ -484,7 +484,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, onDeactivated, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
 import { useLanguageSettingsStore } from '@/stores/languageSettings'
@@ -1358,8 +1358,10 @@ let _narrowMq: MediaQueryList | null = null
 
 // Panel grid height for narrow screens — measured dynamically so the
 // input+result block fills exactly the viewport without a scrollbar when
-// the details section is collapsed.  A ~44 px reserve is always kept for
-// the action row ("Definition & Context" toggle) beneath the grid.
+// the details section is collapsed.  The reserve accounts for:
+//   • action row ("Definition & Context" toggle): pt-2 + pb-3 + border + text ≈ 39 px
+//   • bottom py-3 of the TranslatorView outer wrapper: 12 px
+//   • small safety margin: 5 px  →  total ≈ 56 px
 // The height is set once and does NOT change when details open or close,
 // so closing details restores the correct view without any content resize.
 const panelGridRef = ref<HTMLElement | null>(null)
@@ -1374,7 +1376,7 @@ function updateNarrowPanelHeight() {
   const el = panelGridRef.value
   if (!el) { narrowPanelHeight.value = null; return }
   const top = el.getBoundingClientRect().top
-  narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 44)
+  narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 56)
 }
 
 function _onNarrowMqChange(e: MediaQueryListEvent) {
@@ -1390,6 +1392,19 @@ onMounted(() => {
   _narrowMq.addEventListener('change', _onNarrowMqChange)
   window.addEventListener('resize', _onWindowResize)
   nextTick(updateNarrowPanelHeight)
+})
+
+// When KeepAlive navigates away from this view (without destroying it),
+// Teleported popups stay in <body>. Close them explicitly on deactivation.
+onDeactivated(() => {
+  if (groupMenuVisible.value) {
+    groupMenuVisible.value = false
+    document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  }
+  if (_addWbLongPressTimer) {
+    clearTimeout(_addWbLongPressTimer)
+    _addWbLongPressTimer = null
+  }
 })
 
 onUnmounted(() => {
