@@ -76,7 +76,7 @@
         (desk:) the layout switches to a single-row three-column grid so panels
         sit side-by-side and stretch to equal height automatically.
       -->
-      <div class="grid h-96 narrow:h-[520px] desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <div ref="panelGridRef" :style="panelGridStyle" class="grid h-96 desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <!-- Source panel -->
         <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto desk:overflow-visible">
           <div class="flex items-center gap-2 h-8">
@@ -244,7 +244,7 @@
               title="Lexical provider"
               @change="onLexProviderChange"
             >
-              <option value="" :selected="dropdownLexCode === ''">No lexical provider</option>
+              <option value="" :selected="dropdownLexCode === ''">{{ isNarrow ? 'No lexical' : 'No lexical provider' }}</option>
               <!-- Saved lexical provider removed from registry (ghost) -->
               <option
                 v-if="ghostLexProviderCode"
@@ -1351,20 +1351,51 @@ async function addToWordbookInGroup(groupId: number) {
 }
 
 // ─── Narrow-screen detection ─────────────────────────────────────
-// Used to switch provider dropdowns to their short abbreviations on very
-// small viewports (portrait phones), keeping dropdowns narrow.
+// Drives short provider abbreviations and dynamic panel height on very
+// small viewports (portrait phones).
 const isNarrow = ref(false)
 let _narrowMq: MediaQueryList | null = null
-function _onNarrowMqChange(e: MediaQueryListEvent) { isNarrow.value = e.matches }
+
+// Panel grid height for narrow screens — measured dynamically so the
+// input+result block fills exactly the viewport without a scrollbar when
+// the details section is collapsed.  A ~44 px reserve is always kept for
+// the action row ("Definition & Context" toggle) beneath the grid.
+// The height is set once and does NOT change when details open or close,
+// so closing details restores the correct view without any content resize.
+const panelGridRef = ref<HTMLElement | null>(null)
+const narrowPanelHeight = ref<number | null>(null)
+
+const panelGridStyle = computed(() =>
+  narrowPanelHeight.value !== null ? { height: `${narrowPanelHeight.value}px` } : undefined
+)
+
+function updateNarrowPanelHeight() {
+  if (!isNarrow.value) { narrowPanelHeight.value = null; return }
+  const el = panelGridRef.value
+  if (!el) { narrowPanelHeight.value = null; return }
+  const top = el.getBoundingClientRect().top
+  narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 44)
+}
+
+function _onNarrowMqChange(e: MediaQueryListEvent) {
+  isNarrow.value = e.matches
+  nextTick(updateNarrowPanelHeight)
+}
+
+function _onWindowResize() { updateNarrowPanelHeight() }
+
 onMounted(() => {
   _narrowMq = window.matchMedia('(max-width: 479px)')
   isNarrow.value = _narrowMq.matches
   _narrowMq.addEventListener('change', _onNarrowMqChange)
+  window.addEventListener('resize', _onWindowResize)
+  nextTick(updateNarrowPanelHeight)
 })
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
+  window.removeEventListener('resize', _onWindowResize)
 })
 </script>

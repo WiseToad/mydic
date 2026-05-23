@@ -4,7 +4,7 @@
       :title="buttonTitle"
       :disabled="!text"
       :class="[
-        'inline-flex items-center justify-center rounded-full disabled:opacity-30 disabled:cursor-not-allowed',
+        'inline-flex items-center justify-center rounded-full disabled:opacity-30 disabled:cursor-not-allowed touch-none',
         isPlaying ? '' : 'transition-colors',
         size === 'sm' ? 'w-6 h-6' : 'w-8 h-8',
         isGenerating
