@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!settings.loaded || choices.length > 0" class="relative inline-flex" ref="rootRef" data-audio-button>
+  <div v-if="!settings.loaded || choices.length > 0" class="relative inline-flex" ref="rootRef" data-audio-button draggable="false">
     <button
       :title="buttonTitle"
       :disabled="!text"
