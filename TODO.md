@@ -14,11 +14,10 @@ Not-so-critical bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-- Independent scrolling of main field and side panel in wordbook; top bar also stays at the top and not scrolls past the top of the screen
 - Add swapped-lang display mode in wordbook
-
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 
+- Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle so some group strictly should be active. Rename "group" to "tab"?
 - ~~Dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)~~
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 - On narrow screens (Android) shrink translation and lexical provider names

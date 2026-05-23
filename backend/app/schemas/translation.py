@@ -14,8 +14,8 @@ class TranslateRequest(BaseModel):
         v = normalize_text(v)
         if not v:
             raise ValueError("Text must not be empty")
-        if len(v) > 5000:
-            raise ValueError("Text too long (max 5000 characters)")
+        if len(v) > 100:
+            raise ValueError("Text too long (max 100 characters)")
         return v
 
 

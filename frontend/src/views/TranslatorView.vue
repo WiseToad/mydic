@@ -119,14 +119,6 @@
               {{ store.result.detected_lang }}
             </span>
             <div class="flex-1" />
-            <button
-              v-if="store.inputText"
-              title="Clear input"
-              class="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-300 hover:bg-surface-800 rounded-full transition-colors"
-              @click="clearInput"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-            </button>
             <!-- Already saved: click to jump to the wordbook card -->
             <button
               v-if="store.result && isAlreadyInWordbook && hasEnabledAvailableTranslationProvider"
@@ -145,12 +137,21 @@
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
             </button>
+            <button
+              v-if="store.inputText"
+              title="Clear input"
+              class="inline-flex items-center justify-center w-8 h-8 text-gray-500 hover:text-gray-300 hover:bg-surface-800 rounded-full transition-colors"
+              @click="clearInput"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+            </button>
           </div>
           <textarea
             ref="inputTextareaRef"
             v-model="store.inputText"
             placeholder="Enter text to translate…"
             rows="4"
+            maxlength="100"
             class="w-full flex-1 resize-none font-medium text-gray-100 placeholder:text-gray-600 bg-transparent focus:outline-none leading-relaxed overflow-y-auto"
             @input="onInput"
             @keydown="onInputActivity"
@@ -162,7 +163,7 @@
           />
           <div class="flex items-center justify-between h-8">
             <AudioButton v-if="store.inputText" :text="store.inputText" :lang="resolvedSourceLang" title="Listen to input" />
-            <p v-if="store.inputText" class="text-xs text-gray-600 ml-auto">{{ store.inputText.length }} / 5000</p>
+<p v-if="store.inputText" class="text-xs text-gray-600 ml-auto">{{ store.inputText.length }} / 100</p>
           </div>
         </div>
 
@@ -1175,26 +1176,15 @@ function clearInput() {
 
 /**
  * Jump to the Wordbook view and scroll to + flash the card matching the
- * current translation. Only the filter(s) that actually hide this card are
- * reset — any other active filters are preserved.
+ * current translation. Active filters that would hide this card are widened
+ * or switched to include it; unrelated active filters are preserved.
  */
 function openInWordbook() {
   if (!store.result) return
   const entry = wordbookStore.findDuplicate(resolvedSourceLang.value, store.targetLang, store.inputText.trim())
   if (!entry) return
   const pair = `${entry.source_lang}→${entry.target_lang}`
-  const activeLangs = wordbookUiStore.activeLangs
-  const activeGroupId = wordbookUiStore.activeGroupId
-  const activeColors = wordbookUiStore.activeColors
-  const langOk = activeLangs.length === 0 || activeLangs.includes(pair)
-  const tabOk = activeGroupId === null || (entry.group?.id ?? null) === activeGroupId
-  const entryColor = entry.color ?? null
-  const colorOk =
-    activeColors.length === 0 ||
-    (entryColor !== null
-      ? activeColors.includes(entryColor)
-      : activeColors.includes('none'))
-  wordbookUiStore.requestShowEntry(entry.id, langOk, tabOk, colorOk)
+  wordbookUiStore.requestShowEntry(entry.id, pair, entry.group?.id ?? null, entry.color ?? null)
   router.push({ name: 'wordbook' })
 }
 

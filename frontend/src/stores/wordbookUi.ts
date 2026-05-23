@@ -280,25 +280,34 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
 
   /**
    * Queue the given entry id for a scroll-to-and-highlight action on the
-   * next render of the Wordbook view. Clears only the filter(s) that would
+   * next render of the Wordbook view. Adjusts only the filter(s) that would
    * hide the target card so unrelated active filters are preserved:
-   *   - langOk   = false → clear the language-pair filter
-   *   - tabOk    = false → clear the active group tab
-   *   - colorOk  = false → clear the active color filter
+   *   - lang-pair filter active but missing `pair`    → add `pair` to the list
+   *   - group filter active but on a different group  → switch to `entryGroupId`
+   *     (if the entry has no group, clears the filter — nothing to switch to)
+   *   - color filter active but missing entry's color → add that color to the list
    */
-  function requestShowEntry(id: number, langOk: boolean, tabOk: boolean, colorOk: boolean) {
+  function requestShowEntry(
+    id: number,
+    pair: string,
+    entryGroupId: number | null,
+    entryColor: string | null,
+  ) {
     let changed = false
-    if (!langOk) {
-      prefs.value.activeLangs = []
+    if (prefs.value.activeLangs.length > 0 && !prefs.value.activeLangs.includes(pair)) {
+      prefs.value.activeLangs = [...prefs.value.activeLangs, pair]
       changed = true
     }
-    if (!tabOk) {
-      prefs.value.activeGroupId = null
+    if (prefs.value.activeGroupId !== null && prefs.value.activeGroupId !== entryGroupId) {
+      prefs.value.activeGroupId = entryGroupId
       changed = true
     }
-    if (!colorOk) {
-      prefs.value.activeColors = []
-      changed = true
+    if (prefs.value.activeColors.length > 0) {
+      const colorKey = entryColor ?? 'none'
+      if (!prefs.value.activeColors.includes(colorKey)) {
+        prefs.value.activeColors = [...prefs.value.activeColors, colorKey]
+        changed = true
+      }
     }
     if (changed) savePrefs(prefs.value)
     pendingHighlightId.value = id
