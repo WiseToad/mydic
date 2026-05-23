@@ -2,7 +2,6 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-* Translation button for text selection do not work for wordbook details - on pressing it details are closed and button is somehow "reset" with no result
 * DB: On add-to-wordbook clicking rapid enpough (or when server responded with delay), the same word can be added to wordbook multiple times
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
 
@@ -15,8 +14,8 @@ Not-so-critical bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
++ For translator in very narrow screens (android phone in portrait) - strech stacked panel block overall the screen height and display short translation provider codes
 * Optimize api for card movement - do not issue multiple PUTs, make a batch one
-- For translator in very narrow screens (android phone in portrait) - strech stacked panel block overall the screen height and display short translation provider codes
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - DB: Store user requested provider along with cached results in db
 - Remember scrolling position for a group; If layout state changed (by orientation in Android or by other screen resizing) then restore that position by (non-animated) scrolling to the same upper-left word (or it's row) in the group list

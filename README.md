@@ -9,8 +9,8 @@ Some non-obvious UI features:
 - Long-pressing the "Add to wordbook" button allows you to select a group
 - Long-pressing an audio button pops up the voice selection menu
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
-- A small button appearing below selected text allows you to immediately translate it
-- You may tap the word in a card to show/hide translation hint
+- A small button appearing below selected text allows you to translate selection
+- You may tap the word in a wordbook card to show/hide translation hint
 - You may drag cards in the wordbook to reorder them
 - Long-pressing a group tab in the wordbook allows you to change it's name
 - You may drag group tips in the wordbook to reorder them
