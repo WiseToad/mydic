@@ -707,14 +707,29 @@ const WORDBOOK_DETAILS_TOP_MARGIN_PX = 12
 const entryRootRef = ref<HTMLElement | null>(null)
 
 /**
- * After the details overlay opens, scroll the page so more of the
- * panel becomes visible. Bounded so that the entry's top never crosses
- * above `top + WORDBOOK_DETAILS_TOP_MARGIN_PX` — in other words, we
- * never scroll "too far" and tuck the entry's source text out of view.
- *
- * The page itself is already long enough to scroll into (the wordbook
- * grid + its surrounding chrome), so we only need to drive
- * `window.scrollBy`; no body-padding tricks required.
+ * Returns the nearest scrollable ancestor of `el`, or `document.documentElement`
+ * as a fallback. Used so ensureDetailsVisible works whether the wordbook grid
+ * is the scroll root (current layout: inner overflow-y-auto div) or the window
+ * itself was the scroll container (legacy layout).
+ */
+function _findScrollParent(el: HTMLElement): Element {
+  let parent = el.parentElement
+  while (parent && parent !== document.documentElement) {
+    const { overflow, overflowY } = window.getComputedStyle(parent)
+    if (/auto|scroll/.test(overflow) || /auto|scroll/.test(overflowY)) {
+      return parent
+    }
+    parent = parent.parentElement
+  }
+  return document.documentElement
+}
+
+/**
+ * After the details overlay opens, scroll the nearest scroll container so
+ * more of the panel becomes visible. Bounded so that the entry's top never
+ * crosses above `stickyHeaderBottom + WORDBOOK_DETAILS_TOP_MARGIN_PX` —
+ * in other words, we never scroll "too far" and tuck the entry's source
+ * text out of view.
  */
 function ensureDetailsVisible() {
   if (!expandedInfo.value) return
@@ -726,18 +741,20 @@ function ensureDetailsVisible() {
   ) as HTMLElement | null
   if (!overlay) return
   const overlayRect = overlay.getBoundingClientRect()
-  const overlayBottom = overlayRect.bottom
-  const viewportHeight = window.innerHeight
-  if (overlayBottom <= viewportHeight) return  // already fully visible
-  const overflow = overlayBottom - viewportHeight
-  // How much we can scroll without pushing the entry's top above the
-  // sticky header + top-margin band. Negative values clamp to 0 (no scroll possible).
-  const stickyHeader = document.querySelector('header') as HTMLElement | null
-  const stickyHeaderHeight = stickyHeader?.getBoundingClientRect().height ?? 0
-  const headroom = Math.max(0, wrapperRect.top - stickyHeaderHeight - WORDBOOK_DETAILS_TOP_MARGIN_PX)
+  const scrollParent = _findScrollParent(wrapper) as HTMLElement
+  const scrollParentRect = scrollParent.getBoundingClientRect()
+  // Use the scroll container's own visible bounds rather than the window:
+  //   • scrollParentRect.bottom fixes "not enough scroll" — the container
+  //     ends above window.innerHeight due to pb-3 on its flex parent.
+  //   • scrollParentRect.top fixes "too much scroll" — the container starts
+  //     below the app header (it also sits below the wordbook header row),
+  //     so using only stickyHeaderHeight overestimates the available headroom.
+  if (overlayRect.bottom <= scrollParentRect.bottom) return  // already fully visible
+  const overflow = overlayRect.bottom - scrollParentRect.bottom
+  const headroom = Math.max(0, wrapperRect.top - scrollParentRect.top - WORDBOOK_DETAILS_TOP_MARGIN_PX)
   const delta = Math.min(overflow, headroom)
   if (delta <= 0) return
-  window.scrollBy({ top: delta, behavior: 'smooth' })
+  scrollParent.scrollBy({ top: delta, behavior: 'smooth' })
 }
 
 // The DefinitionPanel / ContextExamples / LexicalPanel children fetch
