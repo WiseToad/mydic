@@ -1,5 +1,5 @@
 <template>
-  <div class="h-screen flex flex-col overflow-hidden">
+<div class="h-dvh flex flex-col overflow-hidden">
     <!-- Navigation -->
     <header v-if="authStore.isLoggedIn" class="sticky top-0 z-40 bg-surface-900/80 backdrop-blur-md border-b border-surface-700 px-6 py-3 flex items-center gap-6">
       <span class="font-bold text-primary-400 text-lg tracking-tight">MyDic</span>

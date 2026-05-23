@@ -76,7 +76,7 @@
         (desk:) the layout switches to a single-row three-column grid so panels
         sit side-by-side and stretch to equal height automatically.
       -->
-      <div class="grid h-96 desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
+      <div class="grid h-96 narrow:h-[520px] desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <!-- Source panel -->
         <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto desk:overflow-visible">
           <div class="flex items-center gap-2 h-8">
@@ -227,7 +227,7 @@
                 :selected="p.code === dropdownTranslationCode"
                 :disabled="!p.enabled || !p.available"
                 :title="!p.enabled ? 'Excluded' : (!p.available ? (p.unavailable_reason ?? 'Not available') : undefined)"
-              >{{ !p.enabled ? `🛇 ${p.name}` : (!p.available ? `⚠ ${p.name}` : p.name) }}</option>
+              >{{ !p.enabled ? `🛇 ${isNarrow ? p.abbrev : p.name}` : (!p.available ? `⚠ ${isNarrow ? p.abbrev : p.name}` : (isNarrow ? p.abbrev : p.name)) }}</option>
             </select>
             <!--
               Lexical provider selector (sits next to the translation
@@ -260,7 +260,7 @@
                 :selected="p.code === dropdownLexCode"
                 :disabled="!p.enabled || !p.available"
                 :title="!p.enabled ? 'Excluded' : (!p.available ? (p.unavailable_reason ?? 'Not available') : undefined)"
-              >{{ !p.enabled ? `🛇 ${p.name}` : (!p.available ? `⚠ ${p.name}` : p.name) }}</option>
+              >{{ !p.enabled ? `🛇 ${isNarrow ? p.abbrev : p.name}` : (!p.available ? `⚠ ${isNarrow ? p.abbrev : p.name}` : (isNarrow ? p.abbrev : p.name)) }}</option>
             </select>
           </div>
 
@@ -1350,8 +1350,21 @@ async function addToWordbookInGroup(groupId: number) {
   await addToWordbook()
 }
 
+// ─── Narrow-screen detection ─────────────────────────────────────
+// Used to switch provider dropdowns to their short abbreviations on very
+// small viewports (portrait phones), keeping dropdowns narrow.
+const isNarrow = ref(false)
+let _narrowMq: MediaQueryList | null = null
+function _onNarrowMqChange(e: MediaQueryListEvent) { isNarrow.value = e.matches }
+onMounted(() => {
+  _narrowMq = window.matchMedia('(max-width: 479px)')
+  isNarrow.value = _narrowMq.matches
+  _narrowMq.addEventListener('change', _onNarrowMqChange)
+})
+
 onUnmounted(() => {
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
+  _narrowMq?.removeEventListener('change', _onNarrowMqChange)
 })
 </script>

@@ -4,6 +4,7 @@ export default {
   theme: {
     extend: {
       screens: {
+        'narrow': { max: '479px' },
         'desk': '920px',
       },
       colors: {
