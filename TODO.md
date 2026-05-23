@@ -2,23 +2,29 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-- On add-to-wordbook clicking rapid enpough (or when server responded with delay), the same word can be added to wordbook multiple times
+* Translation button for text selection do not work for wordbook details - on pressing it details are closed and button is somehow "reset" with no result
+* DB: On add-to-wordbook clicking rapid enpough (or when server responded with delay), the same word can be added to wordbook multiple times
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
 
 Bugs encountered when running in Android device browser:
-- In wordbook, it's impossible to change voice by long press on audio button. Instead, the card itself is enetering dragging mode.
+* In wordbook, it's impossible to change voice by long press on audio button. Instead, the card itself is enetering dragging mode.
 - It's impossible to translate selection - the translate button do not appears. Instead, there is standard android toolbar appeared.
 
 Not-so-critical bugs:
 - Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer.
+- Implement storing in-memory extra height value for wordbook cards, to prevent screen twitching when user changes details for cards near bottom of the screen
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-- Add swapped-lang display mode in wordbook
-- Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
-
-- Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle so some group strictly should be active. Rename "group" to "tab"?
+- Long-pressing on "add to wordbook" brings in a popup with word groups
+* Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
+* Optimize api for card movement - do not issue multiple PUTs, make a batch one
+- For translator in very narrow screens (android phone in portrait) - strech stacked panel block overall the screen height and display short translation provider codes
+- DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
+- DB: Store user requested provider along with cached results in db
+- Remember scrolling position for a group; If layout state changed (by orientation in Android or by other screen resizing) then restore that position by (non-animated) scrolling to the same upper-left word (or it's row) in the group list
 - ~~Dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)~~
+- Tapping MyDic or Wordbook collapses upper toolbar of Chrome in Android.
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 - On narrow screens (Android) shrink translation and lexical provider names
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
@@ -52,6 +58,7 @@ Distant future:
 - Metrics for inner and external api calls
 - Per-user stats for external api usage
 - UI localization
+- Definition providers with non-english output (non-english Wikitionary alternatives)
 - Light theme, theming in general
 - Batch import words into wordbook
 - Ability to force re-fetches around the cache (if it really needed)

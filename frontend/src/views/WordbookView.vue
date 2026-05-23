@@ -126,7 +126,7 @@
                     ? 'bg-primary-500/20 text-primary-400 border-primary-500/40'
                     : 'text-gray-700 border-surface-800 hover:text-gray-500',
               ]"
-            ><span class="block -translate-y-px">{{ lang.replace('→', ' → ') }}</span></button>
+            ><span class="block -translate-y-px">{{ formatLangPair(lang) }}</span></button>
           </div>
 
           <!-- Filter by color (icon + popup) -->
@@ -191,6 +191,24 @@
             </svg>
             <svg v-else viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 2l12 12M6.5 6.6a2 2 0 0 0 2.9 2.9M3.3 5.2C2.2 6.3 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1 0 1.9-.3 2.7-.7M13.1 10.4c.9-1 1.4-2.4 1.4-2.4s-2.5-4.5-6.5-4.5c-.5 0-1 .1-1.4.2"/>
+            </svg>
+          </button>
+
+          <!-- Swap display mode toggle (icon) -->
+          <button
+            class="p-1.5 transition-colors rounded-lg border border-surface-700"
+            :class="store.entries.length === 0
+              ? 'text-gray-700 cursor-not-allowed'
+              : uiStore.swapDisplay ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="store.entries.length === 0"
+            @click="uiStore.swapDisplay = !uiStore.swapDisplay"
+            :title="store.entries.length === 0 ? 'No entries' : uiStore.swapDisplay ? 'Disable swap display' : 'Enable swap display'"
+          >
+            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M2 5h9"/>
+              <path d="M8.5 2.5L11 5l-2.5 2.5"/>
+              <path d="M14 11H5"/>
+              <path d="M7.5 8.5L5 11l2.5 2.5"/>
             </svg>
           </button>
 
@@ -334,9 +352,9 @@
               :class="uiStore.highlightId === entry.id
                 ? 'text-primary-300 bg-primary-500/10'
                 : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
-              :title="entry.source_text"
+              :title="uiStore.swapDisplay ? entry.target_text : entry.source_text"
               @click="scrollToEntry(entry.id)"
-            >{{ entry.source_text }}</button>
+            >{{ uiStore.swapDisplay ? entry.target_text : entry.source_text }}</button>
           </li>
         </ul>
       </aside>
@@ -543,10 +561,18 @@ watch(filteredEntries, (entries) => {
 // ─── Side panel (alphabetical word list) ─────────────────────────────────────
 
 const sortedPanelWords = computed(() =>
-  [...filteredEntries.value].sort((a, b) =>
-    a.source_text.localeCompare(b.source_text, undefined, { sensitivity: 'base' }),
-  ),
+  [...filteredEntries.value].sort((a, b) => {
+    const textA = uiStore.swapDisplay ? a.target_text : a.source_text
+    const textB = uiStore.swapDisplay ? b.target_text : b.source_text
+    return textA.localeCompare(textB, undefined, { sensitivity: 'base' })
+  }),
 )
+
+function formatLangPair(pair: string): string {
+  if (!uiStore.swapDisplay) return pair.replace('→', ' → ')
+  const [src, tgt] = pair.split('→')
+  return `${tgt} ← ${src}`
+}
 
 /**
  * Scroll the entry grid item with the given id into view and trigger a brief

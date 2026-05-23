@@ -19,6 +19,7 @@ interface GlobalPrefs {
   activeGroupId: number | null  // null = show all groups
   showTranslations?: boolean       // when set, overrides all per-entry hintVisible flags
   sidePanelVisible?: boolean  // vertical word list panel on the right
+  swapDisplay?: boolean     // show target word as primary, source as hint
 }
 
 type UiMap = Record<number, EntryUiState>
@@ -27,7 +28,7 @@ type UiMap = Record<number, EntryUiState>
 const LEGACY_UI_KEY = 'lb_wordbook_ui'
 const LEGACY_PROV_KEY = 'lb_wb_lexical_providers'
 
-const DEFAULT_PREFS: GlobalPrefs = { density: 'normal', activeLangs: [], activeColors: [], activeGroupId: null, showTranslations: undefined, sidePanelVisible: false }
+const DEFAULT_PREFS: GlobalPrefs = { density: 'normal', activeLangs: [], activeColors: [], activeGroupId: null, showTranslations: undefined, sidePanelVisible: false, swapDisplay: false }
 
 interface StorageNode {
   entries?: UiMap
@@ -37,6 +38,7 @@ interface StorageNode {
   activeGroupId?: number | null
   showTranslations?: boolean
   sidePanelVisible?: boolean
+  swapDisplay?: boolean
 }
 
 /** Namespaced localStorage key for the current user's wordbook UI state. */
@@ -157,6 +159,11 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   const sidePanelVisible = computed<boolean>({
     get: () => prefs.value.sidePanelVisible ?? false,
     set: (v) => { prefs.value.sidePanelVisible = v; savePrefs(prefs.value) },
+  })
+
+  const swapDisplay = computed<boolean>({
+    get: () => prefs.value.swapDisplay ?? false,
+    set: (v) => { prefs.value.swapDisplay = v; savePrefs(prefs.value) },
   })
 
   // --- Per-card overlay state ---
@@ -353,7 +360,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     toggleDetails, openEditing, closeActive,
     activeMenuId,
     setAllHints, showTranslations,
-    density, activeLangs, activeColors, activeGroupId, sidePanelVisible,
+    density, activeLangs, activeColors, activeGroupId, sidePanelVisible, swapDisplay,
     highlightId, highlightSeq, pendingHighlightId,
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
     reinitialize,

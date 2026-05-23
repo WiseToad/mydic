@@ -134,12 +134,12 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                 data-hint-toggle
                 class="cursor-pointer hover:text-primary-400 transition-colors"
                 @click="hintVisible = !hintVisible"
-              >{{ entry.source_text }}</span>
+              >{{ primaryText }}</span>
             </p>
           </div>
 
           <div class="flex items-center gap-1 shrink-0">
-            <AudioButton :text="entry.source_text" :lang="entry.source_lang" size="sm" title="Pronounce source" />
+            <AudioButton :text="primaryText" :lang="primaryLang" size="sm" title="Pronounce source" />
 
             <template v-if="!isCompact">
               <div class="relative" ref="actionsContainerRef">
@@ -266,15 +266,14 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
         <!-- Secondary row: lang pair OR translation swap in place; buttons always on right -->
         <div class="flex items-start gap-2 min-w-0">
           <p v-if="!hintVisible" class="text-xs text-gray-500 flex-1 min-w-0">
-            {{ entry.source_lang }} → {{ entry.target_lang }}
+            {{ langPairDisplay }}
             <span v-if="entry.provider_abbrev" class="ml-1 text-gray-600 opacity-0 group-hover/provider:opacity-100 transition-opacity">· {{ entry.provider_abbrev }}</span>
           </p>
-          <p v-else class="flex-1 min-w-0 text-gray-400 text-sm self-center">{{ entry.target_text }}</p>
+          <p v-else class="flex-1 min-w-0 text-gray-400 text-sm self-center">{{ hintText }}</p>
           <div class="flex items-center gap-1 shrink-0">
             <AudioButton
-              v-if="hintVisible"
-              :text="entry.target_text"
-              :lang="entry.target_lang"
+              :text="hintText"
+              :lang="hintLang"
               size="sm"
               title="Pronounce translation"
             />
@@ -476,6 +475,15 @@ const hintVisible = computed({
   get: () => uiStore.getReactive(props.entry.id, 'hintVisible'),
   set: (v) => uiStore.setState(props.entry.id, { hintVisible: v }),
 })
+
+const swapDisplay = computed(() => uiStore.swapDisplay)
+const primaryText = computed(() => swapDisplay.value ? props.entry.target_text : props.entry.source_text)
+const primaryLang = computed(() => swapDisplay.value ? props.entry.target_lang : props.entry.source_lang)
+const hintText = computed(() => swapDisplay.value ? props.entry.source_text : props.entry.target_text)
+const hintLang = computed(() => swapDisplay.value ? props.entry.source_lang : props.entry.target_lang)
+const langPairDisplay = computed(() => swapDisplay.value
+  ? `${props.entry.target_lang} ← ${props.entry.source_lang}`
+  : `${props.entry.source_lang} → ${props.entry.target_lang}`)
 
 
 const expandedInfo = computed(

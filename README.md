@@ -12,7 +12,8 @@ Some non-obvious UI features:
 - You may tap the word in a card to show/hide translation hint
 - You may drag cards in the wordbook to reorder them
 - Long-pressing a group tab in the wordbook allows you to change it's name
-- Dragging a group in the wordbook onto some word adds this word in the group
+- You may drag group tips in the wordbook to reorder them
+- Dragging a group tip onto some word adds this word in the group
 - Clicking the group label in a card activates filtering by this group
 
 Some usage notes for languages, you do not familiar enough with:
