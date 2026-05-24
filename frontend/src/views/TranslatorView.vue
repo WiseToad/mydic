@@ -1375,7 +1375,13 @@ function updateNarrowPanelHeight() {
   if (!isNarrow.value) { narrowPanelHeight.value = null; return }
   const el = panelGridRef.value
   if (!el) { narrowPanelHeight.value = null; return }
-  const top = el.getBoundingClientRect().top
+  // getBoundingClientRect().top is shifted by any scroll inside the overflow
+  // container (e.g. when details are open and the user scrolled down).
+  // Add back the scroll offset to get the element's natural top as if the
+  // container were at scroll=0, so the height is never over-estimated.
+  const scrollParent = el.closest('.overflow-y-auto') as HTMLElement | null
+  const scrollOffset = scrollParent?.scrollTop ?? 0
+  const top = el.getBoundingClientRect().top + scrollOffset
   narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 56)
 }
 
