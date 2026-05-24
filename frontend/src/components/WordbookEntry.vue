@@ -21,7 +21,7 @@
         cardBgClass,
         expandedInfo && !editing ? 'rounded-t-2xl' : 'rounded-2xl',
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
-        'border-surface-700',
+        isFocused && !expandedInfo ? 'border-gray-600' : 'border-surface-700',
       ]"
       @animationend.self="onFlashEnd"
       @pointerdown.capture="onCardPointerDownCapture"

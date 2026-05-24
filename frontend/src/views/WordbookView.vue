@@ -397,6 +397,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { onBeforeRouteLeave } from 'vue-router'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookUiStore, type DensityLevel } from '@/stores/wordbookUi'
 import { useWordbookGroupsStore, type WordGroup } from '@/stores/wordbookGroups'
@@ -608,7 +609,7 @@ async function scrollToEntry(id: number) {
     return
   }
 
-  // Card was off-screen. Start the flash as soon as ~30 % of the card
+  // Card was off-screen. Start the flash as soon as ~50 % of the card
   // scrolls into view (mid-scroll, not after the scroll finishes) so the
   // animation feels immediate while the card is still visibly arriving.
   // IntersectionObserver fires reactively during the smooth scroll;
@@ -622,7 +623,7 @@ async function scrollToEntry(id: number) {
   }
   const observer = new IntersectionObserver(
     (entries) => { if (entries[0].isIntersecting) triggerHighlight() },
-    { threshold: 0.3 },
+    { threshold: 0.5 },
   )
   observer.observe(el)
   setTimeout(triggerHighlight, 800)
@@ -667,9 +668,24 @@ const groupScrollPositions = new Map<number | null, number>()
  * then restore the incoming group's position after the DOM settles.
  * `scrollTop` assignment is instantaneous (no animation).
  */
+// Save the current group's scroll position just before navigating away.
+// onBeforeRouteLeave fires before KeepAlive detaches the DOM, so scrollTop
+// is still valid here. onDeactivated is too late — Firefox resets scrollTop
+// to 0 when elements are moved to a detached container, which happens before
+// onDeactivated runs.
+onBeforeRouteLeave(() => {
+  if (cardsAreaEl.value) {
+    groupScrollPositions.set(uiStore.activeGroupId ?? null, cardsAreaEl.value.scrollTop)
+  }
+})
+
 watch(
   () => uiStore.activeGroupId,
   (newGroupId, oldGroupId) => {
+    // Guard: do not read/write scrollTop while deactivated. The DOM may be
+    // detached (KeepAlive) so scrollTop is unreliable (often reset to 0 by
+    // the browser), and writing it corrupts previously-saved positions.
+    if (!viewIsActive.value) return
     if (cardsAreaEl.value) {
       groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
     }
@@ -1230,6 +1246,18 @@ onBeforeUnmount(() => {
 // (e.g. from TranslatorView via the “already in wordbook” checkmark).
 onActivated(() => {
   viewIsActive.value = true
+  // Restore the saved scroll position for the current group. This is the
+  // reliable path: KeepAlive's DOM detachment does not always preserve
+  // scrollTop across browsers, and the watcher is now guarded so it won't
+  // touch the DOM while deactivated. If there is a pending highlight,
+  // handlePendingHighlight will scroll to the entry immediately after,
+  // which is the correct final position in that case.
+  nextTick(() => {
+    if (cardsAreaEl.value) {
+      const saved = groupScrollPositions.get(uiStore.activeGroupId ?? null)
+      if (saved !== undefined) cardsAreaEl.value.scrollTop = saved
+    }
+  })
   handlePendingHighlight()
 })
 
