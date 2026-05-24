@@ -1379,19 +1379,29 @@ function updateNarrowPanelHeight() {
   narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 56)
 }
 
-function _onNarrowMqChange(e: MediaQueryListEvent) {
-  isNarrow.value = e.matches
-  nextTick(updateNarrowPanelHeight)
+// Schedule a height update after two rAF frames so the browser has fully
+// reflowed to the new viewport dimensions before we sample any geometry.
+// One frame is not enough after orientation changes: window.innerHeight and
+// getBoundingClientRect().top can still reflect the old layout on the first
+// frame, causing an overestimated height and a scrollbar.
+function _scheduleHeightUpdate() {
+  requestAnimationFrame(() => requestAnimationFrame(updateNarrowPanelHeight))
 }
 
-function _onWindowResize() { updateNarrowPanelHeight() }
+function _onNarrowMqChange(e: MediaQueryListEvent) {
+  isNarrow.value = e.matches
+  // Wait for Vue to flush the reactive update first, then wait for reflow.
+  nextTick(_scheduleHeightUpdate)
+}
+
+function _onWindowResize() { _scheduleHeightUpdate() }
 
 onMounted(() => {
   _narrowMq = window.matchMedia('(max-width: 479px)')
   isNarrow.value = _narrowMq.matches
   _narrowMq.addEventListener('change', _onNarrowMqChange)
   window.addEventListener('resize', _onWindowResize)
-  nextTick(updateNarrowPanelHeight)
+  nextTick(updateNarrowPanelHeight)  // initial mount: DOM is already stable
 })
 
 // When KeepAlive navigates away from this view (without destroying it),

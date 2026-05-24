@@ -2,7 +2,12 @@
 <div class="h-dvh flex flex-col overflow-hidden">
     <!-- Navigation -->
     <header v-if="authStore.isLoggedIn" class="sticky top-0 z-40 bg-surface-900/80 backdrop-blur-md border-b border-surface-700 px-6 py-3 flex items-center gap-6">
-      <span class="font-bold text-primary-400 text-lg tracking-tight">MyDic</span>
+      <span
+        class="font-bold text-primary-400 text-lg tracking-tight"
+        :class="{ 'cursor-pointer select-none active:opacity-60': canGoFullscreen }"
+        :title="canGoFullscreen ? (isFullscreen ? 'Exit fullscreen' : 'Fullscreen') : undefined"
+        @click="toggleFullscreen"
+      >MyDic</span>
       <nav class="flex gap-4 flex-1">
         <RouterLink
           to="/translator"
@@ -93,6 +98,31 @@ const wordbookUiStore = useWordbookUiStore()
 const menuOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
 
+// ── Fullscreen toggle (MyDic label, browser mode only) ────────────────────
+const isStandalone = (
+  window.matchMedia('(display-mode: standalone)').matches ||
+  (window.navigator as any).standalone === true
+)
+const canGoFullscreen = ref(false)
+const isFullscreen = ref(false)
+
+function onFullscreenChange() {
+  isFullscreen.value = !!document.fullscreenElement
+}
+
+async function toggleFullscreen() {
+  if (!canGoFullscreen.value) return
+  try {
+    if (document.fullscreenElement) {
+      await document.exitFullscreen()
+    } else {
+      await document.documentElement.requestFullscreen()
+    }
+  } catch {
+    // request rejected (permissions policy, etc.)
+  }
+}
+
 /** userId captured at page-load time, before any authentication changes.
  *  Used to detect whether stores were already seeded for the resuming user. */
 const _initialUserId = (() => {
@@ -133,6 +163,13 @@ onMounted(() => {
     languageSettingsStore.load()
   }
   document.addEventListener('click', onClickOutside)
+  canGoFullscreen.value = !isStandalone && !!document.fullscreenEnabled
+  if (canGoFullscreen.value) {
+    document.addEventListener('fullscreenchange', onFullscreenChange)
+  }
 })
-onUnmounted(() => document.removeEventListener('click', onClickOutside))
+onUnmounted(() => {
+  document.removeEventListener('click', onClickOutside)
+  document.removeEventListener('fullscreenchange', onFullscreenChange)
+})
 </script>
