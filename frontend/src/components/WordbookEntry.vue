@@ -853,6 +853,8 @@ watch(expandedInfo, (open) => {
 //  • Actions area  (actionsContainerRef) on THIS card → close immediately.
 //  • [data-floating-translate-button] (teleported to body) → close on pointerup
 //    so the click handler fires first (same as card body).
+//  • [data-audio-popup] AudioButton voice-picker (teleported to body) → never close
+//    so the voice-item @click fires and the details panel stays open.
 //  • Clicks outside entryRootRef (other cards, header, …) → close immediately.
 //  • Any other area of THIS card's body         → close on pointerup so a
 //    scroll drag starting on the card doesn't accidentally dismiss the panel.
@@ -886,6 +888,10 @@ function onDetailsOutsidePointerDown(e: PointerEvent) {
   if (overlayRef.value?.contains(target)) return
   // ⓘ toggle on THIS card: let its own handler run.
   if (entryRootRef.value?.contains(target) && target.closest('[data-details-toggle]')) return
+
+  // AudioButton voice-picker popup (teleported to <body>): never close —
+  // the popup is conceptually part of this card's audio interaction.
+  if (target.closest('[data-audio-popup]')) return
 
   // Floating translate button (teleported to <body>): defer close to pointerup
   // so the click handler fires before the details panel disappears.

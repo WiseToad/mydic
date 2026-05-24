@@ -42,6 +42,7 @@
       <div
         v-if="popupVisible"
         ref="popupRef"
+        data-audio-popup
         :style="{ left: popupLeft + 'px', top: popupTop + 'px' }"
         class="fixed z-50 max-h-72 bg-surface-900 border border-surface-700 rounded-lg shadow-2xl min-w-[180px] flex flex-col"
         @pointerdown.stop

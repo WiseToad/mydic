@@ -6,7 +6,7 @@ Bugs:
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
 
 Bugs encountered when running in Android device browser:
-* In android with narrow layout, when details are open, after switching orientation to landscape and back to portrait, stacked panels become incredibly tall.
++ In android with narrow layout, when details are open, after switching orientation to landscape and back to portrait, stacked panels become incredibly tall.
 - It's impossible to translate selection - the translate button do not appears. Instead, there is standard android toolbar appeared.
 
 Not-so-critical bugs:
