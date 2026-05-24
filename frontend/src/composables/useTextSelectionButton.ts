@@ -50,19 +50,33 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     buttonVisible.value = true
   }
 
-  /** Triggered on mouseup / touchend — starts the delay timer. */
+  /** Triggered on mouseup (PC) — starts the delay timer. */
   function onPointerUp() {
     clearTimer()
     showTimer = setTimeout(tryShow, SHOW_DELAY)
   }
 
-  /** Hide and cancel the timer whenever the selection collapses or clears. */
+  /** Hide and cancel the timer whenever the selection collapses or clears.
+   * Also debounces the button show when a non-collapsed selection stabilises.
+   * Using selectionchange (rather than touchend) avoids false triggers from
+   * scroll gestures, which also fire touchend on Android.
+   */
   function onSelectionChange() {
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) {
       clearTimer()
       buttonVisible.value = false
       selectedText.value = ''
+      return
+    }
+    // Non-collapsed selection changed — debounce the button show.
+    // This replaces the touchend path for touch devices: selectionchange fires
+    // while the user drags handles and stabilises when they stop, but is never
+    // fired by a scroll gesture, preventing false positives.
+    const range = selection.getRangeAt(0)
+    if (containerRef.value?.contains(range.commonAncestorContainer)) {
+      clearTimer()
+      showTimer = setTimeout(tryShow, SHOW_DELAY)
     }
   }
 
@@ -92,8 +106,10 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
 
   onMounted(() => {
     document.addEventListener('selectionchange', onSelectionChange)
-    document.addEventListener('mouseup', onPointerUp)
-    document.addEventListener('touchend', onPointerUp)
+    document.addEventListener('mouseup', onPointerUp) // PC fast path
+    // touchend intentionally omitted: scroll gestures also fire touchend on
+    // Android, causing false button shows. Touch selection is handled via the
+    // selectionchange debounce in onSelectionChange instead.
     window.addEventListener('scroll', dismissSilently, { passive: true })
     window.addEventListener('resize', dismissSilently)
   })
@@ -102,7 +118,6 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     clearTimer()
     document.removeEventListener('selectionchange', onSelectionChange)
     document.removeEventListener('mouseup', onPointerUp)
-    document.removeEventListener('touchend', onPointerUp)
     window.removeEventListener('scroll', dismissSilently)
     window.removeEventListener('resize', dismissSilently)
   })
