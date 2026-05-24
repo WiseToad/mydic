@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 
 export interface EntryUiState {
   hintVisible?: boolean                              // translation hint revealed
@@ -195,6 +195,13 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    */
   const pendingHighlightId = ref<number | null>(null)
 
+  // ── Per-group focused entry (in-memory only) ──────────────────────────────────
+  /**
+   * Tracks the focused entry id per group. Key = group id (null = ungrouped).
+   * At most one focused entry per group. Not persisted.
+   */
+  const focusedByGroup = reactive(new Map<number | null, number>())
+
   function getState(id: number): EntryUiState {
     return map.value[id] ?? {}
   }
@@ -224,6 +231,33 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     if (key === 'def') setState(id, { defProvider: code })
     else if (key === 'ctx') setState(id, { ctxProvider: code })
     else setState(id, { lexProvider: code })
+  }
+
+  /** Mark `entryId` as the focused entry for the given group. */
+  function setFocusedEntry(entryId: number, groupId: number | null): void {
+    focusedByGroup.set(groupId, entryId)
+  }
+
+  /**
+   * Returns the focused entry id for `groupId`, or `undefined` if none.
+   * Reactive: a computed that calls this will re-evaluate when the focused
+   * entry for that specific group changes.
+   */
+  function getFocusedEntry(groupId: number | null): number | undefined {
+    return focusedByGroup.get(groupId)
+  }
+
+  /**
+   * Clear whichever group currently has `entryId` as its focused entry.
+   * Called when an entry is deleted or moved out of its group.
+   */
+  function clearFocusedEntryById(entryId: number): void {
+    for (const [gid, eid] of focusedByGroup) {
+      if (eid === entryId) {
+        focusedByGroup.delete(gid)
+        break
+      }
+    }
   }
 
   /**
@@ -341,6 +375,9 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
       }
     }
     if (changed) save(map.value)
+    for (const [gid, eid] of focusedByGroup) {
+      if (!set.has(eid)) focusedByGroup.delete(gid)
+    }
   }
 
   function reinitialize(userId: number) {
@@ -352,6 +389,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightId.value = null
     highlightSeq.value = 0
     pendingHighlightId.value = null
+    focusedByGroup.clear()
   }
 
   return {
@@ -363,6 +401,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     density, activeLangs, activeColors, activeGroupId, sidePanelVisible, swapDisplay,
     highlightId, highlightSeq, pendingHighlightId,
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
+    setFocusedEntry, getFocusedEntry, clearFocusedEntryById,
     reinitialize,
   }
 })

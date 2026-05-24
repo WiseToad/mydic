@@ -36,6 +36,15 @@ export const ENTRY_COLOR_CARD_BG: Record<EntryColor, string> = {
   purple: 'bg-purple-500/15',
 }
 
+/** Slightly brighter variant used when the card is focused (details closed). */
+export const ENTRY_COLOR_CARD_BG_FOCUSED: Record<EntryColor, string> = {
+  red: 'bg-red-500/20',
+  yellow: 'bg-yellow-500/20',
+  green: 'bg-green-500/20',
+  blue: 'bg-blue-500/20',
+  purple: 'bg-purple-500/20',
+}
+
 /** Solid swatch fill used in the picker / filter UI. */
 export const ENTRY_COLOR_SWATCH_BG: Record<EntryColor, string> = {
   red: 'bg-red-500/60',

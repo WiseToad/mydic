@@ -349,8 +349,8 @@
           <li v-for="entry in sortedPanelWords" :key="entry.id">
             <button
               class="w-full text-left px-2 py-1 text-xs rounded truncate transition-colors"
-              :class="uiStore.highlightId === entry.id
-                ? 'text-primary-300 bg-primary-500/10'
+              :class="uiStore.getFocusedEntry(entry.group?.id ?? null) === entry.id
+                ? 'text-gray-300 bg-surface-800 hover:text-primary-300 hover:bg-surface-800'
                 : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
               :title="uiStore.swapDisplay ? entry.target_text : entry.source_text"
               @click="scrollToEntry(entry.id)"
@@ -584,6 +584,8 @@ function formatLangPair(pair: string): string {
  * edit form is left alone to avoid dropping unsaved changes.
  */
 async function scrollToEntry(id: number) {
+  const entry = store.entries.find((e) => e.id === id)
+  if (entry) uiStore.setFocusedEntry(id, entry.group?.id ?? null)
   if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
     uiStore.closeActive()
   }
@@ -891,6 +893,7 @@ const entryGroupNames = computed(() => {
 })
 
 async function handleUngroup(id: number) {
+  uiStore.clearFocusedEntryById(id)
   try {
     await groupsStore.assignEntry(id, null)
   } catch (e: unknown) {
@@ -922,6 +925,7 @@ async function confirmDelete() {
   if (pendingDeleteId.value === null) return
   try {
     await store.deleteEntry(pendingDeleteId.value)
+    uiStore.clearFocusedEntryById(pendingDeleteId.value)
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to delete entry'))
   } finally {
@@ -1144,6 +1148,8 @@ function onDragStart(event: DragEvent, entryId: number) {
     return
   }
   draggedId.value = entryId
+  const draggedEntry = store.entries.find((e) => e.id === entryId)
+  if (draggedEntry) uiStore.setFocusedEntry(entryId, draggedEntry.group?.id ?? null)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
   cardDragSourceEl.value = event.currentTarget as HTMLElement
   cardDragSourceEl.value.style.opacity = '0.4'

@@ -16,14 +16,16 @@
     <div
       ref="cardRef"
       :draggable="!editing"
-      class="group/provider h-full p-3 border border-surface-700"
+      class="group/provider h-full p-3 border"
       :class="[
         cardBgClass,
         expandedInfo && !editing ? 'rounded-t-2xl' : 'rounded-2xl',
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
+        'border-surface-700',
       ]"
       @animationend.self="onFlashEnd"
       @pointerdown.capture="onCardPointerDownCapture"
+      @pointerup.capture="onCardPointerUpCapture"
     >
       <!-- Edit mode: unified form (replaces entire card content) -->
       <template v-if="editing">
@@ -31,7 +33,7 @@
           <!-- Row 1: original word -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editSource" class="input w-full py-1 pr-9" placeholder="Original" @input="onEditSourceInput" />
+              <input v-model="editSource" class="input w-full py-1 pr-9" :class="isEntryColor(entry.color) ? '' : '!bg-surface-900'" placeholder="Original" @input="onEditSourceInput" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.source_lang }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -59,7 +61,7 @@
           <!-- Row 2: translation -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editTarget" class="input w-full py-1 pr-9" placeholder="Translation" @input="onEditTargetInput" />
+              <input v-model="editTarget" class="input w-full py-1 pr-9" :class="isEntryColor(entry.color) ? '' : '!bg-surface-900'" placeholder="Translation" @input="onEditTargetInput" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.target_lang }}</span>
             </div>
             <div class="flex items-center justify-end gap-1 shrink-0">
@@ -120,6 +122,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
             v-model="editNotes"
             rows="2"
             class="input resize-none py-1 w-full"
+            :class="isEntryColor(entry.color) ? '' : '!bg-surface-900'"
             placeholder="Notes (optional)"
           />
         </div>
@@ -344,10 +347,10 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
       draggable="false"
       data-details-overlay
       :data-entry-id="entry.id"
-      class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b border-surface-700 rounded-b-2xl p-3 select-text"
-      @pointerdown.stop
+      class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b rounded-b-2xl p-3 select-text"
       :class="[
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
+        'border-surface-700',
       ]"
       @animationend.self="onFlashEnd"
       :style="{ overflowAnchor: 'none' }"
@@ -432,6 +435,7 @@ import { translateApi } from '@/api/translate'
 import {
   ENTRY_COLORS,
   ENTRY_COLOR_CARD_BG,
+  ENTRY_COLOR_CARD_BG_FOCUSED,
   ENTRY_COLOR_LABEL,
   ENTRY_COLOR_SWATCH_BG,
   isEntryColor,
@@ -533,9 +537,22 @@ const colorOptions = ENTRY_COLORS
 const swatchBg = (c: EntryColor) => ENTRY_COLOR_SWATCH_BG[c]
 const colorLabel = (c: EntryColor) => ENTRY_COLOR_LABEL[c]
 
-const cardBgClass = computed(() =>
-  isEntryColor(props.entry.color) ? ENTRY_COLOR_CARD_BG[props.entry.color] : 'bg-surface-900',
+const cardBgClass = computed(() => {
+  const focused = isFocused.value && !expandedInfo.value
+  if (isEntryColor(props.entry.color)) {
+    return focused ? ENTRY_COLOR_CARD_BG_FOCUSED[props.entry.color] : ENTRY_COLOR_CARD_BG[props.entry.color]
+  }
+  return focused ? 'bg-surface-800' : 'bg-surface-900'
+})
+
+const isFocused = computed(
+  () => uiStore.getFocusedEntry(props.entry.group?.id ?? null) === props.entry.id,
 )
+
+function setFocused() {
+  if (uiStore.activeCardMode === 'editing') uiStore.closeActive()
+  uiStore.setFocusedEntry(props.entry.id, props.entry.group?.id ?? null)
+}
 
 const editSource = ref('')
 const editTarget = ref('')
@@ -693,6 +710,10 @@ watch(showActionsMenu, (open) => {
 // @pointerdown.stop swallows it.  draggable is restored on pointer release.
 let _restoreCardDraggable: (() => void) | null = null
 
+function onCardPointerUpCapture() {
+  if (!editing.value) setFocused()
+}
+
 function onCardPointerDownCapture(e: PointerEvent) {
   if (editing.value) return
   if (!(e.target as Element | null)?.closest('[data-audio-button]')) return
@@ -713,8 +734,8 @@ function onCardPointerDownCapture(e: PointerEvent) {
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
   document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
-  document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
-  _clearPendingCardClose()
+  document.removeEventListener('pointerup', onDetailsOutsidePointerUp, true)
+  document.removeEventListener('dragstart', onDetailsOutsideDragStart, true)
   _restoreCardDraggable?.()
   stopDetailsResizeObserver()
   if (retranslateSpinnerTimer !== null) {
@@ -845,95 +866,46 @@ watch(expandedInfo, (open) => {
 
 // ── Details panel close logic ────────────────────────────────────────────────
 //
+// Listening on pointerup (capture) means scrolls on mobile — which fire
+// pointercancel instead of pointerup — never accidentally dismiss the panel.
+// No pending-close machinery is needed: pointerup simply does not fire for
+// scroll or drag gestures, and click always follows pointerup naturally.
+// HTML5 drags on OTHER cards fire dragstart+pointercancel (no pointerup), so
+// we also close on dragstart from outside this entry's root.
+//
 // Invariants (while this card's details panel is open):
-//  • Clicks inside the overlay itself           → never close.
-//  • ⓘ toggle button on THIS card               → never close (own handler runs).
-//  • Audio button  [data-audio-button] on THIS card → never close.
-//  • Source-text   [data-hint-toggle]  on THIS card → never close.
-//  • Actions area  (actionsContainerRef) on THIS card → close immediately.
-//  • [data-floating-translate-button] (teleported to body) → close on pointerup
-//    so the click handler fires first (same as card body).
-//  • [data-audio-popup] AudioButton voice-picker (teleported to body) → never close
-//    so the voice-item @click fires and the details panel stays open.
-//  • Clicks outside entryRootRef (other cards, header, …) → close immediately.
-//  • Any other area of THIS card's body         → close on pointerup so a
-//    scroll drag starting on the card doesn't accidentally dismiss the panel.
+//  • Inside the overlay itself                        → never close.
+//  • ⓘ toggle [data-details-toggle] on this card     → never close (own click handler runs).
+//  • [data-audio-popup] (teleported body)             → never close.
+//  • [data-audio-button] on this card                 → never close.
+//  • [data-hint-toggle]  on this card                 → never close.
+//  • dragstart from within this entry's root          → never close.
+//  • Everything else                                  → close.
 
-let _pendingCardClose = false
-
-function _clearPendingCardClose() {
-  if (!_pendingCardClose) return
-  _pendingCardClose = false
-  document.removeEventListener('pointerup', onDetailsCardPointerUp, true)
-  document.removeEventListener('pointercancel', onDetailsCardPointerCancel, true)
-}
-
-function onDetailsCardPointerUp(e: PointerEvent) {
-  const target = e.target as Element | null
-  _clearPendingCardClose()
-  // Released inside the overlay → user was scrolling within the panel, keep open.
-  if (target && overlayRef.value?.contains(target)) return
-  if (expandedInfo.value) uiStore.closeActive()
-}
-
-function onDetailsCardPointerCancel() {
-  // Native scroll/drag took over — do not close.
-  _clearPendingCardClose()
-}
-
-function onDetailsOutsidePointerDown(e: PointerEvent) {
+function onDetailsOutsidePointerUp(e: PointerEvent) {
   const target = e.target as Element | null
   if (!target) return
-  // Overlay itself: keep open.
   if (overlayRef.value?.contains(target)) return
-  // ⓘ toggle on THIS card: let its own handler run.
   if (entryRootRef.value?.contains(target) && target.closest('[data-details-toggle]')) return
-
-  // AudioButton voice-picker popup (teleported to <body>): never close —
-  // the popup is conceptually part of this card's audio interaction.
   if (target.closest('[data-audio-popup]')) return
+  if (entryRootRef.value?.contains(target) && target.closest('[data-audio-button]')) return
+  if (entryRootRef.value?.contains(target) && target.closest('[data-hint-toggle]')) return
+  uiStore.closeActive()
+}
 
-  // Floating translate button (teleported to <body>): defer close to pointerup
-  // so the click handler fires before the details panel disappears.
-  if (target.closest('[data-floating-translate-button]')) {
-    _pendingCardClose = true
-    document.addEventListener('pointerup', onDetailsCardPointerUp, true)
-    document.addEventListener('pointercancel', onDetailsCardPointerCancel, true)
-    return
-  }
-
-  // Outside this card entirely: close immediately.
-  if (!entryRootRef.value?.contains(target)) {
-    uiStore.closeActive()
-    return
-  }
-
-  // Inside this card — apply per-element rules:
-
-  // Audio button: don't close.
-  if (target.closest('[data-audio-button]')) return
-
-  // Source-text / hint-toggle: don't close.
-  if (target.closest('[data-hint-toggle]')) return
-
-  // Actions area (⋮ button + its popup): close immediately.
-  if (actionsContainerRef.value?.contains(target)) {
-    uiStore.closeActive()
-    return
-  }
-
-  // Card body: defer close to pointerup so scroll drags don't dismiss the panel.
-  _pendingCardClose = true
-  document.addEventListener('pointerup', onDetailsCardPointerUp, true)
-  document.addEventListener('pointercancel', onDetailsCardPointerCancel, true)
+function onDetailsOutsideDragStart(e: DragEvent) {
+  const target = e.target as Element | null
+  if (target && entryRootRef.value?.contains(target)) return
+  uiStore.closeActive()
 }
 
 watch(expandedInfo, (open) => {
   if (open) {
-    document.addEventListener('pointerdown', onDetailsOutsidePointerDown, true)
+    document.addEventListener('pointerup', onDetailsOutsidePointerUp, true)
+    document.addEventListener('dragstart', onDetailsOutsideDragStart, true)
   } else {
-    document.removeEventListener('pointerdown', onDetailsOutsidePointerDown, true)
-    _clearPendingCardClose()
+    document.removeEventListener('pointerup', onDetailsOutsidePointerUp, true)
+    document.removeEventListener('dragstart', onDetailsOutsideDragStart, true)
   }
 })
 
