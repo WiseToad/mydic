@@ -17,6 +17,7 @@ Not-so-critical bugs:
 Features:
 * Remember scrolling position for a group; If layout state changed (by orientation in Android or by other screen resizing) then restore that position by (non-animated) scrolling to the same upper-left word (or it's row) in the group list
 * Optimize api for card movement - do not issue multiple PUTs, make a batch one
+- Fix wordbook layout for narrow android screens
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - DB: Store user requested provider along with cached results in db
 - ~~Dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)~~

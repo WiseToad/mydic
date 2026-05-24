@@ -5,6 +5,7 @@ MyDic, a tool for those who keen to dramatically improve their memorization of f
 ![mydic](mydic.png)
 
 Some non-obvious UI features:
+- Tapping MyDic title toggles browser fullscreen mode
 - Long-pressing the swap button clears the input text along with language swapping
 - Long-pressing the "Add to wordbook" button allows you to select a group
 - Long-pressing an audio button pops up the voice selection menu
@@ -21,7 +22,6 @@ Some usage notes for languages, you do not familiar enough with:
 
 - Translation providers sometimes not so good for single word translation without context. So, always check the translation by switching to different translation providers. Or, read the word definition to grasp it's sense more clearly, in order to understand, whether the translation is suitable for you. The best option is to take some context examples as well.
 - The same is for TTS. Generated single-word speech outside it's context (especially on slower rates) may prodice artifacts. So, the best bet is to listen some context examples, in which your word of interest will be pronounced more properly and naturally.
-
 
 ## INSTALLATION
 
