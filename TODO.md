@@ -6,7 +6,6 @@ Bugs:
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
 
 Bugs encountered when running in Android device browser:
-+ In android with narrow layout, when details are open, after switching orientation to landscape and back to portrait, stacked panels become incredibly tall - still didn't fixed.
 - It's impossible to translate selection - the translate button do not appears. Instead, there is standard android toolbar appeared.
 
 Not-so-critical bugs:
@@ -17,23 +16,18 @@ Not-so-critical bugs:
 Features:
 * Remember scrolling position for a group; If layout state changed (by orientation in Android or by other screen resizing) then restore that position by (non-animated) scrolling to the same upper-left word (or it's row) in the group list
 * Optimize api for card movement - do not issue multiple PUTs, make a batch one
-- Fix wordbook layout for narrow android screens
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - DB: Store user requested provider along with cached results in db
-- ~~Dragging "add to wordbook" onto lexical example saves a new wordbook entry with this example as a translation (translation provider is empty for a new entry in such a case)~~
-- Tapping MyDic or Wordbook collapses upper toolbar of Chrome in Android.
+- Fix wordbook layout for narrow android screens
+- On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
-- On narrow screens (Android) shrink translation and lexical provider names
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB)
 - A concept of currently selected card(s) in wordbook - to help find it/them when changing density, or to delete group; items lost when changing filter are excluded from list 
-- On narrow screens (Android) maybe it's better to completely disable different density selector, since it has no effect anyway
-- If group filter activated in wordbook, and when highlighting a word from trasnslator, set a new group filter, instead of resetting it, as now is implemented. Find other cases where filter of different types get reset and work with them too
 - Typing a word in translator suggest words found in wordbook
 
 Presentation:
 - Add about dialog with version info
-- Add icons for the app
 
 Architectural:
 - Proactive speech generation for wordbook items by separate worker job
