@@ -290,7 +290,7 @@
 
     <!-- Content row: main grid + optional right word-list panel (fills remaining height) -->
     <div class="flex-1 min-h-0 flex gap-3 pb-3">
-      <div class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
+      <div ref="cardsAreaEl" class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
         <!-- Loading skeleton -->
         <div v-if="store.isLoading" class="grid gap-3" :style="gridStyle">
           <div v-for="i in 6" :key="i" class="h-16 bg-surface-800 rounded-2xl animate-pulse" />
@@ -648,6 +648,36 @@ const anyHintVisible = computed(() =>
 function toggleAllHints() {
   uiStore.setAllHints(!anyHintVisible.value)
 }
+
+// ─── Scroll position memory per group ───────────────────────────────────────
+
+const cardsAreaEl = ref<HTMLElement | null>(null)
+
+/**
+ * In-memory map of group id (or null for "All") → last scroll position.
+ * Populated when leaving a group; consumed when entering one.
+ */
+const groupScrollPositions = new Map<number | null, number>()
+
+/**
+ * Watcher fires at `flush: 'pre'` — before Vue applies DOM updates — so
+ * `cardsAreaEl.scrollTop` still reflects the *outgoing* group. We save it,
+ * then restore the incoming group's position after the DOM settles.
+ * `scrollTop` assignment is instantaneous (no animation).
+ */
+watch(
+  () => uiStore.activeGroupId,
+  (newGroupId, oldGroupId) => {
+    if (cardsAreaEl.value) {
+      groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
+    }
+    nextTick(() => {
+      if (cardsAreaEl.value) {
+        cardsAreaEl.value.scrollTop = groupScrollPositions.get(newGroupId ?? null) ?? 0
+      }
+    })
+  },
+)
 
 // ─── Group / tab CRUD ─────────────────────────────────────────────────────────
 
