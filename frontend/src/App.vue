@@ -1,5 +1,5 @@
 <template>
-<div class="flex flex-col overflow-hidden" style="height: var(--app-height, 100dvh)">
+<div class="flex flex-col overflow-hidden" style="height: calc(var(--app-height, 100dvh) - env(safe-area-inset-bottom, 0px))">
     <!-- Navigation -->
     <header v-if="authStore.isLoggedIn" class="sticky top-0 z-40 bg-surface-900/80 backdrop-blur-md border-b border-surface-700 px-6 py-3 flex items-center gap-6">
       <span
