@@ -1,5 +1,5 @@
 <template>
-<div class="h-dvh flex flex-col overflow-hidden">
+<div class="flex flex-col overflow-hidden" style="height: var(--app-height, 100dvh)">
     <!-- Navigation -->
     <header v-if="authStore.isLoggedIn" class="sticky top-0 z-40 bg-surface-900/80 backdrop-blur-md border-b border-surface-700 px-6 py-3 flex items-center gap-6">
       <span
@@ -155,6 +155,15 @@ watch(() => authStore.user?.id, (newId, oldId) => {
   languageSettingsStore.load()
 })
 
+// ── Android PWA pull-to-refresh viewport height fix ──────────────────────
+// dvh misbehaves on Android after pull-to-refresh, temporarily growing to
+// include the bottom system bar. visualViewport.height always reflects the
+// true visible area, so we drive height via a CSS custom property instead.
+function updateAppHeight() {
+  const h = window.visualViewport?.height ?? window.innerHeight
+  document.documentElement.style.setProperty('--app-height', `${h}px`)
+}
+
 onMounted(() => {
   authStore.fetchAppConfig()
   if (authStore.isLoggedIn) {
@@ -167,9 +176,14 @@ onMounted(() => {
   if (canGoFullscreen.value) {
     document.addEventListener('fullscreenchange', onFullscreenChange)
   }
+  window.visualViewport?.addEventListener('resize', updateAppHeight)
+  window.addEventListener('resize', updateAppHeight)
+  updateAppHeight()
 })
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
+  window.visualViewport?.removeEventListener('resize', updateAppHeight)
+  window.removeEventListener('resize', updateAppHeight)
 })
 </script>
