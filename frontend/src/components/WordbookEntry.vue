@@ -21,7 +21,11 @@
         cardBgClass,
         expandedInfo && !editing ? 'rounded-t-2xl' : 'rounded-2xl',
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
-        isFocused && !expandedInfo ? 'border-gray-600' : 'border-surface-700',
+        // Outer perimeter color (top / left / right)
+        isFocused ? 'border-t-gray-600 border-l-gray-600 border-r-gray-600' : 'border-t-surface-700 border-l-surface-700 border-r-surface-700',
+        // Bottom border: acts as the divider between card and details overlay —
+        // keep it regular even when focused so it doesn't draw the eye inward.
+        expandedInfo && !editing ? 'border-b-surface-700' : (isFocused ? 'border-b-gray-600' : 'border-b-surface-700'),
       ]"
       @animationend.self="onFlashEnd"
       @pointerdown.capture="onCardPointerDownCapture"
@@ -350,7 +354,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
       class="absolute left-0 right-0 top-full bg-surface-800 border-l border-r border-b rounded-b-2xl p-3 select-text"
       :class="[
         isDragTarget ? 'ring-2 ring-primary-500/50' : '',
-        'border-surface-700',
+        isFocused ? 'border-gray-600' : 'border-surface-700',
       ]"
       @animationend.self="onFlashEnd"
       :style="{ overflowAnchor: 'none' }"

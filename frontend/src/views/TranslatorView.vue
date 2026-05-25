@@ -1274,6 +1274,31 @@ const groupMenuTop = ref(0)
 let _addWbLongPressTimer: ReturnType<typeof setTimeout> | null = null
 let _addWbLongPressDidFire = false
 
+// Same one-shot click guard as AudioButton: after the group-picker popup opens
+// via long-press, swallow the click that fires when the user releases the
+// finger — unless it lands inside the popup.
+let _addWbClickGuard: ((e: MouseEvent) => void) | null = null
+
+function _registerAddWbClickGuard() {
+  if (_addWbClickGuard) document.removeEventListener('click', _addWbClickGuard, true)
+  const handler = (e: MouseEvent) => {
+    document.removeEventListener('click', handler, true)
+    _addWbClickGuard = null
+    if (groupMenuPopupRef.value?.contains(e.target as Node)) return
+    e.stopPropagation()
+    e.preventDefault()
+  }
+  _addWbClickGuard = handler
+  document.addEventListener('click', handler, true)
+}
+
+function _cleanAddWbClickGuard() {
+  if (_addWbClickGuard) {
+    document.removeEventListener('click', _addWbClickGuard, true)
+    _addWbClickGuard = null
+  }
+}
+
 function onAddWordbookPointerDown(e: PointerEvent) {
   if (e.button !== 0) return
   _addWbLongPressDidFire = false
@@ -1312,6 +1337,8 @@ function _openGroupMenu() {
   groupMenuTop.value = rect.bottom + 4
   groupMenuVisible.value = true
   document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  // Swallow the click that follows the long-press release.
+  _registerAddWbClickGuard()
   nextTick(() => _repositionGroupMenu(rect))
 }
 
@@ -1413,6 +1440,7 @@ onMounted(() => {
 // When KeepAlive navigates away from this view (without destroying it),
 // Teleported popups stay in <body>. Close them explicitly on deactivation.
 onDeactivated(() => {
+  _cleanAddWbClickGuard()
   if (groupMenuVisible.value) {
     groupMenuVisible.value = false
     document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
@@ -1424,6 +1452,7 @@ onDeactivated(() => {
 })
 
 onUnmounted(() => {
+  _cleanAddWbClickGuard()
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)

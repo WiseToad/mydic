@@ -16,7 +16,7 @@
               : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
       ]"
       @click.stop="onClick"
-      @pointerdown.stop="onPointerDown"
+      @pointerdown.stop.prevent="onPointerDown"
       @pointerup.stop="onPointerUp"
       @pointerleave="onPointerUp"
       @pointercancel="onPointerUp"
@@ -147,6 +147,67 @@ const popupTop = ref(0)
 
 let pressTimer: ReturnType<typeof setTimeout> | null = null
 let longPressFired = false
+let _longPressPointerId: number | null = null
+
+// One-shot guard: after a long-press opens the popup, releasing the finger
+// anywhere may synthesize a spurious click on whatever element is under the
+// pointer at that moment.  We intercept that click (capture phase, before any
+// child handler) and swallow it unless it lands inside the popup itself.
+let _longPressClickGuard: ((e: MouseEvent) => void) | null = null
+
+// One-shot pointerup / pointercancel guard for the same press that opened the
+// popup.  On desktop, releasing the held mouse button over another element
+// fires pointerup on that element and triggers side-effects there (e.g.
+// WordbookEntry's onCardPointerUpCapture which focuses a card).  We intercept
+// that specific pointerup in the capture phase and stop propagation so it
+// reaches no element handler.  Keyed by pointerId so it never fires for an
+// unrelated touch or mouse button.
+let _longPressPointerUpGuard: ((e: PointerEvent) => void) | null = null
+
+function _registerLongPressClickGuard() {
+  _cleanLongPressClickGuard()
+  const handler = (e: MouseEvent) => {
+    document.removeEventListener('click', handler, true)
+    _longPressClickGuard = null
+    if ((e.target as Element | null)?.closest('[data-audio-popup]')) return
+    e.stopPropagation()
+    e.preventDefault()
+  }
+  _longPressClickGuard = handler
+  document.addEventListener('click', handler, true)
+}
+
+function _cleanLongPressClickGuard() {
+  if (_longPressClickGuard) {
+    document.removeEventListener('click', _longPressClickGuard, true)
+    _longPressClickGuard = null
+  }
+}
+
+function _registerLongPressPointerUpGuard() {
+  _cleanLongPressPointerUpGuard()
+  const id = _longPressPointerId
+  if (id === null) return
+  const handler = (e: PointerEvent) => {
+    if (e.pointerId !== id) return
+    _cleanLongPressPointerUpGuard()
+    // On pointerup: stop propagation so no element below sees this event
+    // (prevents onCardPointerUpCapture and similar handlers from firing).
+    // On pointercancel: just clean up — cancels cause no side-effects.
+    if (e.type === 'pointerup') e.stopPropagation()
+  }
+  _longPressPointerUpGuard = handler
+  document.addEventListener('pointerup', handler, true)
+  document.addEventListener('pointercancel', handler, true)
+}
+
+function _cleanLongPressPointerUpGuard() {
+  if (_longPressPointerUpGuard) {
+    document.removeEventListener('pointerup', _longPressPointerUpGuard, true)
+    document.removeEventListener('pointercancel', _longPressPointerUpGuard, true)
+    _longPressPointerUpGuard = null
+  }
+}
 
 /** Reactive: this button is currently "primed for slow on next click". */
 const isSlow = computed(() => isSlowOwner(buttonId))
@@ -261,6 +322,7 @@ async function _play(
 function onPointerDown(e: PointerEvent) {
   // Only start long-press on the primary button.
   if (e.button !== 0) return
+  _longPressPointerId = e.pointerId
   longPressFired = false
   if (pressTimer) clearTimeout(pressTimer)
   pressTimer = setTimeout(() => {
@@ -310,6 +372,13 @@ function openPopup() {
   stopTts()
   document.addEventListener('pointerdown', onOutsidePointerDown, true)
   document.addEventListener('dragstart', onDocumentDragStart, true)
+  // Swallow the click that follows releasing the long-press finger, unless
+  // it lands inside the popup (where the user is making a deliberate choice).
+  _registerLongPressClickGuard()
+  // Swallow the pointerup that ends the long-press gesture so it cannot
+  // trigger side-effects on whatever element the pointer happens to be over
+  // at the moment of release (e.g. focusing a different wordbook card).
+  _registerLongPressPointerUpGuard()
   // Second-pass refinement: now that the popup is in the DOM, measure it
   // and apply viewport-aware adjustments.
   void nextTick(() => positionPopup(rect))
@@ -380,6 +449,8 @@ function onChoosePopup(providerCode: string, voiceId: string) {
 // deactivated (not destroyed). Teleported popups stay in <body> in that case,
 // so we must close them explicitly.
 onDeactivated(() => {
+  _cleanLongPressClickGuard()
+  _cleanLongPressPointerUpGuard()
   if (popupVisible.value) {
     popupVisible.value = false
     document.removeEventListener('pointerdown', onOutsidePointerDown, true)
@@ -394,6 +465,8 @@ onDeactivated(() => {
 onBeforeUnmount(() => {
   if (pressTimer) clearTimeout(pressTimer)
   _cancelSpinnerTimer()
+  _cleanLongPressClickGuard()
+  _cleanLongPressPointerUpGuard()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
   // #4: a button being unmounted (e.g. wordbook card filtered out) must

@@ -1,13 +1,24 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
   <rect width="64" height="64" rx="10" fill="#111118"/>
-  <text
-    x="31" y="41"
-    text-anchor="middle"
-    font-family="ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif"
-    font-size="36"
-    font-weight="700"
-    letter-spacing="-2"
+  <!--
+    "MD" rendered as filled paths so the glyph shape is identical across all
+    environments (no font substitution, no FOUT, no permission issues with
+    embedded fonts in browser favicon renderers).
+
+    Coordinate system: 64×64 viewBox.
+      M  – bold geometric M: x 4–30, cap-height y 15–41
+      D  – bold geometric D: x 32–57, same cap-height
+    The underline bar is kept from the original design.
+  -->
+  <path
     fill="#818cf8"
-  >MD</text>
-  <rect x="6" y="45" width="53" height="4" fill="#818cf8"/>
+    fill-rule="evenodd"
+    d="
+      M 6 41 L 6 15 L 12 15 L 19 35 L 26 15 L 32 15 L 32 41 L 27 41
+        L 27 23 L 21 41 L 17 41 L 11 23 L 11 41 Z
+      M 35 15 L 43 15 Q 57 15 57 28 Q 57 41 43 41 L 35 41 Z
+      M 40 20 L 43 20 Q 52 20 52 28 Q 52 36 43 36 L 40 36 Z
+    "
+  />
+  <rect x="6" y="45" width="52" height="4" fill="#818cf8"/>
 </svg>
