@@ -147,7 +147,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
           </div>
 
           <div class="flex items-center gap-1 shrink-0">
-            <AudioButton :text="primaryText" :lang="primaryLang" size="sm" title="Pronounce source" />
+            <AudioButton :text="primaryText" :lang="primaryLang" size="sm" title="Pronounce source" @longpress="setFocused" />
 
             <template v-if="!isCompact">
               <div class="relative" ref="actionsContainerRef">
@@ -284,6 +284,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
               :lang="hintLang"
               size="sm"
               title="Pronounce translation"
+              @longpress="setFocused"
             />
             <template v-if="!isCompact">
               <button
@@ -704,14 +705,10 @@ watch(showActionsMenu, (open) => {
   }
 })
 
-// ── Audio-button drag guard ───────────────────────────────────────────────────
-// On Android, the browser initiates HTML5 drag (firing pointercancel) for a
-// long-press on any draggable element, which cancels the AudioButton's 500 ms
-// long-press timer before the voice-picker popup can open.
-// Fix: on any touch that starts over an AudioButton, immediately set
-// draggable=false on the card so the browser never starts a drag for that
-// touch.  We use the capture phase so we see the event before the AudioButton's
-// @pointerdown.stop swallows it.  draggable is restored on pointer release.
+// ── Audio-button drag guard ──────────────────────────────────────────────────
+// On Android, a long-press on a draggable element fires pointercancel before
+// AudioButton's timer fires.  Fix: disable card draggable on pointerdown over
+// an AudioButton; restore on release.
 let _restoreCardDraggable: (() => void) | null = null
 
 function onCardPointerUpCapture() {
@@ -762,18 +759,11 @@ function toggleExpandedInfo() {
   uiStore.toggleDetails(props.entry.id)
 }
 
-// Padding below the viewport's top edge that the entry's top must keep
-// when the page auto-scrolls on details-panel open. Matches the spec's
-// "some margin below that screen edge" requirement (#6).
+// Gap between the viewport top and the entry's top when auto-scrolling on details open.
 const WORDBOOK_DETAILS_TOP_MARGIN_PX = 12
 const entryRootRef = ref<HTMLElement | null>(null)
 
-/**
- * Returns the nearest scrollable ancestor of `el`, or `document.documentElement`
- * as a fallback. Used so ensureDetailsVisible works whether the wordbook grid
- * is the scroll root (current layout: inner overflow-y-auto div) or the window
- * itself was the scroll container (legacy layout).
- */
+/** Returns the nearest scrollable ancestor of `el`, or documentElement as fallback. */
 function _findScrollParent(el: HTMLElement): Element {
   let parent = el.parentElement
   while (parent && parent !== document.documentElement) {
@@ -786,13 +776,7 @@ function _findScrollParent(el: HTMLElement): Element {
   return document.documentElement
 }
 
-/**
- * After the details overlay opens, scroll the nearest scroll container so
- * more of the panel becomes visible. Bounded so that the entry's top never
- * crosses above `stickyHeaderBottom + WORDBOOK_DETAILS_TOP_MARGIN_PX` —
- * in other words, we never scroll "too far" and tuck the entry's source
- * text out of view.
- */
+/** Scrolls the overlay into view, bounded so the entry's source text stays visible. */
 function ensureDetailsVisible() {
   if (!expandedInfo.value) return
   const wrapper = entryRootRef.value
@@ -805,12 +789,8 @@ function ensureDetailsVisible() {
   const overlayRect = overlay.getBoundingClientRect()
   const scrollParent = _findScrollParent(wrapper) as HTMLElement
   const scrollParentRect = scrollParent.getBoundingClientRect()
-  // Use the scroll container's own visible bounds rather than the window:
-  //   • scrollParentRect.bottom fixes "not enough scroll" — the container
-  //     ends above window.innerHeight due to pb-3 on its flex parent.
-  //   • scrollParentRect.top fixes "too much scroll" — the container starts
-  //     below the app header (it also sits below the wordbook header row),
-  //     so using only stickyHeaderHeight overestimates the available headroom.
+  // Use the scroll container's bounds (not the window) — the container
+  // ends above innerHeight and starts below the app header.
   if (overlayRect.bottom <= scrollParentRect.bottom) return  // already fully visible
   const overflow = overlayRect.bottom - scrollParentRect.bottom
   const headroom = Math.max(0, wrapperRect.top - scrollParentRect.top - WORDBOOK_DETAILS_TOP_MARGIN_PX)
@@ -819,12 +799,8 @@ function ensureDetailsVisible() {
   scrollParent.scrollBy({ top: delta, behavior: 'smooth' })
 }
 
-// The DefinitionPanel / ContextExamples / LexicalPanel children fetch
-// asynchronously, so the overlay's height after the first paint reflects
-// only their loading skeleton. Observe the overlay for a brief window
-// after open so the auto-scroll catches up once content arrives.  The
-// observer is torn down well before the user is likely to switch tabs,
-// so a later tab change doesn't yank the page around again.
+// Child panels fetch async; observe overlay height for a short window so
+// the auto-scroll catches up when content arrives.
 const DETAILS_RESIZE_OBSERVE_MS = 1500
 let detailsResizeObserver: ResizeObserver | null = null
 let detailsResizeTimer: ReturnType<typeof setTimeout> | null = null
@@ -838,13 +814,7 @@ function stopDetailsResizeObserver() {
   }
 }
 
-/**
- * Scroll the page so the open details overlay is visible (bounded by the
- * top-margin), then watch the overlay for async height changes for a short
- * window so newly-arrived content (lazy fetches in the active tab) is also
- * accounted for. Used both when the overlay first opens and when the user
- * switches tabs inside it.
- */
+/** Scrolls the overlay into view and watches for async height changes for a short window. */
 async function startDetailsAutoScroll() {
   await nextTick()
   await new Promise<void>((r) => requestAnimationFrame(() => r()))
@@ -860,31 +830,14 @@ async function startDetailsAutoScroll() {
   }
 }
 
-watch(expandedInfo, (open) => {
-  if (!open) {
-    stopDetailsResizeObserver()
-    return
-  }
-  startDetailsAutoScroll()
-})
-
 // ── Details panel close logic ────────────────────────────────────────────────
+// Listening on pointerup (capture) so scrolls (which fire pointercancel) never
+// dismiss the panel.  Also closes on dragstart from outside this entry's root.
 //
-// Listening on pointerup (capture) means scrolls on mobile — which fire
-// pointercancel instead of pointerup — never accidentally dismiss the panel.
-// No pending-close machinery is needed: pointerup simply does not fire for
-// scroll or drag gestures, and click always follows pointerup naturally.
-// HTML5 drags on OTHER cards fire dragstart+pointercancel (no pointerup), so
-// we also close on dragstart from outside this entry's root.
-//
-// Invariants (while this card's details panel is open):
-//  • Inside the overlay itself                        → never close.
-//  • ⓘ toggle [data-details-toggle] on this card     → never close (own click handler runs).
-//  • [data-audio-popup] (teleported body)             → never close.
-//  • [data-audio-button] on this card                 → never close.
-//  • [data-hint-toggle]  on this card                 → never close.
-//  • dragstart from within this entry's root          → never close.
-//  • Everything else                                  → close.
+// Never close when pointerup lands on:
+//  • overlay, [data-details-toggle], [data-audio-button], [data-hint-toggle] on this card
+//  • [data-audio-popup] anywhere in the document
+//  • dragstart from within this entry's root
 
 function onDetailsOutsidePointerUp(e: PointerEvent) {
   const target = e.target as Element | null
@@ -907,9 +860,11 @@ watch(expandedInfo, (open) => {
   if (open) {
     document.addEventListener('pointerup', onDetailsOutsidePointerUp, true)
     document.addEventListener('dragstart', onDetailsOutsideDragStart, true)
+    startDetailsAutoScroll()
   } else {
     document.removeEventListener('pointerup', onDetailsOutsidePointerUp, true)
     document.removeEventListener('dragstart', onDetailsOutsideDragStart, true)
+    stopDetailsResizeObserver()
   }
 })
 

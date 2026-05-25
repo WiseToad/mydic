@@ -33,7 +33,6 @@
         </button>
       </div>
 
-      <!-- Spacer -->
       <div class="flex-1" />
 
       <!-- Clear entire history -->
@@ -52,30 +51,18 @@
         :disabled="isSwapDisabled"
         :title="isSwapDisabled ? 'Cannot swap: detected language is disabled' : 'Swap languages (long press to clear & swap)'"
         class="absolute left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-primary-400 hover:bg-surface-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
-      @mousedown="onSwapPointerDown"
-        @touchstart.prevent="onSwapPointerDown"
-        @mouseup="onSwapPointerUp"
-        @mouseleave="onSwapPointerUp"
-        @touchend="onSwapTouchEnd"
-        @touchcancel="onSwapPointerUp"
-        @click="onSwapClick"
+        @pointerdown.prevent="onSwapPointerDown"
+        @pointerup="onSwapPointerUp"
+        @pointerleave="cancelSwapPress"
+        @pointercancel="cancelSwapPress"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M6.99 12L3 16l3.99 4v-3H14v-2H6.99v-3zm14.02-1l-3.99-4v3H10v2h7.02v3L21 11z"/></svg>
       </button>
     </div>
 
-      <!-- Single unified card. Sub-panels share the card background;
-         thin dividers separate columns and rows instead of color difference. -->
     <div class="card overflow-hidden">
-      <!-- Input / Result row -->
-      <!--
-        On mobile the two panels stack vertically and must be equal height.
-        A CSS grid with `grid-template-rows: minmax(0,1fr) auto minmax(0,1fr)`
-        and a fixed container height achieves this: both panel rows get exactly
-        half the available height regardless of content length. On desktop
-        (desk:) the layout switches to a single-row three-column grid so panels
-        sit side-by-side and stretch to equal height automatically.
-      -->
+      <!-- On mobile: 3-row grid (source | divider | result) with fixed height for equal halves.
+           On desktop (desk:): 3-column single-row grid. -->
       <div ref="panelGridRef" :style="panelGridStyle" class="grid h-96 desk:h-auto [grid-template-rows:minmax(0,1fr)_auto_minmax(0,1fr)] desk:[grid-template-rows:auto] desk:[grid-template-columns:minmax(0,1fr)_auto_minmax(0,1fr)]">
         <!-- Source panel -->
         <div class="flex-1 p-4 flex flex-col gap-2 min-h-0 overflow-y-auto desk:overflow-visible">
@@ -97,12 +84,7 @@
                 :title="!lang.enabled ? 'Excluded' : undefined"
               >{{ !lang.enabled ? `🛇 ${lang.name}` : lang.name }}</option>
             </select>
-            <!--
-              Detected lang badge: clickable when the detected language is
-              enabled in the user's preferences (i.e. it appears as a
-              selectable option in the source-language dropdown). Clicking
-              "pins" the source to that language and re-translates.
-            -->
+            <!-- Detected lang badge — clickable to pin the source lang when it's enabled. -->
             <button
               v-if="store.sourceLang === 'auto' && store.result?.detected_lang && detectedLangIsEnabled"
               class="text-sm text-primary-400 hover:text-primary-300 transition-colors"
@@ -136,9 +118,9 @@
               class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors"
               @pointerdown.stop="onAddWordbookPointerDown"
               @pointerup.stop="onAddWordbookPointerUp"
-              @pointerleave="onAddWordbookPointerUp"
-              @pointercancel="onAddWordbookPointerUp"
-              @click="onAddWordbookClick"
+              @pointerleave="onAddWordbookCancelPress"
+              @pointercancel="onAddWordbookCancelPress"
+              @click.stop
               @contextmenu.prevent
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
@@ -202,10 +184,7 @@
               <option v-for="lang in langStore.enabledLangs" :key="lang.code" :value="lang.code">{{ lang.name }}</option>
             </select>
             <div class="flex-1" />
-            <!-- Translation provider selector (top-right of result panel).
-                 Hidden when there are no enabled providers AND no saved code
-                 to display as a ghost.  When hidden, the lexical selector is
-                 implicitly hidden as well. -->
+            <!-- Translation provider selector; hidden when no enabled providers exist. -->
             <select
               v-if="translationDropdownVisible"
               class="bg-surface-800 border border-surface-700 text-gray-400 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-colors"
@@ -229,16 +208,7 @@
                 :title="!p.enabled ? 'Excluded' : (!p.available ? (p.unavailable_reason ?? 'Not available') : undefined)"
               >{{ !p.enabled ? `🛇 ${isNarrow ? p.abbrev : p.name}` : (!p.available ? `⚠ ${isNarrow ? p.abbrev : p.name}` : (isNarrow ? p.abbrev : p.name)) }}</option>
             </select>
-            <!--
-              Lexical provider selector (sits next to the translation
-              provider <select>; same styling).  Lists every provider
-              returned by the backend for the current lang pair, with
-              disabled / unavailable ones shown but unpickable.  An extra
-              "None" option lets the user explicitly deactivate lexical
-              fetching.  Hidden when the backend returns an empty list OR
-              when the translation dropdown itself is hidden — in either
-              case the saved code is left intact.
-            -->
+            <!-- Lexical provider selector; "None" deactivates fetching. -->
             <select
               class="bg-surface-800 border border-surface-700 text-gray-400 rounded-lg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500 transition-colors"
               title="Lexical provider"
@@ -277,15 +247,9 @@
           <p v-else-if="store.result && translationProvidersLoaded" ref="resultContainerRef" class="text-medium leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto">
             {{ store.result.translated_text }}
           </p>
-          <!-- <p v-else class="flex-1 font-medium text-gray-600">Translation will appear here…</p> -->
           <p v-else class="flex-1 font-medium text-gray-600">&nbsp;</p>
 
-          <!--
-            Lexical matches inline row.  Driven entirely by the view's
-            resolved lexical code; when no usable provider exists (or the
-            translation dropdown is hidden), `effectiveLexCode` is null and
-            the panel renders nothing — no message, just silence.
-          -->
+          <!-- Lexical panel: hidden when effectiveLexCode is null. -->
           <LexicalPanel
             v-if="store.result && effectiveLexCode"
             :key="`lex-${store.historyIndex}`"
@@ -305,7 +269,7 @@
         </div>
       </div>
 
-      <!-- Bottom action row: border divider + show/hide toggle (matching WordbookEntry style) -->
+      <!-- Definition & Context toggle -->
       <div v-if="store.result" class="mx-4 pt-2 pb-3 border-t border-surface-700 flex items-center">
         <button
           class="text-xs text-gray-500 hover:text-gray-300 transition-colors ml-auto"
@@ -315,9 +279,7 @@
         </button>
       </div>
 
-      <!-- Definition + Context panels (collapsible).
-           The view owns the provider selectors (same pattern as translation/lex);
-           panels run in inline mode and trust the validated effective code. -->
+      <!-- Definition + Context panels (collapsible) -->
       <div v-if="store.result && detailsVisible" class="px-4 pb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
         <!-- Definition panel -->
         <div class="bg-surface-800 rounded-xl p-3">
@@ -519,8 +481,7 @@ onMounted(async () => {
   if (!wordbookStore.isLoaded) wordbookStore.fetchEntries()
   // load() is guarded by isLoaded – safe to call from multiple views
   await langStore.load()
-  // When starting fresh (no history), default the target lang to the first
-  // enabled language in the user's configured list.
+  // No history: default target lang to the first enabled language.
   if (store.historyIndex < 0 && langStore.enabledLangs.length > 0) {
     store.targetLang = langStore.enabledLangs[0].code
   }
@@ -563,15 +524,13 @@ const isTargetLangDisabled = computed(() =>
   !langStore.enabledLangs.some(l => l.code === store.targetLang)
 )
 
-// True when the auto-detected language is enabled in the user's settings,
-// meaning it appears as a legitimate selectable option in the source dropdown.
+// True when the detected lang is enabled — appears as a selectable option in the source dropdown.
 const detectedLangIsEnabled = computed(() => {
   const detected = store.result?.detected_lang
   if (!detected) return false
   return langStore.enabledLangs.some(l => l.code === detected)
 })
 
-// Pin the detected language as the explicit source and retranslate.
 function onDetectedLangClick() {
   const detected = store.result?.detected_lang
   if (!detected || !detectedLangIsEnabled.value) return
@@ -606,12 +565,7 @@ const detailsVisible = ref(false)
 const showClearHistoryDialog = ref(false)
 
 // ─── Translation provider list ──────────────────────────────────
-//
-// The view owns the translation provider list — re-queried on every
-// language pair change and after settings save.  No carry-over lives in
-// the store; the dropdown's value derives from the current history
-// entry (or, transiently, the user's pending pick) and the API call
-// uses the same value (with a fallback to the first usable provider).
+// Re-queried on lang-pair change and settings save.
 const translationProviders = ref<ProviderItem[]>([])
 const translationProvidersLoaded = ref(false)
 
@@ -634,17 +588,8 @@ watch(
 )
 watch(() => settingsStore.saveCount, loadTranslationProviders)
 
-// User's pending translation provider override — set when the user picks
-// from the dropdown without input text yet, cleared on history navigation
-// so navigating to another entry resets the dropdown to that entry's saved
-// code.  Once a translation actually runs the new entry's `providerCode`
-// reflects the choice, so the override is no longer needed and is also
-// cleared then.
+// Pending provider overrides — explicit user selections; cleared on navigation or lang-pair change.
 const pendingTranslationCode = ref<string | null>(null)
-// Pending provider overrides for def/ctx: take highest priority in the
-// dropdown computeds so that a stale @provider-changed emit from an old
-// panel instance (completing after a navigation or lang-pair change) cannot
-// silently revert a deliberate user selection.
 const pendingDefCode = ref<string | null>(null)
 const pendingCtxCode = ref<string | null>(null)
 
@@ -654,25 +599,21 @@ function _clearPendingProviderCodes() {
   pendingCtxCode.value = null
 }
 watch(() => store.currentEntry, _clearPendingProviderCodes)
-// Also clear whenever the user changes the language pair
-// (the entry doesn't change in that case, so the entry watch above won't fire).
+// Also clear on lang-pair change (the entry watch above won't fire in that case).
 watch(
   () => [store.sourceLang, store.targetLang] as const,
   _clearPendingProviderCodes,
 )
 
-// True only when the displayed history entry's lang pair matches the current
-// UI lang pair.  When false (user changed source/target after navigating to a
-// history entry without yet translating), the entry's saved provider codes
-// are stale for the new pair and must not drive the dropdowns.
+// True when the entry's lang pair matches the current UI pair.
+// When false, the entry's saved codes are stale and must not drive the dropdowns.
 const entryMatchesLangPair = computed(() => {
   const entry = store.currentEntry
   if (!entry) return false
   return entry.sourceLang === store.sourceLang && entry.targetLang === store.targetLang
 })
 
-// Visible providers: enabled ones (available or not) + the entry's saved
-// code when it is disabled (to keep the saved selection visible as a ghost).
+// Enabled providers + the entry's saved code if disabled (shown as ghost).
 const visibleTranslationProviders = computed(() => {
   const list = translationProviders.value
   const entryCode = entryMatchesLangPair.value
@@ -690,15 +631,8 @@ const ghostTranslationProviderCode = computed<string | null>(() => {
   return code
 })
 
-// What the dropdown shows as currently selected.  Order of preference:
-// 1. Pending user pick (explicit dropdown interaction).
-// 2. Current entry's saved code when the entry matches the active lang pair
-//    (includes the case where result is null / user is typing a new query).
-// 3. Last entry's provider code carried across a lang-pair change, when that
-//    provider is still enabled+available in the new pair's list.  This
-//    prevents the selection from silently resetting to the first provider
-//    every time the user switches source or target language.
-// 4. First enabled+available provider as ultimate fallback.
+// Dropdown selection priority: pending pick → entry's saved code (matching pair)
+// → last-used code if still usable → first enabled+available.
 const dropdownTranslationCode = computed<string>(() => {
   if (pendingTranslationCode.value) return pendingTranslationCode.value
   if (entryMatchesLangPair.value) {
@@ -714,10 +648,7 @@ const dropdownTranslationCode = computed<string>(() => {
   return translationProviders.value.find(p => p.enabled && p.available)?.code ?? translationProviders.value.find(p => p.enabled)?.code ?? ''
 })
 
-// What we send to the API.  Same as the displayed value, but if it is not
-// usable (disabled, unavailable, or not in the registry) we fall back to
-// the first enabled+available provider.  null means no translation is
-// possible for this language pair right now.
+// API code: dropdown value if usable, else first enabled+available; null = no providers.
 const effectiveTranslationCode = computed<string | null>(() => {
   const code = dropdownTranslationCode.value
   if (code) {
@@ -733,9 +664,7 @@ const translationDropdownVisible = computed(() =>
 const noTranslationProviders = computed(() =>
   translationProvidersLoaded.value && !translationDropdownVisible.value
 )
-// True while providers are still loading OR when at least one enabled+available
-// provider exists.  Buttons that require a working provider (add-to-wordbook,
-// listen-to-translation) are hidden when this is false.
+// True while loading or when any enabled+available provider exists.
 const hasEnabledAvailableTranslationProvider = computed(() =>
   !translationProvidersLoaded.value || effectiveTranslationCode.value !== null
 )
@@ -756,28 +685,21 @@ async function loadLexicalProviders() {
   }
 }
 
-// Reload on explicit lang-selector changes.  We intentionally watch
-// store.sourceLang (not resolvedSourceLang) so that clearing the result
-// while auto-detect is active — which changes the resolved value from the
-// detected lang to the first-enabled-lang fallback — does NOT reload the
-// provider list with the wrong source lang mid-typing.
+// Watch sourceLang (not resolvedSourceLang) so clearing the result while
+// auto-detect is active doesn't reload providers with the wrong lang.
 watch(
   () => [store.sourceLang, store.targetLang] as const,
   loadLexicalProviders,
   { immediate: true },
 )
-// When auto-detect resolves to a (different) lang via a new translation
-// result, reload providers for the real source lang.  The guard
-// `store.result !== null` prevents this from firing when the result is
-// cleared (typing starts), which would switch to the fallback lang.
+// When auto-detect resolves to a new lang via a translation result, reload.
+// Guard `store.result !== null` prevents firing when result is cleared.
 watch(resolvedSourceLang, (newLang, oldLang) => {
   if (store.result !== null && newLang !== oldLang) loadLexicalProviders()
 })
 watch(() => settingsStore.saveCount, loadLexicalProviders)
 
-// Visible lexical providers: enabled (incl. unavailable) + saved-but-disabled
-// from the current history entry.  Disabled ones render as unpickable items
-// with the appropriate marker.
+// Enabled providers + the entry's saved code if disabled (shown as ghost).
 const visibleLexProviders = computed(() => {
   const list = lexicalProviders.value
   const entryCode = entryMatchesLangPair.value ? store.currentEntry?.lexProviderCode : undefined
@@ -794,10 +716,7 @@ const ghostLexProviderCode = computed<string | null>(() => {
   return code
 })
 
-// Bound to the <select> value: '' for explicit / implicit None, otherwise
-// the saved string code (rendered as-is even if disabled/unavailable).
-// Only honour the entry's saved code when the entry's lang pair matches
-// the current UI pair; otherwise fall back to first enabled+available.
+// '' for None; otherwise the saved code. Honours entry code only when lang pair matches.
 const dropdownLexCode = computed<string>(() => {
   if (entryMatchesLangPair.value) {
     const code = store.currentEntry?.lexProviderCode
@@ -808,12 +727,8 @@ const dropdownLexCode = computed<string>(() => {
   return lexicalProviders.value.find(p => p.enabled && p.available)?.code ?? ''
 })
 
-// Validated lex code to carry into a new history entry.
-// Since the lex dropdown is always visible, we always commit a concrete value
-// (never undefined): if the entry has no explicit code yet, resolve it to
-// whatever the dropdown currently shows so the new entry records the actual
-// displayed selection.  Explicit null ("No lexical provider") is preserved.
-// Disabled / unavailable codes fall back to first usable (or null).
+// Lex code to carry into the next history entry.
+// Unset → use dropdown's current value; null → preserve; disabled/unavailable → fall back.
 const resolvedCarryLexCode = computed<string | null>(() => {
   const code = store.currentEntry?.lexProviderCode
   if (code === null) return null  // explicit None: preserve
@@ -829,9 +744,7 @@ const resolvedCarryLexCode = computed<string | null>(() => {
   return lexicalProviders.value.find(pr => pr.enabled && pr.available)?.code ?? null
 })
 
-// Effective code passed to LexicalPanel for fetching.  Null when the
-// dropdown is hidden, when "None" is selected, or when no usable provider
-// can serve the current pair (fallback exhausted).
+// Code passed to LexicalPanel; null when None selected or no usable provider.
 const effectiveLexCode = computed<string | null>(() => {
   const code = dropdownLexCode.value
   if (code === '') return null  // explicit None
@@ -841,13 +754,10 @@ const effectiveLexCode = computed<string | null>(() => {
 })
 
 // ─── Definition provider list ────────────────────────────────────
-// Owns the definition provider list — re-queried on every source-lang
-// change and after settings save, matching the pattern for translation/lex.
 const defProviders = ref<ProviderItem[]>([])
 const defProvidersLoaded = ref(false)
 
-// Records which source lang the def provider list was fetched for, so the
-// carry-code computed can detect staleness when the lang changes mid-flight.
+// Lang the def provider list was fetched for — used to detect staleness.
 const defProvidersLang = ref<string | null>(null)
 
 async function loadDefProviders() {
@@ -893,9 +803,7 @@ const dropdownDefCode = computed<string>(() => {
   return defProviders.value.find(p => p.enabled && p.available)?.code ?? defProviders.value.find(p => p.enabled)?.code ?? ''
 })
 
-// Validated code passed to DefinitionPanel (inline mode).  Null when
-// providers are still loading, ghost, disabled, or unavailable — the panel
-// shows nothing so no stale content from a different provider is displayed.
+// Code passed to DefinitionPanel; null when loading or no usable provider.
 const effectiveDefCode = computed<string | null>(() => {
   if (!defProvidersLoaded.value) return null
   const code = dropdownDefCode.value
@@ -909,9 +817,7 @@ const defDropdownVisible = computed(() =>
   visibleDefProviders.value.length > 0 || !!ghostDefProviderCode.value
 )
 
-// Validated def code to carry into the next history entry.
-// Returns null when the provider list is stale (lang changed since last load)
-// so a provider for the wrong language is never inherited by a new entry.
+// Def code to carry forward; null when the list is stale or provider is unusable.
 const resolvedCarryDefCode = computed<string | null | undefined>(() => {
   const code = store.currentEntry?.defProviderCode
   if (code === null || code === undefined) return code
@@ -932,7 +838,7 @@ function onDefProviderChange(e: Event) {
 const ctxProviders = ref<ProviderItem[]>([])
 const ctxProvidersLoaded = ref(false)
 
-// Records which lang pair the ctx provider list was fetched for.
+// Lang pair the ctx provider list was fetched for — used to detect staleness.
 const ctxProvidersLangs = ref<readonly [string, string] | null>(null)
 
 async function loadCtxProviders() {
@@ -990,7 +896,7 @@ const ctxDropdownVisible = computed(() =>
   visibleCtxProviders.value.length > 0 || !!ghostCtxProviderCode.value
 )
 
-// Validated ctx code to carry into the next history entry.
+// Ctx code to carry forward; null when stale or provider is unusable.
 const resolvedCarryCtxCode = computed<string | null | undefined>(() => {
   const code = store.currentEntry?.ctxProviderCode
   if (code === null || code === undefined) return code
@@ -1016,11 +922,8 @@ function onProviderChange(e: Event) {
   if (!code) return
   pendingTranslationCode.value = code
   if (store.inputText.trim()) {
-    // When source lang is 'auto', the new translation provider may detect a
-    // different source language than the current entry.  In that case any
-    // lex/def/ctx codes saved for the old language would be invalid for the
-    // newly created entry.  Pass `undefined` so the new entry starts with a
-    // fresh fallback rather than inheriting stale provider preferences.
+    // With auto-detect, a new provider may detect a different source lang.
+    // Pass undefined so the new entry starts fresh rather than inheriting stale codes.
     const isAuto = store.sourceLang === 'auto'
     store.translate(
       code, false,
@@ -1051,7 +954,6 @@ function onResultSelectionTranslate() {
   store.translateWord(text, 'auto')
 }
 
-// Re-translate when user manually changes a language selector.
 async function retranslate() {
   await loadTranslationProviders()
   if (noTargetLangs.value || isTargetLangDisabled.value) {
@@ -1099,14 +1001,12 @@ function onInputPointerUp() {
 }
 
 function onInputPointerCancel() {
-  // Browser took over the pointer (e.g. native scroll) — clear the flag
-  // but don't reset the debounce since this wasn't a deliberate selection.
+  // Native scroll took over — clear the flag but don't reset the debounce.
   _inputPointerDown = false
 }
 
 function onInputPointerMove() {
-  // Only reset the debounce while a button is held (i.e. during a drag-
-  // selection). Idle hover movements should not interfere with the timer.
+  // Only reset debounce during drag-selection, not idle hover.
   if (_inputPointerDown) onInputActivity()
 }
 
@@ -1163,47 +1063,37 @@ async function onCtrlEnter() {
 
 // Long press on swap button: clear input + swap langs
 let longPressTimer: ReturnType<typeof setTimeout> | null = null
-let longPressDidFire = false
 
 function onSwapPointerDown() {
-  longPressDidFire = false
+  if (longPressTimer) clearTimeout(longPressTimer)
   longPressTimer = setTimeout(() => {
-    longPressDidFire = true
+    longPressTimer = null
     resetAudioContext()
     clearInput()
     store.swapLangs()
   }, 600)
 }
 
-function onSwapPointerUp() {
-  if (longPressTimer) {
+/** Short press → swap languages. */
+async function onSwapPointerUp() {
+  if (longPressTimer !== null) {
     clearTimeout(longPressTimer)
     longPressTimer = null
+    resetAudioContext()
+    store.reverse(false)
+    if (store.inputText.trim() && !noTargetLangs.value && !isTargetLangDisabled.value) {
+      // Reload providers for the swapped pair so the selection carries across.
+      await loadTranslationProviders()
+      const code = effectiveTranslationCode.value
+      if (code) store.translate(code, false, resolvedCarryLexCode.value, resolvedCarryDefCode.value, resolvedCarryCtxCode.value)
+    }
   }
 }
 
-// On touch devices @touchstart.prevent suppresses the synthetic click event,
-// so the tap action is handled here instead of in onSwapClick.
-async function onSwapTouchEnd() {
-  onSwapPointerUp()
-  await onSwapClick()
-}
-
-async function onSwapClick() {
-  if (longPressDidFire) {
-    longPressDidFire = false
-    return
-  }
-  resetAudioContext()
-  store.reverse(false)
-  if (store.inputText.trim() && !noTargetLangs.value && !isTargetLangDisabled.value) {
-    // Load providers for the new (swapped) lang pair so dropdownTranslationCode
-    // can carry the previously-selected provider across the swap, matching the
-    // behaviour of retranslate().  resolvedCarryDefCode/CtxCode will both be
-    // null here (stale list) so those entries start fresh.
-    await loadTranslationProviders()
-    const code = effectiveTranslationCode.value
-    if (code) store.translate(code, false, resolvedCarryLexCode.value, resolvedCarryDefCode.value, resolvedCarryCtxCode.value)
+function cancelSwapPress() {
+  if (longPressTimer !== null) {
+    clearTimeout(longPressTimer)
+    longPressTimer = null
   }
 }
 
@@ -1218,11 +1108,7 @@ function clearInput() {
   nextTick(() => inputTextareaRef.value?.focus())
 }
 
-/**
- * Jump to the Wordbook view and scroll to + flash the card matching the
- * current translation. Active filters that would hide this card are widened
- * or switched to include it; unrelated active filters are preserved.
- */
+/** Jumps to and highlights the current translation's wordbook card. */
 function openInWordbook() {
   if (!store.result) return
   const entry = wordbookStore.findDuplicate(resolvedSourceLang.value, store.targetLang, store.inputText.trim())
@@ -1246,9 +1132,7 @@ async function addToWordbook() {
       target_text: store.result.translated_text,
       provider_code: store.currentEntry?.providerCode ?? null,
     })
-    // Migrate def/ctx/lex provider codes from the current translator history
-    // entry into the wordbook UI store (localStorage) so the entry opens with
-    // the same providers the user was already using in the translation session.
+    // Copy def/ctx/lex provider codes to the wordbook UI store.
     const cur = store.currentEntry
     if (cur?.defProviderCode != null)
       wordbookUiStore.setProvider(entry.id, 'def', cur.defProviderCode)
@@ -1272,11 +1156,8 @@ const groupMenuVisible = ref(false)
 const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
 let _addWbLongPressTimer: ReturnType<typeof setTimeout> | null = null
-let _addWbLongPressDidFire = false
 
-// Same one-shot click guard as AudioButton: after the group-picker popup opens
-// via long-press, swallow the click that fires when the user releases the
-// finger — unless it lands inside the popup.
+// One-shot guard: swallows the post-long-press click unless it lands inside the popup.
 let _addWbClickGuard: ((e: MouseEvent) => void) | null = null
 
 function _registerAddWbClickGuard() {
@@ -1301,10 +1182,8 @@ function _cleanAddWbClickGuard() {
 
 function onAddWordbookPointerDown(e: PointerEvent) {
   if (e.button !== 0) return
-  _addWbLongPressDidFire = false
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
   _addWbLongPressTimer = setTimeout(async () => {
-    _addWbLongPressDidFire = true
     _addWbLongPressTimer = null
     if (wordbookGroupsStore.tabs.length === 0) {
       try { await wordbookGroupsStore.fetchGroups() } catch { /* non-critical */ }
@@ -1313,19 +1192,20 @@ function onAddWordbookPointerDown(e: PointerEvent) {
   }, 600)
 }
 
-function onAddWordbookPointerUp() {
-  if (_addWbLongPressTimer) {
+/** Short press → add to wordbook. */
+async function onAddWordbookPointerUp() {
+  if (_addWbLongPressTimer !== null) {
     clearTimeout(_addWbLongPressTimer)
     _addWbLongPressTimer = null
+    await addToWordbook()
   }
 }
 
-async function onAddWordbookClick() {
-  if (_addWbLongPressDidFire) {
-    _addWbLongPressDidFire = false
-    return
+function onAddWordbookCancelPress() {
+  if (_addWbLongPressTimer !== null) {
+    clearTimeout(_addWbLongPressTimer)
+    _addWbLongPressTimer = null
   }
-  await addToWordbook()
 }
 
 function _openGroupMenu() {
@@ -1336,7 +1216,6 @@ function _openGroupMenu() {
   groupMenuLeft.value = Math.max(8, rect.right - 160)
   groupMenuTop.value = rect.bottom + 4
   groupMenuVisible.value = true
-  document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   // Swallow the click that follows the long-press release.
   _registerAddWbClickGuard()
   nextTick(() => _repositionGroupMenu(rect))
@@ -1363,16 +1242,20 @@ function _repositionGroupMenu(buttonRect: DOMRect) {
   }
 }
 
+function closeGroupMenu() { groupMenuVisible.value = false }
+watch(groupMenuVisible, (open) => {
+  if (open) document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  else document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+})
+
 function _onGroupMenuOutsidePointerDown(e: PointerEvent) {
   if (groupMenuPopupRef.value?.contains(e.target as Node)) return
-  groupMenuVisible.value = false
-  document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  closeGroupMenu()
   e.stopPropagation()
 }
 
 async function addToWordbookInGroup(groupId: number) {
-  groupMenuVisible.value = false
-  document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  closeGroupMenu()
   wordbookUiStore.activeGroupId = groupId
   await addToWordbook()
 }
@@ -1383,14 +1266,8 @@ async function addToWordbookInGroup(groupId: number) {
 const isNarrow = ref(false)
 let _narrowMq: MediaQueryList | null = null
 
-// Panel grid height for narrow screens — measured dynamically so the
-// input+result block fills exactly the viewport without a scrollbar when
-// the details section is collapsed.  The reserve accounts for:
-//   • action row ("Definition & Context" toggle): pt-2 + pb-3 + border + text ≈ 39 px
-//   • bottom py-3 of the TranslatorView outer wrapper: 12 px
-//   • small safety margin: 5 px  →  total ≈ 56 px
-// The height is set once and does NOT change when details open or close,
-// so closing details restores the correct view without any content resize.
+// Dynamic height for the panel grid on narrow screens (fills viewport without scrollbar).
+// Reserve of 56 px: action row (≈39 px) + outer padding (12 px) + margin (5 px).
 const panelGridRef = ref<HTMLElement | null>(null)
 const narrowPanelHeight = ref<number | null>(null)
 
@@ -1402,21 +1279,15 @@ function updateNarrowPanelHeight() {
   if (!isNarrow.value) { narrowPanelHeight.value = null; return }
   const el = panelGridRef.value
   if (!el) { narrowPanelHeight.value = null; return }
-  // getBoundingClientRect().top is shifted by any scroll inside the overflow
-  // container (e.g. when details are open and the user scrolled down).
-  // Add back the scroll offset to get the element's natural top as if the
-  // container were at scroll=0, so the height is never over-estimated.
+  // Add scroll offset so the height isn't over-estimated when the container is scrolled.
   const scrollParent = el.closest('.overflow-y-auto') as HTMLElement | null
   const scrollOffset = scrollParent?.scrollTop ?? 0
   const top = el.getBoundingClientRect().top + scrollOffset
   narrowPanelHeight.value = Math.max(200, window.innerHeight - top - 56)
 }
 
-// Schedule a height update after two rAF frames so the browser has fully
-// reflowed to the new viewport dimensions before we sample any geometry.
-// One frame is not enough after orientation changes: window.innerHeight and
-// getBoundingClientRect().top can still reflect the old layout on the first
-// frame, causing an overestimated height and a scrollbar.
+// Two rAF frames to ensure reflow is complete before sampling geometry
+// (one frame isn't enough after orientation changes).
 function _scheduleHeightUpdate() {
   requestAnimationFrame(() => requestAnimationFrame(updateNarrowPanelHeight))
 }
@@ -1437,14 +1308,10 @@ onMounted(() => {
   nextTick(updateNarrowPanelHeight)  // initial mount: DOM is already stable
 })
 
-// When KeepAlive navigates away from this view (without destroying it),
-// Teleported popups stay in <body>. Close them explicitly on deactivation.
+// KeepAlive deactivation: teleported popups stay in <body>, close them manually.
 onDeactivated(() => {
   _cleanAddWbClickGuard()
-  if (groupMenuVisible.value) {
-    groupMenuVisible.value = false
-    document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-  }
+  closeGroupMenu()
   if (_addWbLongPressTimer) {
     clearTimeout(_addWbLongPressTimer)
     _addWbLongPressTimer = null

@@ -6,11 +6,11 @@ Bugs:
 - On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message - it produces unpleasant and pointless flicker
 
 Bugs encountered when running in Android device browser:
-- It's impossible to translate selection - the translate button do not appears. Instead, there is standard android toolbar appeared.
+- After refreshing installed web-app via pull-down, vertical space ocuppied by app becomes more than screen height (general scrollbar appears)
+- Bottom system bar in Android still appears in white for app in dark mode, despite attempts to fix it
 
 Not-so-critical bugs:
-- Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer.
-- Implement storing in-memory extra height value for wordbook cards, to prevent screen twitching when user changes details for cards near bottom of the screen
+- Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer Implement storing in-memory extra height value for wordbook cards, to prevent screen twitching when user changes details for cards near bottom of the screen
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:

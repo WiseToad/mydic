@@ -15,12 +15,11 @@
               ? 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/10'
               : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
       ]"
-      @click.stop="onClick"
-      @touchstart.prevent
+      @click.stop
       @pointerdown.stop.prevent="onPointerDown"
       @pointerup.stop="onPointerUp"
-      @pointerleave="onPointerUp"
-      @pointercancel="onPointerUp"
+      @pointerleave="cancelPress"
+      @pointercancel="cancelPress"
       @contextmenu.prevent
     >
       <!-- Spinner while server is generating audio -->
@@ -94,7 +93,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onDeactivated, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import {
   claimSlow,
   clearSlow,
@@ -116,11 +115,13 @@ const props = withDefaults(defineProps<{
   size?: 'sm' | 'md'
 }>(), { title: 'Listen', size: 'md' })
 
+const emit = defineEmits<{
+  (e: 'longpress'): void
+}>()
+
 /** Time the user must hold the button before the voice-picker popup opens. */
 const LONG_PRESS_MS = 500
 
-/** Per-instance identity used as the slow-mode owner key.  Stable for the
- *  lifetime of this AudioButton; never collides with another instance. */
 const buttonId = Symbol('AudioButton')
 
 const settings = useSettingsStore()
@@ -131,12 +132,9 @@ const popupRef = ref<HTMLElement | null>(null)
 const isPlaying = ref(false)
 const isGenerating = ref(false)
 
-/** Whether a TTS request is currently in-flight.  Set immediately (unlike
- *  `isGenerating` which is delayed) so concurrent clicks are blocked and
- *  unmount teardown can stop a pending request. */
+/** Set immediately (unlike the delayed `isGenerating`) to block concurrent requests. */
 let _inFlight = false
-/** Timer that delays the spinner; cancelled when audio starts before the
- *  delay expires so the spinner never appears for fast/cached responses. */
+/** Delayed spinner timer — cancelled if audio starts before it fires, preventing flicker. */
 let _spinnerTimer: ReturnType<typeof setTimeout> | null = null
 function _cancelSpinnerTimer() {
   if (_spinnerTimer !== null) { clearTimeout(_spinnerTimer); _spinnerTimer = null }
@@ -147,22 +145,14 @@ const popupLeft = ref(0)
 const popupTop = ref(0)
 
 let pressTimer: ReturnType<typeof setTimeout> | null = null
-let longPressFired = false
 let _longPressPointerId: number | null = null
 
-// One-shot guard: after a long-press opens the popup, releasing the finger
-// anywhere may synthesize a spurious click on whatever element is under the
-// pointer at that moment.  We intercept that click (capture phase, before any
-// child handler) and swallow it unless it lands inside the popup itself.
+// One-shot guard: swallows the spurious click that fires after long-press release,
+// unless it lands inside the popup.
 let _longPressClickGuard: ((e: MouseEvent) => void) | null = null
 
-// One-shot pointerup / pointercancel guard for the same press that opened the
-// popup.  On desktop, releasing the held mouse button over another element
-// fires pointerup on that element and triggers side-effects there (e.g.
-// WordbookEntry's onCardPointerUpCapture which focuses a card).  We intercept
-// that specific pointerup in the capture phase and stop propagation so it
-// reaches no element handler.  Keyed by pointerId so it never fires for an
-// unrelated touch or mouse button.
+// One-shot guard: intercepts the pointerup that ends the long-press gesture so
+// it cannot focus a different wordbook card.  Keyed by pointerId.
 let _longPressPointerUpGuard: ((e: PointerEvent) => void) | null = null
 
 function _registerLongPressClickGuard() {
@@ -192,9 +182,8 @@ function _registerLongPressPointerUpGuard() {
   const handler = (e: PointerEvent) => {
     if (e.pointerId !== id) return
     _cleanLongPressPointerUpGuard()
-    // On pointerup: stop propagation so no element below sees this event
-    // (prevents onCardPointerUpCapture and similar handlers from firing).
-    // On pointercancel: just clean up — cancels cause no side-effects.
+    // pointerup: stop propagation to prevent other cards from being focused.
+    // pointercancel: just clean up.
     if (e.type === 'pointerup') e.stopPropagation()
   }
   _longPressPointerUpGuard = handler
@@ -215,12 +204,7 @@ const isSlow = computed(() => isSlowOwner(buttonId))
 
 const choices = computed(() => settings.ttsChoicesForLang(props.lang))
 
-/**
- * Reactive (provider, voice) pair the user has previously picked from this
- * lang's popup, or the natural fallback when no pick exists.  Compared by
- * identity (provider.code + voice.id) against each row in the popup so the
- * current default gets a clear visual marker.
- */
+/** User-picked (or fallback) voice for this lang; used to mark the current default in the popup. */
 const currentDefault = computed(() => settings.defaultTtsForLang(props.lang))
 
 function isCurrentDefault(choice: { provider: ProviderItem; voice: TtsVoiceItem }): boolean {
@@ -235,23 +219,8 @@ const buttonTitle = computed(() => {
   return isSlow.value ? `${props.title} (slow)` : props.title
 })
 
-function _resolvedDefault() {
-  return settings.defaultTtsForLang(props.lang)
-}
-
-/** Drive a single playback request through the slow-state machine.
- *
- *  Speed selection (no explicit override):
- *    - This button is the slow owner       → SLOW
- *    - Otherwise                            → NORMAL (and any other button's
- *      slow ownership is cleared first, satisfying #5)
- *
- *  Post-playback transitions:
- *    - speed=NORMAL & result='completed'    → claim slow ownership (#1)
- *    - speed=NORMAL & result='interrupted'  → stay normal (don't promote
- *      partial playback to slow)
- *    - speed=SLOW   & any result            → always release slow ownership
- *      (interrupted or not, per spec)
+/** Plays TTS through the slow-mode state machine.
+ *  NORMAL + completed → claim slow; NORMAL + interrupted → stay normal; SLOW → always release.
  */
 async function _play(
   override?: { provider: string; voice: string; forceSpeed?: TtsSpeed },
@@ -265,20 +234,17 @@ async function _play(
   const wasSlow = isSlowOwner(buttonId)
   const speed: TtsSpeed = override?.forceSpeed ?? (wasSlow ? 'SLOW' : 'NORMAL')
 
-  // #5: a normal-speed playback elsewhere immediately clears any other
-  // button's slow ownership.  When playing slow on the current owner, keep
-  // the ownership marker until the playback finishes so the post-playback
-  // branch below can release it.
+  // Normal-speed play clears any other button's slow ownership.
+  // Slow play: keep ownership until playback finishes so we can release it below.
   if (speed !== 'SLOW' || !wasSlow) {
     clearSlow()
   }
 
-  const fallback = _resolvedDefault()
+  const fallback = currentDefault.value
   if (!fallback && !override) return  // no voices available for this lang — bail out silently
   const resolvedProvider = override?.provider ?? fallback?.provider.code
   const resolvedVoice = override?.voice ?? fallback?.voice.id
-  // After the guard above at least one source is non-null, but TypeScript
-  // cannot infer that, so we narrow explicitly.
+  // TypeScript can't infer non-null here; narrow explicitly.
   if (!resolvedProvider) return
 
   _inFlight = true
@@ -311,82 +277,57 @@ async function _play(
   }
 
   if (speed === 'SLOW') {
-    // Always end slow mode after a slow playback (#1).
     clearSlow()
   } else if (result === 'completed') {
-    // Only enter slow mode after an uninterrupted normal playback (#1).
     claimSlow(buttonId)
   }
-  // speed=NORMAL & interrupted: stay normal (no claim).
+  // NORMAL + interrupted: stay normal.
 }
 
 function onPointerDown(e: PointerEvent) {
-  // Only start long-press on the primary button.
   if (e.button !== 0) return
   _longPressPointerId = e.pointerId
-  longPressFired = false
   if (pressTimer) clearTimeout(pressTimer)
   pressTimer = setTimeout(() => {
-    longPressFired = true
     pressTimer = null
     openPopup()
   }, LONG_PRESS_MS)
 }
 
+/** Pointer released on the button — short press → play audio. */
 function onPointerUp() {
-  if (pressTimer) {
+  if (pressTimer !== null) {
+    clearTimeout(pressTimer)
+    pressTimer = null
+    void _play()
+  }
+}
+
+/** Pointer left the button or was cancelled — just kill the timer. */
+function cancelPress() {
+  if (pressTimer !== null) {
     clearTimeout(pressTimer)
     pressTimer = null
   }
 }
 
-function onClick() {
-  if (longPressFired) {
-    longPressFired = false
-    return
-  }
-  void _play()
-}
-
-/**
- * Open the long-press popup and place it relative to the audio button with
- * viewport-edge awareness:
- *  - Default placement is below the button, left-aligned to it.
- *  - When the popup would overflow the bottom edge of the viewport, it
- *    flips up so its bottom sits just above the button (#4).
- *  - When the popup would overflow the right edge, it switches to being
- *    right-aligned to the audio button instead of left-aligned (#5).
- *
- * Initial position is computed from the button rect alone (no popup size yet),
- * then refined after `nextTick` once the popup has rendered and we can read
- * its actual size.  This two-pass approach avoids placing the popup off-screen
- * for one frame on slower machines.
- */
+/** Opens the voice-picker popup, placed below/left the button with viewport-edge flipping.
+ *  Two-pass positioning: initial guess from button rect, refined after nextTick. */
 function openPopup() {
   if (!rootRef.value || !props.text) return
-  // Clear any text selection the browser started during the long-press hold.
-  // On Android, a long press can select adjacent text before our timer fires;
-  // discarding it here ensures only the voice picker is shown.
+  // Clear any text selection the browser may have started during the hold.
   window.getSelection()?.removeAllRanges()
   const rect = rootRef.value.getBoundingClientRect()
   // First-pass guess (good enough until the popup measures itself).
   popupLeft.value = Math.max(8, Math.min(window.innerWidth - 200, rect.left))
   popupTop.value = rect.bottom + 4
   popupVisible.value = true
+  emit('longpress')
   // Stop any current playback so the next one is the user's chosen voice.
   stopTts()
-  document.addEventListener('pointerdown', onOutsidePointerDown, true)
-  document.addEventListener('dragstart', onDocumentDragStart, true)
-  // Swallow the click that follows releasing the long-press finger, unless
-  // it lands inside the popup (where the user is making a deliberate choice).
-  _registerLongPressClickGuard()
-  // Swallow the pointerup that ends the long-press gesture so it cannot
-  // trigger side-effects on whatever element the pointer happens to be over
-  // at the moment of release (e.g. focusing a different wordbook card).
-  _registerLongPressPointerUpGuard()
-  // Second-pass refinement: now that the popup is in the DOM, measure it
-  // and apply viewport-aware adjustments.
-  void nextTick(() => positionPopup(rect))
+  _registerLongPressClickGuard()   // swallow post-long-press click
+  _registerLongPressPointerUpGuard()  // prevent focusing a different card on release
+  void nextTick(() => positionPopup(rect))  // second-pass: refine position once rendered
 }
 
 /** Reposition the rendered popup so it stays inside the viewport. */
@@ -417,50 +358,41 @@ function positionPopup(buttonRect: DOMRect) {
   }
 }
 
+function closePopup() { popupVisible.value = false }
+watch(popupVisible, (open) => {
+  if (open) {
+    document.addEventListener('pointerdown', onOutsidePointerDown, true)
+    document.addEventListener('dragstart', onDocumentDragStart, true)
+  } else {
+    document.removeEventListener('pointerdown', onOutsidePointerDown, true)
+    document.removeEventListener('dragstart', onDocumentDragStart, true)
+  }
+})
+
 function onOutsidePointerDown(e: PointerEvent) {
-  // The handler is registered in the capture phase so it runs before any
-  // listener inside the popup.  Bail out for clicks that originate inside
-  // the popup itself; otherwise the popup would be torn down before the
-  // chosen item's @click handler ever fires.
+  // Bail out if the click originated inside the popup (let the item's handler run).
   if (popupRef.value && popupRef.value.contains(e.target as Node)) return
-  popupVisible.value = false
-  document.removeEventListener('pointerdown', onOutsidePointerDown, true)
-  document.removeEventListener('dragstart', onDocumentDragStart, true)
+  closePopup()
   // Don't fire a normal click after long-press dismissal.
   e.stopPropagation()
 }
 
 /** Close the voice popup when any HTML5 card drag starts. */
-function onDocumentDragStart() {
-  popupVisible.value = false
-  document.removeEventListener('pointerdown', onOutsidePointerDown, true)
-  document.removeEventListener('dragstart', onDocumentDragStart, true)
-}
+function onDocumentDragStart() { closePopup() }
 
 function onChoosePopup(providerCode: string, voiceId: string) {
-  popupVisible.value = false
-  document.removeEventListener('pointerdown', onOutsidePointerDown, true)
-  document.removeEventListener('dragstart', onDocumentDragStart, true)
-  // Picking a voice from the popup also records it as the default for this
-  // button's language (browser-local), so future plain clicks default to
-  // the same voice without altering the user's settings-defined order.
+  closePopup()
+  // Record the picked voice as the browser-local default for this lang.
   settings.setDefaultTtsForLang(props.lang, providerCode, voiceId)
-  // #9: popup picks unconditionally start a NORMAL-speed playback, even if
-  // this button currently owns slow mode.
+  // Popup picks always play at normal speed.
   void _play({ provider: providerCode, voice: voiceId, forceSpeed: 'NORMAL' })
 }
 
-// When the parent KeepAlive view is navigated away from, the component is
-// deactivated (not destroyed). Teleported popups stay in <body> in that case,
-// so we must close them explicitly.
+// KeepAlive deactivation: teleported popup stays in <body>, close it manually.
 onDeactivated(() => {
   _cleanLongPressClickGuard()
   _cleanLongPressPointerUpGuard()
-  if (popupVisible.value) {
-    popupVisible.value = false
-    document.removeEventListener('pointerdown', onOutsidePointerDown, true)
-    document.removeEventListener('dragstart', onDocumentDragStart, true)
-  }
+  closePopup()
   if (pressTimer) {
     clearTimeout(pressTimer)
     pressTimer = null
@@ -474,8 +406,6 @@ onBeforeUnmount(() => {
   _cleanLongPressPointerUpGuard()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
-  // #4: a button being unmounted (e.g. wordbook card filtered out) must
-  // stop any playback it initiated and release any slow ownership it held.
   if (isPlaying.value || _inFlight) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()
 })
