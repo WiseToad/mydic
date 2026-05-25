@@ -10,15 +10,16 @@
       D  – bold geometric D: x 32–57, same cap-height
     The underline bar is kept from the original design.
   -->
+  <g transform="translate(0,2)">
   <path
     fill="#818cf8"
     fill-rule="evenodd"
     d="
-      M 6 41 L 6 15 L 12 15 L 19 35 L 26 15 L 32 15 L 32 41 L 27 41
-        L 27 23 L 21 41 L 17 41 L 11 23 L 11 41 Z
-      M 35 15 L 43 15 Q 57 15 57 28 Q 57 41 43 41 L 35 41 Z
-      M 40 20 L 43 20 Q 52 20 52 28 Q 52 36 43 36 L 40 36 Z
+      M 6 41 L 6 15 L 12 15 L 19 35 L 26 15 L 32 15 L 32 41 L 27 41 L 27 23 L 21 41 L 17 41 L 11 23 L 11 41 Z
+      M 36 15 L 43 15 Q 58 15 58 28 Q 58 41 43 41 L 36 41 Z
+      M 41 20 L 43 20 Q 53 20 53 28 Q 53 36 43 36 L 41 36 Z
     "
   />
   <rect x="6" y="45" width="52" height="4" fill="#818cf8"/>
+  </g>
 </svg>

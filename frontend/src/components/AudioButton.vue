@@ -16,6 +16,7 @@
               : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
       ]"
       @click.stop="onClick"
+      @touchstart.prevent
       @pointerdown.stop.prevent="onPointerDown"
       @pointerup.stop="onPointerUp"
       @pointerleave="onPointerUp"
@@ -363,6 +364,10 @@ function onClick() {
  */
 function openPopup() {
   if (!rootRef.value || !props.text) return
+  // Clear any text selection the browser started during the long-press hold.
+  // On Android, a long press can select adjacent text before our timer fires;
+  // discarding it here ensures only the voice picker is shown.
+  window.getSelection()?.removeAllRanges()
   const rect = rootRef.value.getBoundingClientRect()
   // First-pass guess (good enough until the popup measures itself).
   popupLeft.value = Math.max(8, Math.min(window.innerWidth - 200, rect.left))

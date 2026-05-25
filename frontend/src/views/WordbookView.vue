@@ -309,7 +309,7 @@
         </div>
 
         <!-- Entry grid -->
-        <div v-else class="grid gap-3" :style="gridStyle" :class="cardTouchDragActive ? '[touch-action:none]' : ''">
+        <div v-else class="grid gap-3" :style="gridStyle" @pointerdown.capture="onCardGridPointerDown">
           <div
             v-for="entry in filteredEntries"
             :key="entry.id"
@@ -319,10 +319,6 @@
             @dragleave="onCardDragLeave"
             @drop.prevent="onCardDrop(entry.id)"
             @dragend="onDragEnd"
-            @pointerdown="onCardTouchDragDown($event, entry.id)"
-            @pointermove="onCardTouchDragMove"
-            @pointerup="onCardTouchDragUp"
-            @pointercancel="onCardTouchDragCancel"
             class="flex flex-col transition-opacity duration-150"
           >
             <WordbookEntry
@@ -994,6 +990,8 @@ async function handleUpdate(
 // Card reorder drag
 const draggedId = ref<number | null>(null)
 const cardDragSourceEl = ref<HTMLElement | null>(null)
+/** Last pointer type that touched the card grid; used to suppress HTML5 DnD on touch. */
+let _lastCardPointerType = 'mouse'
 
 // Tab → card group assignment drag, OR tab → tab reorder drag
 // (custom pointer-based, single state machine for both)
@@ -1158,133 +1156,14 @@ function onTabPointerCancel() {
   dragOverDeleteZone.value = false
 }
 
-// ─── Touch/pointer-based card drag (Android fallback) ────────────────────────
-//
-// HTML5 drag-and-drop events (dragstart / dragover / drop) do not fire
-// reliably on Android Chrome.  This parallel pointer-event state machine
-// provides the same reorder behaviour for touch devices without replacing
-// the HTML5 DnD path used on desktop.
-//
-// A long-press (CARD_TOUCH_LONG_PRESS_MS) on the card body initiates drag
-// mode. That avoids conflicting with vertical scroll: short taps and quick
-// swipes still reach the scroll container normally, because we don't call
-// preventDefault or capture the pointer until the long-press fires.
-// Moving the finger by more than CARD_TOUCH_DRAG_THRESHOLD px before the
-// timer fires cancels the pending drag so a scroll gesture works as usual.
-
-const CARD_TOUCH_DRAG_THRESHOLD = 10
-const CARD_TOUCH_LONG_PRESS_MS = 400
-
-/** Set to true while a touch drag is active; drives [touch-action:none] on the grid. */
-const cardTouchDragActive = ref(false)
-
-interface CardTouchDrag {
-  entryId: number
-  pointerId: number
-  startX: number
-  startY: number
-  isDragging: boolean
-  sourceEl: HTMLElement
-}
-let _cardTouchDrag: CardTouchDrag | null = null
-let _cardTouchLongPressTimer: ReturnType<typeof setTimeout> | null = null
-
-function _clearCardTouchDrag() {
-  if (_cardTouchLongPressTimer !== null) { clearTimeout(_cardTouchLongPressTimer); _cardTouchLongPressTimer = null }
-  if (_cardTouchDrag) {
-    if (_cardTouchDrag.isDragging) {
-      _cardTouchDrag.sourceEl.style.opacity = ''
-      draggedId.value = null
-      dragOverId.value = null
-      cardTouchDragActive.value = false
-    }
-    _cardTouchDrag = null
-  }
-}
-
-function onCardTouchDragDown(e: PointerEvent, entryId: number) {
-  // Only intercept touch events — desktop uses the HTML5 DnD path above.
-  if (e.pointerType !== 'touch') return
-  // Skip touches that start on interactive children (buttons, audio, details).
-  const target = e.target as Element | null
-  if (target?.closest('button, input, textarea, [data-audio-button], [data-details-overlay], [data-details-toggle]')) return
-
-  const sourceEl = e.currentTarget as HTMLElement
-  _cardTouchDrag = {
-    entryId, pointerId: e.pointerId,
-    startX: e.clientX, startY: e.clientY,
-    isDragging: false, sourceEl,
-  }
-
-  // Wait for a deliberate long-press before entering drag mode so that
-  // short taps and flick-scrolls still work without interference.
-  _cardTouchLongPressTimer = setTimeout(() => {
-    _cardTouchLongPressTimer = null
-    const state = _cardTouchDrag
-    if (!state) return
-    state.isDragging = true
-    draggedId.value = state.entryId
-    cardTouchDragActive.value = true
-    const entry = store.entries.find((en) => en.id === state.entryId)
-    if (entry) uiStore.setFocusedEntry(state.entryId, entry.group?.id ?? null)
-    // Capture so pointermove/pointerup still arrive after finger slides away.
-    sourceEl.setPointerCapture(state.pointerId)
-    sourceEl.style.opacity = '0.4'
-    // Close any open overlays on the dragged card.
-    uiStore.activeMenuId = null
-    if (uiStore.activeCardId === state.entryId) uiStore.closeActive()
-  }, CARD_TOUCH_LONG_PRESS_MS)
-}
-
-function onCardTouchDragMove(e: PointerEvent) {
-  const state = _cardTouchDrag
-  if (!state || e.pointerId !== state.pointerId) return
-
-  if (!state.isDragging) {
-    // Cancel the long-press if the finger moved enough to be a scroll gesture.
-    const dx = e.clientX - state.startX
-    const dy = e.clientY - state.startY
-    if (Math.abs(dx) > CARD_TOUCH_DRAG_THRESHOLD || Math.abs(dy) > CARD_TOUCH_DRAG_THRESHOLD) {
-      if (_cardTouchLongPressTimer !== null) { clearTimeout(_cardTouchLongPressTimer); _cardTouchLongPressTimer = null }
-      _cardTouchDrag = null
-    }
-    return
-  }
-
-  // Active drag: update the highlighted drop target.
-  const under = document.elementsFromPoint(e.clientX, e.clientY)
-  const cardEl = under.find((el) => {
-    const raw = el.getAttribute('data-entry-id')
-    return raw !== null && Number(raw) !== state.entryId
-  })
-  dragOverId.value = cardEl ? Number(cardEl.getAttribute('data-entry-id')) : null
-}
-
-function onCardTouchDragUp(e: PointerEvent) {
-  const state = _cardTouchDrag
-  if (_cardTouchLongPressTimer !== null) { clearTimeout(_cardTouchLongPressTimer); _cardTouchLongPressTimer = null }
-  _cardTouchDrag = null
-  if (!state || e.pointerId !== state.pointerId || !state.isDragging) return
-
-  state.sourceEl.style.opacity = ''
-  cardTouchDragActive.value = false
-  const targetId = dragOverId.value
-  if (targetId !== null && targetId !== state.entryId) {
-    onCardDrop(targetId)
-  } else {
-    // onCardDrop would call onDragEnd, so mirror that cleanup here.
-    draggedId.value = null
-    dragOverId.value = null
-  }
-}
-
-function onCardTouchDragCancel(e: PointerEvent) {
-  const state = _cardTouchDrag
-  if (state && e.pointerId === state.pointerId) _clearCardTouchDrag()
-}
-
 // Card reorder drag (HTML5)
+function onCardGridPointerDown(e: PointerEvent) {
+  _lastCardPointerType = e.pointerType
+}
+
 function onDragStart(event: DragEvent, entryId: number) {
+  // Card drag is desktop-only; suppress it on touch (Android).
+  if (_lastCardPointerType === 'touch') { event.preventDefault(); return }
   // If the gesture started inside the details overlay, cancel the card drag
   // so the browser falls back to normal text-selection behaviour.
   if (document.elementsFromPoint(event.clientX, event.clientY)
@@ -1369,7 +1248,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   headerResizeObserver?.disconnect()
-  _clearCardTouchDrag()
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
