@@ -172,7 +172,7 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { dictionaryApi } from '@/api/dictionary'
+import { contextApi } from '@/api/context'
 import AudioButton from './AudioButton.vue'
 import { extractErrorMessage } from '@/utils/error'
 import { useTranslatorStore } from '@/stores/translator'
@@ -223,7 +223,7 @@ async function loadProviders() {
   if (props.inline) { providersLoaded.value = true; return }
   providersLoaded.value = false
   try {
-    const raw = await dictionaryApi.contextProviders(props.sourceLang, props.targetLang)
+    const raw = await contextApi.providers(props.sourceLang, props.targetLang)
     providers.value = [...raw].sort((a, b) => a.position - b.position)
     providersLoaded.value = true
   } catch {
@@ -499,7 +499,7 @@ async function fetchExamples() {
     if (!sp || !sp.enabled || !sp.available) return
   }
   try {
-    const result = await dictionaryApi.contextExamples(
+    const result = await contextApi.examples(
       props.text,
       props.sourceLang,
       props.targetLang,

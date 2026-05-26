@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, translate, wordbook, tts, dictionary, lexical, settings, languages
+from app.routers import auth, translate, wordbook, tts, definition, context, lexical, settings, languages
 
 
 @asynccontextmanager
@@ -41,7 +41,8 @@ app.include_router(auth.router)
 app.include_router(translate.router)
 app.include_router(wordbook.router)
 app.include_router(tts.router)
-app.include_router(dictionary.router)
+app.include_router(definition.router)
+app.include_router(context.router)
 app.include_router(lexical.router)
 app.include_router(settings.router)
 app.include_router(languages.router)

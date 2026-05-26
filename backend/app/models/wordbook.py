@@ -11,6 +11,9 @@ if TYPE_CHECKING:
 
 class WordbookEntry(Base):
     __tablename__ = "wordbook_entries"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'source_lang', 'target_lang', 'source_text', name='uq_wordbook_entries_user_word'),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)

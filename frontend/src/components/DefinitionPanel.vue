@@ -145,7 +145,7 @@
 <script setup lang="ts">
 import { ref, computed, watch, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
-import { dictionaryApi } from '@/api/dictionary'
+import { definitionApi } from '@/api/definition'
 import { useTranslatorStore } from '@/stores/translator'
 import { useSettingsStore } from '@/stores/settings'
 import { extractErrorMessage } from '@/utils/error'
@@ -195,7 +195,7 @@ async function loadProviders() {
   if (props.inline) { providersLoaded.value = true; return }
   providersLoaded.value = false
   try {
-    const raw = await dictionaryApi.definitionProviders(props.lang)
+    const raw = await definitionApi.providers(props.lang)
     providers.value = [...raw].sort((a, b) => a.position - b.position)
     providersLoaded.value = true
   } catch {
@@ -429,7 +429,7 @@ async function fetch() {
     if (!sp || !sp.enabled || !sp.available) return  // excluded or unavailable
   }
   try {
-    const result = await dictionaryApi.definition(props.word, props.lang, usedCode)
+    const result = await definitionApi.get(props.word, props.lang, usedCode)
     if (seq !== _fetchSeq) return  // a newer fetch superseded this one
     definition.value = result
     state.value = 'done'

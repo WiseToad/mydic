@@ -463,7 +463,8 @@ import LexicalPanel from '@/components/LexicalPanel.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { translateApi } from '@/api/translate'
 import { lexicalApi } from '@/api/lexical'
-import { dictionaryApi } from '@/api/dictionary'
+import { definitionApi } from '@/api/definition'
+import { contextApi } from '@/api/context'
 import { clearSlow, stopTts } from '@/api/tts'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
@@ -765,7 +766,7 @@ async function loadDefProviders() {
   defProvidersLoaded.value = false
   const lang = resolvedSourceLang.value
   try {
-    const list = await dictionaryApi.definitionProviders(lang)
+    const list = await definitionApi.providers(lang)
     defProviders.value = [...list].sort((a, b) => a.position - b.position)
     defProvidersLang.value = lang
     defProvidersLoaded.value = true
@@ -848,7 +849,7 @@ async function loadCtxProviders() {
   const src = resolvedSourceLang.value
   const tgt = store.targetLang
   try {
-    const list = await dictionaryApi.contextProviders(src, tgt)
+    const list = await contextApi.providers(src, tgt)
     ctxProviders.value = [...list].sort((a, b) => a.position - b.position)
     ctxProvidersLangs.value = [src, tgt]
     ctxProvidersLoaded.value = true
