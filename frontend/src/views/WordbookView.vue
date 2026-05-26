@@ -53,6 +53,7 @@
           @pointermove="onTabPointerMove"
           @pointerup="onTabPointerUp"
           @pointercancel="onTabPointerCancel"
+          @contextmenu.prevent
         >
           <!-- Name or inline edit input -->
           <template v-if="editingTabId !== tab.id">
@@ -1001,7 +1002,7 @@ const dragOverTabId = ref<number | null>(null)
 const dragOverDeleteZone = ref(false)
 
 const DRAG_THRESHOLD = 5
-const LONG_PRESS_DELAY = 500
+const LONG_PRESS_MS = 500
 
 const longPressReadyTabId = ref<number | null>(null)
 let longPressTimerId: ReturnType<typeof setTimeout> | null = null
@@ -1050,7 +1051,7 @@ function onTabPointerDown(event: PointerEvent, tabId: number) {
     longPressTimerId = setTimeout(() => {
       longPressTimerId = null
       if (tabInteraction.value && !tabInteraction.value.isDragging) longPressReadyTabId.value = tabId
-    }, LONG_PRESS_DELAY)
+    }, LONG_PRESS_MS)
   }
 }
 
@@ -1138,7 +1139,7 @@ function onTabPointerUp(_event: PointerEvent) {
   const elapsed = Date.now() - state.startTime
   if (state.onDeleteButton) {
     deleteTab(state.tabId)
-  } else if (elapsed < LONG_PRESS_DELAY) {
+  } else if (elapsed < LONG_PRESS_MS) {
     selectTab(state.tabId)
   } else {
     const tab = groupsStore.tabs.find(t => t.id === state.tabId)

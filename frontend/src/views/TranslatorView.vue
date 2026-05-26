@@ -55,6 +55,7 @@
         @pointerup="onSwapPointerUp"
         @pointerleave="cancelSwapPress"
         @pointercancel="cancelSwapPress"
+        @contextmenu.prevent
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M6.99 12L3 16l3.99 4v-3H14v-2H6.99v-3zm14.02-1l-3.99-4v3H10v2h7.02v3L21 11z"/></svg>
       </button>
@@ -1061,6 +1062,9 @@ async function onCtrlEnter() {
   }
 }
 
+/** Time the user must hold a button before the long-press action fires. */
+const LONG_PRESS_MS = 500
+
 // Long press on swap button: clear input + swap langs
 let longPressTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -1071,7 +1075,7 @@ function onSwapPointerDown() {
     resetAudioContext()
     clearInput()
     store.swapLangs()
-  }, 600)
+  }, LONG_PRESS_MS)
 }
 
 /** Short press → swap languages. */
@@ -1189,7 +1193,7 @@ function onAddWordbookPointerDown(e: PointerEvent) {
       try { await wordbookGroupsStore.fetchGroups() } catch { /* non-critical */ }
     }
     _openGroupMenu()
-  }, 600)
+  }, LONG_PRESS_MS)
 }
 
 /** Short press → add to wordbook. */
