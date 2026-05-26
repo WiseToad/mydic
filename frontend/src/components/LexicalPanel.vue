@@ -130,7 +130,7 @@
   <Teleport to="body">
     <button
       v-if="buttonVisible"
-      :style="{ left: buttonLeft + 'px', top: buttonTop + 'px' }"
+      :style="{ left: buttonLeft + 'px', top: buttonTop + 'px', transform: buttonTransform || undefined }"
       data-floating-translate-button
       class="fixed z-50 flex items-center justify-center p-1.5 bg-surface-900 border border-surface-700 rounded-lg text-primary-400 hover:text-primary-300 hover:bg-surface-800 shadow-lg transition-colors"
       @pointerdown.prevent
@@ -381,7 +381,7 @@ const emit = defineEmits<{
 const router = useRouter()
 const translatorStore = useTranslatorStore()
 const containerRef = ref<HTMLElement | null>(null)
-const { selectedText, buttonVisible, buttonLeft, buttonTop, dismiss } = useTextSelectionButton(containerRef)
+const { selectedText, buttonVisible, buttonLeft, buttonTop, buttonTransform, dismiss } = useTextSelectionButton(containerRef)
 
 function onSelectionTranslate() {
   const text = selectedText.value

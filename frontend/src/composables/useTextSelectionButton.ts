@@ -7,11 +7,15 @@ const SHOW_DELAY = 300
  * Detects text selection within `containerRef` and exposes reactive state
  * for positioning a floating action button underneath the selection.
  * The button appears only after the user finishes selecting (mouseup / touchend)
- * with a short delay, and is left-aligned to the selection's left edge.
+ * with a short delay, and is left-aligned to the selection's left edge for
+ * multi-line selections.  For single-line selections the button is horizontally
+ * centred over the selection via `buttonTransform = 'translateX(-50%)'` —
+ * apply it to the floating button's `transform` style so CSS offsets by exactly
+ * half the button's actual rendered width without any hardcoded values.
  *
  * Usage:
  *   const containerRef = ref<HTMLElement | null>(null)
- *   const { selectedText, buttonVisible, buttonLeft, buttonTop, dismiss } =
+ *   const { selectedText, buttonVisible, buttonLeft, buttonTop, buttonTransform, dismiss } =
  *     useTextSelectionButton(containerRef)
  */
 export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
@@ -19,6 +23,7 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
   const buttonVisible = ref(false)
   const buttonLeft = ref(0)
   const buttonTop = ref(0)
+  const buttonTransform = ref('')
 
   let showTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -41,10 +46,22 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     if (!text) return
 
     const rect = range.getBoundingClientRect()
-    // Use the minimum left across all selection rects so the button aligns
-    // with the leftmost edge of the highlighted selection background.
     const rects = Array.from(range.getClientRects())
-    buttonLeft.value = rects.length ? Math.min(...rects.map(r => r.left)) : rect.left
+    // Single-line: all rects share the same top (within 2 px for sub-pixel rendering).
+    // Set left to the selection centre and let translateX(-50%) handle the button
+    // half-width offset in CSS — no hardcoded pixel values needed.
+    // Multi-line: keep the original left-aligned behaviour.
+    const tops = rects.map(r => r.top)
+    const isSingleLine = tops.length === 0 || Math.max(...tops) - Math.min(...tops) < 2
+    if (isSingleLine) {
+      const minLeft = rects.length ? Math.min(...rects.map(r => r.left)) : rect.left
+      const maxRight = rects.length ? Math.max(...rects.map(r => r.right)) : rect.right
+      buttonLeft.value = (minLeft + maxRight) / 2
+      buttonTransform.value = 'translateX(-50%)'
+    } else {
+      buttonLeft.value = rects.length ? Math.min(...rects.map(r => r.left)) : rect.left
+      buttonTransform.value = ''
+    }
     buttonTop.value = rect.bottom + 4
     selectedText.value = text
     buttonVisible.value = true
@@ -122,5 +139,5 @@ export function useTextSelectionButton(containerRef: Ref<HTMLElement | null>) {
     window.removeEventListener('resize', dismissSilently)
   })
 
-  return { selectedText, buttonVisible, buttonLeft, buttonTop, dismiss }
+  return { selectedText, buttonVisible, buttonLeft, buttonTop, buttonTransform, dismiss }
 }

@@ -396,7 +396,7 @@
   <Teleport to="body">
     <button
       v-if="resultButtonVisible"
-      :style="{ left: resultButtonLeft + 'px', top: resultButtonTop + 'px' }"
+      :style="{ left: resultButtonLeft + 'px', top: resultButtonTop + 'px', transform: resultButtonTransform || undefined }"
       class="fixed z-50 flex items-center justify-center p-1.5 bg-surface-900 border border-surface-700 rounded-lg text-primary-400 hover:text-primary-300 hover:bg-surface-800 shadow-lg transition-colors"
       @pointerdown.prevent
       @click="onResultSelectionTranslate"
@@ -418,7 +418,7 @@
       @click.stop
     >
       <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Add to group</p>
-      <div class="overflow-auto py-1">
+      <div ref="groupMenuScrollRef" class="overflow-auto py-1">
         <button
           v-for="group in wordbookGroupsStore.tabs"
           :key="group.id"
@@ -427,6 +427,7 @@
           :class="wordbookUiStore.activeGroupId === group.id
             ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
             : 'text-gray-200 hover:bg-surface-700'"
+          :data-selected="(wordbookUiStore.activeGroupId === group.id) || undefined"
           @click="addToWordbookInGroup(group.id)"
         >
           <svg
@@ -947,6 +948,7 @@ const {
   buttonVisible: resultButtonVisible,
   buttonLeft: resultButtonLeft,
   buttonTop: resultButtonTop,
+  buttonTransform: resultButtonTransform,
   dismiss: resultDismiss,
 } = useTextSelectionButton(resultContainerRef)
 
@@ -1157,6 +1159,7 @@ async function addToWordbook() {
 // ─── Add-to-wordbook long-press: group picker ────────────────────
 const addToWordbookBtnRef = ref<HTMLButtonElement | null>(null)
 const groupMenuPopupRef = ref<HTMLElement | null>(null)
+const groupMenuScrollRef = ref<HTMLElement | null>(null)
 const groupMenuVisible = ref(false)
 const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
@@ -1223,7 +1226,15 @@ function _openGroupMenu() {
   groupMenuVisible.value = true
   // Swallow the click that follows the long-press release.
   _registerAddWbClickGuard()
-  nextTick(() => _repositionGroupMenu(rect))
+  nextTick(() => { _repositionGroupMenu(rect); _scrollToActiveGroup() })
+}
+
+function _scrollToActiveGroup() {
+  const scroll = groupMenuScrollRef.value
+  if (!scroll) return
+  const selected = scroll.querySelector<HTMLElement>('[data-selected]')
+  if (!selected) return
+  scroll.scrollTop = selected.offsetTop - scroll.clientHeight / 2 + selected.offsetHeight / 2
 }
 
 function _repositionGroupMenu(buttonRect: DOMRect) {

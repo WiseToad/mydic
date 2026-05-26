@@ -49,7 +49,7 @@
         @click.stop
       >
         <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Select voice</p>
-        <div class="overflow-auto py-1">
+        <div ref="popupScrollRef" class="overflow-auto py-1">
           <div v-if="choices.length === 0" class="px-3 py-2 text-xs text-gray-500">
             No TTS voices available for this language.
           </div>
@@ -61,6 +61,7 @@
             :class="isCurrentDefault(c)
               ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
               : 'text-gray-200 hover:bg-surface-700'"
+            :data-selected="isCurrentDefault(c) || undefined"
             :title="isCurrentDefault(c) ? 'Current default voice' : undefined"
             @click="onChoosePopup(c.provider.code, c.voice.id)"
           >
@@ -129,6 +130,7 @@ const toast = useToastStore()
 
 const rootRef = ref<HTMLElement | null>(null)
 const popupRef = ref<HTMLElement | null>(null)
+const popupScrollRef = ref<HTMLElement | null>(null)
 const isPlaying = ref(false)
 const isGenerating = ref(false)
 
@@ -327,7 +329,15 @@ function openPopup() {
   stopTts()
   _registerLongPressClickGuard()   // swallow post-long-press click
   _registerLongPressPointerUpGuard()  // prevent focusing a different card on release
-  void nextTick(() => positionPopup(rect))  // second-pass: refine position once rendered
+  void nextTick(() => { positionPopup(rect); scrollToSelectedVoice() })  // second-pass: refine position once rendered
+}
+
+function scrollToSelectedVoice() {
+  const scroll = popupScrollRef.value
+  if (!scroll) return
+  const selected = scroll.querySelector<HTMLElement>('[data-selected]')
+  if (!selected) return
+  scroll.scrollTop = selected.offsetTop - scroll.clientHeight / 2 + selected.offsetHeight / 2
 }
 
 /** Reposition the rendered popup so it stays inside the viewport. */
