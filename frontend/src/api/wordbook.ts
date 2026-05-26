@@ -3,6 +3,7 @@ import type {
   WordbookEntry,
   WordbookEntryCreate,
   WordbookEntryUpdate,
+  WordbookReorder,
   WordGroup,
   WordGroupUpdate,
 } from '@/types'
@@ -29,6 +30,14 @@ export const wordbookApi = {
 
   async batchRemove(ids: number[]): Promise<void> {
     await apiClient.post('/wordbook/batch-delete', { ids })
+  },
+
+  async reorder(body: WordbookReorder): Promise<void> {
+    await apiClient.put('/wordbook/reorder', body)
+  },
+
+  async reorderGroups(body: WordbookReorder): Promise<void> {
+    await apiClient.put('/wordbook/groups/reorder', body)
   },
 
   // ── Word groups ────────────────────────────────────────────────────────────

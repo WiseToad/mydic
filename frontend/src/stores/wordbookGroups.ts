@@ -69,12 +69,15 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   }
 
   /**
-   * Reorder tabs to match the given id order. Reassigns sparse positions
-   * (n*1000 … 1000) and fires background PATCH calls to persist the new
-   * order. Mirrors the wordbook entry reorderEntries pattern.
+   * Reorder tabs to match the given id order. Applies a sparse position
+   * scheme (1000, 2000, …) locally then persists only the changed slice via
+   * a single PUT /wordbook/groups/reorder call.
    * orderedIds should cover all tab ids; any missing ids are appended last.
    */
   function reorderTabs(orderedIds: number[]): void {
+    // Capture the current order before mutating so we can diff it.
+    const currentIds = tabs.value.map((t) => t.id)
+
     const map = new Map(tabs.value.map((t) => [t.id, t]))
     const reordered: WordGroup[] = []
     for (const id of orderedIds) {
@@ -87,11 +90,18 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     }
     reordered.forEach((t, i) => { t.position = (i + 1) * 1000 })
     tabs.value = reordered
-    Promise.all(
-      reordered.map((t, i) =>
-        wordbookApi.updateGroup(t.id, { position: (i + 1) * 1000 }).catch(() => {}),
-      ),
-    )
+
+    // Find the contiguous slice of ids that actually changed position.
+    const n = Math.min(orderedIds.length, currentIds.length)
+    let first = 0
+    while (first < n && orderedIds[first] === currentIds[first]) first++
+    let last = n - 1
+    while (last >= first && orderedIds[last] === currentIds[last]) last--
+
+    if (first > last) return // nothing changed
+
+    // Persist the slice in a single request — ignore failure, non-critical.
+    wordbookApi.reorderGroups({ ids: orderedIds.slice(first, last + 1), offset: first }).catch(() => {})
   }
 
   function reset() {

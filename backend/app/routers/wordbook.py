@@ -12,6 +12,7 @@ from app.schemas.wordbook import (
     WordbookEntryCreate,
     WordbookEntryResponse,
     WordbookEntryUpdate,
+    WordbookReorder,
     WordGroupCreate,
     WordGroupResponse,
     WordGroupUpdate,
@@ -33,7 +34,7 @@ async def list_entries(
         await db.execute(
             _entry_query()
             .where(WordbookEntry.user_id == current_user.id)
-            .order_by(WordbookEntry.position.desc(), WordbookEntry.created_at.desc())
+            .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
         )
     ).scalars().all()
     return rows
@@ -139,6 +140,33 @@ async def batch_delete_entries(
     await db.commit()
 
 
+@router.put("/reorder", status_code=204)
+async def reorder_entries(
+    body: WordbookReorder,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update positions for a contiguous slice of entries in one transaction.
+
+    ``body.ids`` contains entry IDs in display order for the changed slice.
+    ``body.offset`` is the 0-based index of ``ids[0]`` in the full list.
+    Items outside the slice are not touched.
+    """
+    rows = (
+        await db.execute(
+            select(WordbookEntry).where(
+                WordbookEntry.id.in_(body.ids),
+                WordbookEntry.user_id == current_user.id,
+            )
+        )
+    ).scalars().all()
+    entry_map = {e.id: e for e in rows}
+    for i, entry_id in enumerate(body.ids):
+        if entry_id in entry_map:
+            entry_map[entry_id].position = (body.offset + i + 1) * 1000
+    await db.commit()
+
+
 # ---------------------------------------------------------------------------
 # Word groups
 # ---------------------------------------------------------------------------
@@ -218,6 +246,31 @@ async def update_group(
         raise HTTPException(status_code=409, detail="A group with this name already exists")
     await db.refresh(group)
     return group
+
+
+@router.put("/groups/reorder", status_code=204)
+async def reorder_groups(
+    body: WordbookReorder,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Update positions for a contiguous slice of groups in one transaction.
+
+    Same offset-based semantics as ``PUT /wordbook/reorder``.
+    """
+    rows = (
+        await db.execute(
+            select(WordGroup).where(
+                WordGroup.id.in_(body.ids),
+                WordGroup.user_id == current_user.id,
+            )
+        )
+    ).scalars().all()
+    group_map = {g.id: g for g in rows}
+    for i, group_id in enumerate(body.ids):
+        if group_id in group_map:
+            group_map[group_id].position = (body.offset + i + 1) * 1000
+    await db.commit()
 
 
 @router.delete("/groups/{group_id}", status_code=204)

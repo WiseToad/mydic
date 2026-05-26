@@ -29,7 +29,7 @@ export const useWordbookStore = defineStore('wordbook', () => {
       source_text: normalizeText(data.source_text),
       target_text: normalizeText(data.target_text),
     })
-    entries.value.unshift(entry)  // newest first
+    entries.value.push(entry)  // newest last
     return entry
   }
 
@@ -59,11 +59,15 @@ export const useWordbookStore = defineStore('wordbook', () => {
   }
 
   /**
-   * Reorder entries to match the given id order. Reassigns sparse positions
-   * (n*1000 … 1000) and fires background PATCH calls to persist the new order.
+   * Reorder entries to match the given id order. Applies a sparse position
+   * scheme (1000, 2000, …) locally then persists only the changed slice via
+   * a single PUT /wordbook/reorder call.
    * orderedIds should cover all entry ids; any missing ids are appended last.
    */
   function reorderEntries(orderedIds: number[]): void {
+    // Capture the current order before mutating so we can diff it.
+    const currentIds = entries.value.map((e) => e.id)
+
     const map = new Map(entries.value.map((e) => [e.id, e]))
     const reordered: WordbookEntry[] = []
     for (const id of orderedIds) {
@@ -76,15 +80,20 @@ export const useWordbookStore = defineStore('wordbook', () => {
       if (!seen.has(e.id)) reordered.push(e)
     }
     // Assign sparse positions so server returns them in the right order
-    const n = reordered.length
-    reordered.forEach((e, i) => { e.position = (n - i) * 1000 })
+    reordered.forEach((e, i) => { e.position = (i + 1) * 1000 })
     entries.value = reordered
-    // Background sync — ignore individual failures, non-critical
-    Promise.all(
-      reordered.map((e, i) =>
-        wordbookApi.update(e.id, { position: (n - i) * 1000 }).catch(() => {}),
-      ),
-    )
+
+    // Find the contiguous slice of ids that actually changed position.
+    const n = Math.min(orderedIds.length, currentIds.length)
+    let first = 0
+    while (first < n && orderedIds[first] === currentIds[first]) first++
+    let last = n - 1
+    while (last >= first && orderedIds[last] === currentIds[last]) last--
+
+    if (first > last) return // nothing changed
+
+    // Persist the slice in a single request — ignore failure, non-critical.
+    wordbookApi.reorder({ ids: orderedIds.slice(first, last + 1), offset: first }).catch(() => {})
   }
 
   function reset() {

@@ -61,6 +61,11 @@ class WordbookEntryBatchDelete(BaseModel):
     ids: list[int]
 
 
+class WordbookReorder(BaseModel):
+    ids: list[int]
+    offset: int = 0  # 0-based index of ids[0] in the full display list
+
+
 class WordbookEntryResponse(BaseModel):
     id: int
     source_lang: str
