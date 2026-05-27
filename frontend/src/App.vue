@@ -51,6 +51,12 @@
             Settings
           </RouterLink>
           <button
+            class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface-700 transition-colors"
+            @click="menuOpen = false; aboutOpen = true"
+          >
+            About
+          </button>
+          <button
             class="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors"
             @click="authStore.logout"
           >
@@ -73,6 +79,8 @@
 
     <!-- Global toast notifications (slides in from bottom-right) -->
     <ToastContainer />
+
+    <AboutDialog v-model="aboutOpen" />
   </div>
 </template>
 
@@ -87,6 +95,7 @@ import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookGroupsStore } from '@/stores/wordbookGroups'
 import { useWordbookUiStore } from '@/stores/wordbookUi'
 import ToastContainer from '@/components/ToastContainer.vue'
+import AboutDialog from '@/components/AboutDialog.vue'
 
 const authStore = useAuthStore()
 const settingsStore = useSettingsStore()
@@ -96,6 +105,7 @@ const wordbookStore = useWordbookStore()
 const wordbookGroupsStore = useWordbookGroupsStore()
 const wordbookUiStore = useWordbookUiStore()
 const menuOpen = ref(false)
+const aboutOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
 
 // ── Fullscreen toggle (MyDic label, browser mode only) ────────────────────

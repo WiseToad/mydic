@@ -13,7 +13,6 @@ Not-so-critical bugs:
 
 Features:
 + Long-pressing non-focused wordbook item on Android moved it in it's place
-- Add about dialog with version info
 - Updating installed web app - how?
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - Fix wordbook layout for narrow Android screens. Maybe it would be better to completely disable different density selector, since it has no effect anyway
