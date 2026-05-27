@@ -13,7 +13,8 @@ Some non-obvious UI features:
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
 - A small button appearing below selected text allows you to translate selection
 - You may tap the word in a wordbook card to show/hide translation hint
-- You may drag cards in the wordbook to reorder them (doesn't supported on Android)
+- On PC, you may drag cards in the wordbook to reorder them
+- On Android, you may long-press non-focused card to move focused one in place of it
 - Long-pressing a group tab in the wordbook allows you to change it's name
 - You may drag group tips in the wordbook to reorder them
 - Dragging a group tip onto some word adds this word in the group

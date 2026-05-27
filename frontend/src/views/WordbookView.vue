@@ -310,7 +310,12 @@
         </div>
 
         <!-- Entry grid -->
-        <div v-else class="grid gap-3" :style="gridStyle" @pointerdown.capture="onCardGridPointerDown">
+        <div v-else class="grid gap-3" :style="gridStyle"
+          @pointerdown.capture="onCardGridPointerDown"
+          @pointermove="onCardGridPointerMove"
+          @pointerup="onCardGridPointerUpOrCancel"
+          @pointercancel="onCardGridPointerUpOrCancel"
+        >
           <div
             v-for="entry in filteredEntries"
             :key="entry.id"
@@ -347,9 +352,13 @@
         class="shrink-0 w-44 sm:w-56 self-start max-h-full overflow-y-auto card p-2"
       >
         <ul class="space-y-0.5">
-          <li v-for="entry in sortedPanelWords" :key="entry.id">
+          <li v-for="entry in sortedPanelWords" :key="entry.id" class="flex items-center">
+            <span
+              class="w-3 shrink-0 text-center text-xs font-semibold text-primary-300"
+              aria-hidden="true"
+            >{{ panelWordLetterMap.get(entry.id) ?? '' }}</span>
             <button
-              class="w-full text-left px-2 py-1 text-xs rounded truncate transition-colors"
+              class="flex-1 min-w-0 text-left px-2 py-1 text-xs rounded truncate transition-colors"
               :class="uiStore.getFocusedEntry(entry.group?.id ?? null) === entry.id
                 ? 'text-gray-300 bg-surface-800 hover:text-primary-300 hover:bg-surface-800'
                 : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
@@ -569,6 +578,20 @@ const sortedPanelWords = computed(() =>
     return textA.localeCompare(textB, undefined, { sensitivity: 'base' })
   }),
 )
+
+const panelWordLetterMap = computed(() => {
+  const map = new Map<number, string>()
+  let lastLetter = ''
+  for (const entry of sortedPanelWords.value) {
+    const text = uiStore.swapDisplay ? entry.target_text : entry.source_text
+    const letter = text.charAt(0).toUpperCase()
+    if (letter !== lastLetter) {
+      map.set(entry.id, letter)
+      lastLetter = letter
+    }
+  }
+  return map
+})
 
 function formatLangPair(pair: string): string {
   if (!uiStore.swapDisplay) return pair.replace('→', ' → ')
@@ -994,6 +1017,21 @@ const cardDragSourceEl = ref<HTMLElement | null>(null)
 /** Last pointer type that touched the card grid; used to suppress HTML5 DnD on touch. */
 let _lastCardPointerType = 'mouse'
 
+// Touch long-press card reorder state (Android)
+interface CardLongPressState {
+  entryId: number
+  pointerId: number
+  startX: number
+  startY: number
+}
+const cardLongPressState = ref<CardLongPressState | null>(null)
+let cardLongPressTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearCardLongPress() {
+  if (cardLongPressTimer !== null) { clearTimeout(cardLongPressTimer); cardLongPressTimer = null }
+  cardLongPressState.value = null
+}
+
 // Tab → card group assignment drag, OR tab → tab reorder drag
 // (custom pointer-based, single state machine for both)
 const draggedTabId = ref<number | null>(null)
@@ -1160,6 +1198,45 @@ function onTabPointerCancel() {
 // Card reorder drag (HTML5)
 function onCardGridPointerDown(e: PointerEvent) {
   _lastCardPointerType = e.pointerType
+  // Touch only: start a long-press timer to reorder the focused card into
+  // this card's position (mirrors the desktop drag-and-drop drop behaviour).
+  if (e.pointerType !== 'touch') return
+  const cardEl = (e.target as Element | null)?.closest('[data-entry-id]') as HTMLElement | null
+  if (!cardEl) return
+  const entryId = Number(cardEl.getAttribute('data-entry-id'))
+  if (isNaN(entryId)) return
+  const entry = filteredEntries.value.find((en) => en.id === entryId)
+  if (!entry) return
+  const groupId = entry.group?.id ?? null
+  const focusedId = uiStore.getFocusedEntry(groupId)
+  // Only arm the timer when there is a different focused card in the same group.
+  if (!focusedId || focusedId === entryId) return
+  clearCardLongPress()
+  cardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
+  cardLongPressTimer = setTimeout(() => {
+    cardLongPressTimer = null
+    const state = cardLongPressState.value
+    if (!state || state.entryId !== entryId) return
+    const currentFocused = uiStore.getFocusedEntry(groupId)
+    if (!currentFocused || currentFocused === entryId) { clearCardLongPress(); return }
+    // Guard: focused entry must still be visible in the current filter.
+    if (!filteredEntries.value.some((en) => en.id === currentFocused)) { clearCardLongPress(); return }
+    performCardReorder(currentFocused, entryId)
+    clearCardLongPress()
+  }, LONG_PRESS_MS)
+}
+
+function onCardGridPointerMove(e: PointerEvent) {
+  const state = cardLongPressState.value
+  if (!state || state.pointerId !== e.pointerId) return
+  const dx = e.clientX - state.startX
+  const dy = e.clientY - state.startY
+  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) clearCardLongPress()
+}
+
+function onCardGridPointerUpOrCancel(e: PointerEvent) {
+  const state = cardLongPressState.value
+  if (state && state.pointerId === e.pointerId) clearCardLongPress()
 }
 
 function onDragStart(event: DragEvent, entryId: number) {
@@ -1194,22 +1271,24 @@ function onCardDragLeave() {
   dragOverId.value = null
 }
 
-function onCardDrop(targetEntryId: number) {
-  const dragged = draggedId.value
-  if (!dragged || dragged === targetEntryId) { onDragEnd(); return }
-
+/** Shared reorder logic: move `draggedEntryId` to `targetEntryId`'s position. */
+function performCardReorder(draggedEntryId: number, targetEntryId: number) {
   const filteredIds = filteredEntries.value.map((e) => e.id)
-  const movingForward = filteredIds.indexOf(dragged) < filteredIds.indexOf(targetEntryId)
-  const newFiltered = filteredIds.filter((id) => id !== dragged)
+  const movingForward = filteredIds.indexOf(draggedEntryId) < filteredIds.indexOf(targetEntryId)
+  const newFiltered = filteredIds.filter((id) => id !== draggedEntryId)
   const targetIdx = newFiltered.indexOf(targetEntryId)
-  newFiltered.splice(movingForward ? targetIdx + 1 : targetIdx, 0, dragged)
-
+  newFiltered.splice(movingForward ? targetIdx + 1 : targetIdx, 0, draggedEntryId)
   const filteredSet = new Set(filteredIds)
   const allIds = store.entries.map((e) => e.id)
   let fi = 0
   const newOrder = allIds.map((id) => (filteredSet.has(id) ? newFiltered[fi++] : id))
-
   store.reorderEntries(newOrder)
+}
+
+function onCardDrop(targetEntryId: number) {
+  const dragged = draggedId.value
+  if (!dragged || dragged === targetEntryId) { onDragEnd(); return }
+  performCardReorder(dragged, targetEntryId)
   onDragEnd()
 }
 
@@ -1249,6 +1328,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   headerResizeObserver?.disconnect()
+  clearCardLongPress()
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
