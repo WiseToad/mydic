@@ -22,6 +22,7 @@
               <dd>
                 <button
                   class="font-mono text-primary-400 hover:text-primary-300 underline underline-offset-2 transition-colors cursor-pointer"
+                  title="Click to apply"
                   @click="reload"
                 >
                   {{ serverVersion }}
