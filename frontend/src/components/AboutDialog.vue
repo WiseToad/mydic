@@ -17,22 +17,18 @@
               <dt class="text-gray-400">Version</dt>
               <dd class="text-gray-200 font-mono">{{ version }}</dd>
             </div>
+            <div v-if="updateAvailable" class="flex justify-between text-sm">
+              <dt class="text-gray-400">New version available:</dt>
+              <dd>
+                <button
+                  class="font-mono text-primary-400 hover:text-primary-300 underline underline-offset-2 transition-colors cursor-pointer"
+                  @click="reload"
+                >
+                  {{ serverVersion }}
+                </button>
+              </dd>
+            </div>
           </dl>
-
-          <div
-            v-if="updateAvailable"
-            class="mb-4 p-3 bg-primary-950 border border-primary-700 rounded-xl text-sm"
-          >
-            <p class="text-primary-300 mb-3">
-              A new version is available ({{ serverVersion }}).
-            </p>
-            <button
-              class="w-full px-4 py-2 rounded-lg text-sm font-medium bg-primary-600 hover:bg-primary-500 text-white transition-colors"
-              @click="reload"
-            >
-              Reload to update
-            </button>
-          </div>
 
           <div class="flex justify-end">
             <button
