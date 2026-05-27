@@ -584,7 +584,7 @@ const panelWordLetterMap = computed(() => {
   let lastLetter = ''
   for (const entry of sortedPanelWords.value) {
     const text = uiStore.swapDisplay ? entry.target_text : entry.source_text
-    const letter = text.charAt(0).toUpperCase()
+    const letter = text.charAt(0).toUpperCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
     if (letter !== lastLetter) {
       map.set(entry.id, letter)
       lastLetter = letter
@@ -1018,6 +1018,10 @@ const cardDragSourceEl = ref<HTMLElement | null>(null)
 let _lastCardPointerType = 'mouse'
 
 // Touch long-press card reorder state (Android)
+// After a long-press reorder, the bubble-phase pointerup handler restores
+// focus to the moved entry (overriding the card's capture-phase setFocused).
+let _reorderFocusRestore: { entryId: number; groupId: number | null } | null = null
+
 interface CardLongPressState {
   entryId: number
   pointerId: number
@@ -1222,6 +1226,7 @@ function onCardGridPointerDown(e: PointerEvent) {
     // Guard: focused entry must still be visible in the current filter.
     if (!filteredEntries.value.some((en) => en.id === currentFocused)) { clearCardLongPress(); return }
     performCardReorder(currentFocused, entryId)
+    _reorderFocusRestore = { entryId: currentFocused, groupId }
     clearCardLongPress()
   }, LONG_PRESS_MS)
 }
@@ -1235,6 +1240,12 @@ function onCardGridPointerMove(e: PointerEvent) {
 }
 
 function onCardGridPointerUpOrCancel(e: PointerEvent) {
+  // Bubble phase: fires after the card's capture-phase setFocused().
+  // If a long-press reorder just happened, override focus back to the moved entry.
+  if (_reorderFocusRestore) {
+    uiStore.setFocusedEntry(_reorderFocusRestore.entryId, _reorderFocusRestore.groupId)
+    _reorderFocusRestore = null
+  }
   const state = cardLongPressState.value
   if (state && state.pointerId === e.pointerId) clearCardLongPress()
 }
