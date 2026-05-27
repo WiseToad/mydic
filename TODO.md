@@ -13,7 +13,7 @@ Not-so-critical bugs:
 
 Features:
 + Long-pressing non-focused wordbook item on Android moved it in it's place
-- Updating installed web app - how?
++ Updating installed web app - how?
 - DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
 - Fix wordbook layout for narrow Android screens. Maybe it would be better to completely disable different density selector, since it has no effect anyway
 - Typing a word in translator suggest words found in wordbook
@@ -22,10 +22,10 @@ Features:
 
 Architectural:
 - Proactive speech generation for wordbook items by separate worker job
-- Search for correlations between word cards woth llm using cached definitions
+- Search for correlations between word cards with llm using cached definitions
 - A voice repetitor, spelling the words from wordbook one-by-one and checking STT response from the user 
 - Leverage Websockets to update UI on data change on other devices
-- Implement Android app
+- Implement Android app (the web-app already available)?
 
 Tests:
 - Cover all code with unit tests

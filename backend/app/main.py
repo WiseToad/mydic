@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.routers import auth, translate, wordbook, tts, definition, context, lexical, settings, languages
+from app.routers import auth, translate, wordbook, tts, definition, context, lexical, settings, languages, version
 
 
 @asynccontextmanager
@@ -46,6 +46,7 @@ app.include_router(context.router)
 app.include_router(lexical.router)
 app.include_router(settings.router)
 app.include_router(languages.router)
+app.include_router(version.router)
 
 
 @app.get("/health", tags=["meta"])

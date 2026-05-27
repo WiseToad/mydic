@@ -50,8 +50,10 @@ services:
       TTS_CACHE_DIR: /app/tts/cache
       TTS_SLOW_RATIO: ${TTS_SLOW_RATIO}
       API_FAILURE_RETRY_SECONDS: ${API_FAILURE_RETRY_SECONDS}
+      VERSION_FILE: /app/VERSION.txt
     volumes:
       - ./data/tts:/app/tts
+      - ./VERSION.txt:/app/VERSION.txt:ro
     networks:
       - mydic
     user: "${UID}:${GID}"
