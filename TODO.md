@@ -2,12 +2,7 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-- On invalid login it shows error message for a very short time and then UI state of login form quickly resets back with no message. It produces unpleasant and pointless flicker for the user
-
-Bugs encountered when running in Android device browser:
 - Bottom system bar in Android still appears in white for app in dark mode, despite recent attempts to fix it
-
-Not-so-critical bugs:
 - Avoid up-down pulling when switching def/ctx/lex tabs in wordbook near the bottom edge of the screen. Possible solution: artificial bottom spacer. Implement it by storing in-memory extra height value for wordbook cards, to prevent screen twitching when user changes details for cards near bottom of the screen
 - After individual restarting kokoro tts container, its voices become unavailable
 

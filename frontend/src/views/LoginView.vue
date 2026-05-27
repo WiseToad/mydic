@@ -60,7 +60,6 @@ const isLoading = ref(false)
 const error = ref('')
 
 async function submit() {
-  error.value = ''
   isLoading.value = true
   try {
     if (mode.value === 'login') {
