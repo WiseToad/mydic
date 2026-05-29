@@ -17,8 +17,7 @@ Some non-obvious UI features:
 - On Android, you may long-press non-focused card to move focused one in place of it
 - Long-pressing a group tab in the wordbook allows you to change it's name
 - You may drag group tips in the wordbook to reorder them
-- Dragging a group tip onto some word adds this word in the group
-- Clicking the group label in a card activates filtering by this group
+- Dragging a group tip onto some word moves this word into the group
 
 Some usage notes for languages, you do not familiar enough with:
 

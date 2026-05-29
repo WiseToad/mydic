@@ -156,6 +156,25 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     set: (v) => { prefs.value.activeGroupId = v; savePrefs(prefs.value) },
   })
 
+  /**
+   * Ensure activeGroupId is always set to a valid group when groups exist.
+   * Called after fetchGroups (on mount and after lang-pair filter changes).
+   * - If the saved activeGroupId is still in the list, keep it.
+   * - Otherwise default to the first group.
+   * - If the list is empty, set null.
+   */
+  function initActiveGroup(groups: { id: number }[]) {
+    if (groups.length === 0) {
+      prefs.value.activeGroupId = null
+      savePrefs(prefs.value)
+      return
+    }
+    const current = prefs.value.activeGroupId
+    if (current !== null && groups.some((g) => g.id === current)) return
+    prefs.value.activeGroupId = groups[0].id
+    savePrefs(prefs.value)
+  }
+
   const sidePanelVisible = computed<boolean>({
     get: () => prefs.value.sidePanelVisible ?? false,
     set: (v) => { prefs.value.sidePanelVisible = v; savePrefs(prefs.value) },
@@ -330,7 +349,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    */
   function requestShowEntry(
     id: number,
-    pair: string,
+    pair: string,  // 'src:tgt' format
     entryGroupId: number | null,
     entryColor: string | null,
   ) {
@@ -402,6 +421,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightId, highlightSeq, pendingHighlightId,
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
     setFocusedEntry, getFocusedEntry, clearFocusedEntryById,
+    initActiveGroup,
     reinitialize,
   }
 })

@@ -457,6 +457,8 @@ import { useTextSelectionButton } from '@/composables/useTextSelectionButton'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookGroupsStore } from '@/stores/wordbookGroups'
 import { useWordbookUiStore } from '@/stores/wordbookUi'
+import { wordbookApi } from '@/api/wordbook'
+import type { WordbookLookupResult } from '@/types'
 import AudioButton from '@/components/AudioButton.vue'
 import DefinitionPanel from '@/components/DefinitionPanel.vue'
 import ContextExamples from '@/components/ContextExamples.vue'
@@ -481,7 +483,6 @@ const settingsStore = useSettingsStore()
 const router = useRouter()
 
 onMounted(async () => {
-  if (!wordbookStore.isLoaded) wordbookStore.fetchEntries()
   // load() is guarded by isLoaded – safe to call from multiple views
   await langStore.load()
   // No history: default target lang to the first enabled language.
@@ -557,10 +558,27 @@ watch(isTargetLangDisabled, (disabled, wasDisabled) => {
   }
 })
 
-const isAlreadyInWordbook = computed(() => {
-  if (!store.result) return false
-  return !!wordbookStore.findDuplicate(resolvedSourceLang.value, store.targetLang, store.inputText.trim())
-})
+/** Cached result of the last wordbook lookup; null = not in wordbook. */
+const wordbookLookup = ref<WordbookLookupResult | null>(null)
+
+// Re-check the wordbook whenever the translation result (or detected lang) changes.
+watch(
+  () => store.result,
+  async (result) => {
+    if (!result) { wordbookLookup.value = null; return }
+    try {
+      wordbookLookup.value = await wordbookApi.lookup(
+        resolvedSourceLang.value,
+        store.targetLang,
+        store.inputText.trim(),
+      )
+    } catch {
+      wordbookLookup.value = null
+    }
+  },
+)
+
+const isAlreadyInWordbook = computed(() => wordbookLookup.value !== null)
 
 const ctxExamplesRef = ref<InstanceType<typeof ContextExamples> | null>(null)
 const inputTextareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -1117,28 +1135,29 @@ function clearInput() {
 
 /** Jumps to and highlights the current translation's wordbook card. */
 function openInWordbook() {
-  if (!store.result) return
-  const entry = wordbookStore.findDuplicate(resolvedSourceLang.value, store.targetLang, store.inputText.trim())
-  if (!entry) return
-  const pair = `${entry.source_lang}→${entry.target_lang}`
-  wordbookUiStore.requestShowEntry(entry.id, pair, entry.group?.id ?? null, entry.color ?? null)
+  if (!store.result || !wordbookLookup.value) return
+  const lookup = wordbookLookup.value
+  const pair = `${resolvedSourceLang.value}:${store.targetLang}`
+  wordbookUiStore.requestShowEntry(lookup.entry_id, pair, lookup.group_id, lookup.color)
   router.push({ name: 'wordbook' })
 }
 
-async function addToWordbook() {
+async function addToWordbook(groupId?: number) {
   if (!store.result) return
   if (isAlreadyInWordbook.value) {
     toast.error('This word is already in your wordbook')
     return
   }
   try {
+    // Resolve group: prefer explicit arg, then active UI group, then let backend auto-create Default.
+    const resolvedGroupId = groupId ?? wordbookUiStore.activeGroupId ?? undefined
     const entry = await wordbookStore.addEntry({
       source_lang: resolvedSourceLang.value,
       target_lang: store.targetLang,
       source_text: store.inputText.trim(),
       target_text: store.result.translated_text,
       provider_code: store.currentEntry?.providerCode ?? null,
-    })
+    }, resolvedGroupId)
     // Copy def/ctx/lex provider codes to the wordbook UI store.
     const cur = store.currentEntry
     if (cur?.defProviderCode != null)
@@ -1147,9 +1166,8 @@ async function addToWordbook() {
       wordbookUiStore.setProvider(entry.id, 'ctx', cur.ctxProviderCode)
     if (cur?.lexProviderCode != null)
       wordbookUiStore.setProvider(entry.id, 'lex', cur.lexProviderCode)
-    if (wordbookUiStore.activeGroupId !== null) {
-      wordbookGroupsStore.assignEntry(entry.id, wordbookUiStore.activeGroupId)
-    }
+    // Reflect the new entry in the lookup cache so the button switches to the ✓ state.
+    wordbookLookup.value = { entry_id: entry.id, group_id: entry.group.id, color: entry.color ?? null }
     toast.success('Added to Wordbook')
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to save to wordbook'))
@@ -1272,8 +1290,7 @@ function _onGroupMenuOutsidePointerDown(e: PointerEvent) {
 
 async function addToWordbookInGroup(groupId: number) {
   closeGroupMenu()
-  wordbookUiStore.activeGroupId = groupId
-  await addToWordbook()
+  await addToWordbook(groupId)
 }
 
 // ─── Narrow-screen detection ─────────────────────────────────────

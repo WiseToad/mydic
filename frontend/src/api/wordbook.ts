@@ -3,19 +3,23 @@ import type {
   WordbookEntry,
   WordbookEntryCreate,
   WordbookEntryUpdate,
+  WordbookLookupResult,
   WordbookReorder,
   WordGroup,
   WordGroupUpdate,
 } from '@/types'
 
 export const wordbookApi = {
-  async list(): Promise<WordbookEntry[]> {
-    const { data } = await apiClient.get<WordbookEntry[]>('/wordbook')
+  async list(groupId: number): Promise<WordbookEntry[]> {
+    const { data } = await apiClient.get<WordbookEntry[]>('/wordbook', { params: { group_id: groupId } })
     return data
   },
 
-  async create(entry: WordbookEntryCreate): Promise<WordbookEntry> {
-    const { data } = await apiClient.post<WordbookEntry>('/wordbook', entry)
+  async create(entry: WordbookEntryCreate, groupId?: number): Promise<WordbookEntry> {
+    const { data } = await apiClient.post<WordbookEntry>('/wordbook', {
+      ...entry,
+      ...(groupId !== undefined ? { group_id: groupId } : {}),
+    })
     return data
   },
 
@@ -28,10 +32,6 @@ export const wordbookApi = {
     await apiClient.delete(`/wordbook/${id}`)
   },
 
-  async batchRemove(ids: number[]): Promise<void> {
-    await apiClient.post('/wordbook/batch-delete', { ids })
-  },
-
   async reorder(body: WordbookReorder): Promise<void> {
     await apiClient.put('/wordbook/reorder', body)
   },
@@ -40,10 +40,27 @@ export const wordbookApi = {
     await apiClient.put('/wordbook/groups/reorder', body)
   },
 
+  async listLangPairs(): Promise<string[]> {
+    const { data } = await apiClient.get<string[]>('/wordbook/lang-pairs')
+    return data
+  },
+
+  /** Returns the entry's id/group_id/color, or throws (404) if not found. */
+  async lookup(sourceLang: string, targetLang: string, sourceText: string): Promise<WordbookLookupResult> {
+    const { data } = await apiClient.get<WordbookLookupResult>('/wordbook/lookup', {
+      params: { source_lang: sourceLang, target_lang: targetLang, source_text: sourceText },
+    })
+    return data
+  },
+
   // ── Word groups ────────────────────────────────────────────────────────────
 
-  async listGroups(): Promise<WordGroup[]> {
-    const { data } = await apiClient.get<WordGroup[]>('/wordbook/groups')
+  async listGroups(langPairs?: string[]): Promise<WordGroup[]> {
+    const params = new URLSearchParams()
+    if (langPairs && langPairs.length > 0) {
+      for (const p of langPairs) params.append('lang_pair', p)
+    }
+    const { data } = await apiClient.get<WordGroup[]>('/wordbook/groups', { params })
     return data
   },
 
@@ -63,9 +80,5 @@ export const wordbookApi = {
 
   async setEntryGroup(entryId: number, groupId: number): Promise<void> {
     await apiClient.put(`/wordbook/${entryId}/group/${groupId}`)
-  },
-
-  async clearEntryGroup(entryId: number): Promise<void> {
-    await apiClient.delete(`/wordbook/${entryId}/group`)
   },
 }

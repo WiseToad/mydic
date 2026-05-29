@@ -7,9 +7,8 @@ Bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-- DB: Move group filtering in wordbook from frontend to backend, add "no group" tab, change filtering principle, so some group strictly should be active. Rename "group" to "tab"?
+- Search words in wordbook
 - Fix wordbook layout for narrow Android screens. Maybe it would be better to completely disable different density selector, since it has no effect anyway
-- Typing a word in translator suggest words found in wordbook
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 

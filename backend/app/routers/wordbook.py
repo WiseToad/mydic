@@ -1,5 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import delete, func, select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -8,10 +8,10 @@ from app.database import get_db
 from app.models.user import User
 from app.models.wordbook import WordbookEntry, WordGroup
 from app.schemas.wordbook import (
-    WordbookEntryBatchDelete,
     WordbookEntryCreate,
     WordbookEntryResponse,
     WordbookEntryUpdate,
+    WordbookLookupResult,
     WordbookReorder,
     WordGroupCreate,
     WordGroupResponse,
@@ -25,15 +25,64 @@ def _entry_query():
     return select(WordbookEntry).options(joinedload(WordbookEntry.group))
 
 
+@router.get("/lang-pairs", response_model=list[str])
+async def list_lang_pairs(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return distinct lang-pair strings in 'src:tgt' format for the user."""
+    rows = (
+        await db.execute(
+            select(distinct(WordbookEntry.source_lang), WordbookEntry.target_lang)
+            .where(WordbookEntry.user_id == current_user.id)
+        )
+    ).all()
+    return [f"{src}:{tgt}" for src, tgt in rows]
+
+
+@router.get("/lookup", response_model=WordbookLookupResult)
+async def lookup_entry(
+    source_lang: str,
+    target_lang: str,
+    source_text: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return entry_id/group_id/color for a matching entry, or 404."""
+    from app.utils import normalize_text
+    normalized = normalize_text(source_text)
+    entry = (
+        await db.execute(
+            select(WordbookEntry).where(
+                WordbookEntry.user_id == current_user.id,
+                WordbookEntry.source_lang == source_lang,
+                WordbookEntry.target_lang == target_lang,
+                WordbookEntry.source_text == normalized,
+            )
+        )
+    ).scalar_one_or_none()
+    if entry is None:
+        raise HTTPException(status_code=404)
+    return WordbookLookupResult(
+        entry_id=entry.id,
+        group_id=entry.group_id,
+        color=entry.color,
+    )
+
+
 @router.get("", response_model=list[WordbookEntryResponse])
 async def list_entries(
+    group_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     rows = (
         await db.execute(
             _entry_query()
-            .where(WordbookEntry.user_id == current_user.id)
+            .where(
+                WordbookEntry.user_id == current_user.id,
+                WordbookEntry.group_id == group_id,
+            )
             .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
         )
     ).scalars().all()
@@ -46,6 +95,35 @@ async def create_entry(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if entry.group_id is None:
+        # group_id may be omitted only when the user has no groups yet
+        user_group_count = (
+            await db.execute(
+                select(func.count()).where(WordGroup.user_id == current_user.id)
+            )
+        ).scalar()
+        if user_group_count > 0:
+            raise HTTPException(
+                status_code=422,
+                detail="group_id is required when the user already has groups",
+            )
+        group = WordGroup(user_id=current_user.id, name="Default", position=0)
+        db.add(group)
+        await db.flush()
+        resolved_group_id = group.id
+    else:
+        grp = (
+            await db.execute(
+                select(WordGroup).where(
+                    WordGroup.id == entry.group_id,
+                    WordGroup.user_id == current_user.id,
+                )
+            )
+        ).scalar_one_or_none()
+        if grp is None:
+            raise HTTPException(status_code=404, detail="Group not found")
+        resolved_group_id = entry.group_id
+
     max_pos = (
         await db.execute(
             select(func.coalesce(func.max(WordbookEntry.position), 0))
@@ -55,8 +133,9 @@ async def create_entry(
 
     new_entry = WordbookEntry(
         user_id=current_user.id,
+        group_id=resolved_group_id,
         position=max_pos + 1,
-        **entry.model_dump(),
+        **entry.model_dump(exclude={"group_id"}),
     )
     db.add(new_entry)
     await db.commit()
@@ -122,24 +201,6 @@ async def delete_entry(
     await db.commit()
 
 
-@router.post("/batch-delete", status_code=204)
-async def batch_delete_entries(
-    body: WordbookEntryBatchDelete,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Delete multiple entries in a single query, scoped to the current user."""
-    if not body.ids:
-        return
-    await db.execute(
-        delete(WordbookEntry).where(
-            WordbookEntry.id.in_(body.ids),
-            WordbookEntry.user_id == current_user.id,
-        )
-    )
-    await db.commit()
-
-
 @router.put("/reorder", status_code=204)
 async def reorder_entries(
     body: WordbookReorder,
@@ -173,16 +234,37 @@ async def reorder_entries(
 
 @router.get("/groups", response_model=list[WordGroupResponse])
 async def list_groups(
+    lang_pair: list[str] = Query(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        await db.execute(
-            select(WordGroup)
-            .where(WordGroup.user_id == current_user.id)
-            .order_by(WordGroup.position, WordGroup.id)
-        )
-    ).scalars().all()
+    """Return groups, optionally filtered to those containing entries matching
+    ANY of the supplied 'src:tgt' lang_pair values (OR logic)."""
+    q = (
+        select(WordGroup)
+        .where(WordGroup.user_id == current_user.id)
+        .order_by(WordGroup.position, WordGroup.id)
+    )
+    if lang_pair:
+        pairs = []
+        for p in lang_pair:
+            parts = p.split(":", 1)
+            if len(parts) == 2:
+                pairs.append((parts[0], parts[1]))
+        if pairs:
+            conditions = [
+                and_(
+                    WordbookEntry.source_lang == src,
+                    WordbookEntry.target_lang == tgt,
+                )
+                for src, tgt in pairs
+            ]
+            q = q.where(
+                WordGroup.id.in_(
+                    select(WordbookEntry.group_id).where(or_(*conditions))
+                )
+            )
+    rows = (await db.execute(q)).scalars().all()
     return rows
 
 
@@ -329,23 +411,3 @@ async def set_entry_group(
     await db.commit()
 
 
-@router.delete("/{entry_id}/group", status_code=204)
-async def clear_entry_group(
-    entry_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    """Remove *entry_id* from its group (sets group to null)."""
-    entry = (
-        await db.execute(
-            select(WordbookEntry).where(
-                WordbookEntry.id == entry_id,
-                WordbookEntry.user_id == current_user.id,
-            )
-        )
-    ).scalar_one_or_none()
-    if entry is None:
-        raise HTTPException(status_code=404, detail="Entry not found")
-
-    entry.group_id = None
-    await db.commit()

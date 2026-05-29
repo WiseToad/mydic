@@ -41,9 +41,15 @@ export interface WordbookEntry {
   provider_abbrev?: string | null
   /** Optional color tag; palette defined in `utils/entryColors.ts`. */
   color?: string | null
-  group?: WordGroup | null
+  group: WordGroup
   created_at: string
   updated_at: string
+}
+
+export interface WordbookLookupResult {
+  entry_id: number
+  group_id: number
+  color: string | null
 }
 
 export interface WordbookEntryCreate {

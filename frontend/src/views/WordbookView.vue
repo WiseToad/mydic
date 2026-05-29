@@ -213,23 +213,6 @@
             </svg>
           </button>
 
-          <!-- Batch delete filtered entries (icon) -->
-          <button
-            class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="filteredEntries.length === 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-red-400 hover:border-red-500/40'"
-            :disabled="filteredEntries.length === 0"
-            @click="handleBatchDelete"
-            :title="filteredEntries.length === 0 ? 'No entries to delete' : `Delete ${filteredEntries.length} filtered ${filteredEntries.length === 1 ? 'entry' : 'entries'}`"
-          >
-            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M2.5 4.5h11"/>
-              <path d="M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5"/>
-              <path d="M4 4.5l.7 8.8a1 1 0 0 0 1 .9h4.6a1 1 0 0 0 1-.9l.7-8.8"/>
-              <path d="M6.5 7.5v4"/>
-              <path d="M9.5 7.5v4"/>
-            </svg>
-          </button>
-
           <!-- Side word-list panel toggle (icon) -->
           <button
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
@@ -292,21 +275,21 @@
     <!-- Content row: main grid + optional right word-list panel (fills remaining height) -->
     <div class="flex-1 min-h-0 flex gap-3 pb-3">
       <div ref="cardsAreaEl" class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
-        <!-- Loading skeleton -->
-        <div v-if="store.isLoading" class="grid gap-3" :style="gridStyle">
+        <!-- Loading skeleton: only when loading with no existing entries to show -->
+        <div v-if="store.isLoading && !filteredEntries.length" class="grid gap-3" :style="gridStyle">
           <div v-for="i in 6" :key="i" class="h-16 bg-surface-800 rounded-2xl animate-pulse" />
         </div>
 
-        <!-- Wordbook empty state -->
-        <div v-else-if="!store.entries.length" class="py-16 text-center text-gray-500">
-          <p class="text-lg mb-2">Your wordbook is empty.</p>
-          <p class="text-sm">Translate something and click <strong>Save</strong> to add entries here.</p>
-        </div>
-
-        <!-- Filter empty state -->
-        <div v-else-if="!filteredEntries.length" class="py-16 text-center text-gray-500">
-          <p class="text-lg mb-2">No entries match the current filter.</p>
-          <p class="text-sm">Clear a language, color or group filter to see more entries.</p>
+        <!-- Empty state -->
+        <div v-else-if="!store.isLoading && !filteredEntries.length" class="py-16 text-center text-gray-500">
+          <template v-if="!store.entries.length">
+            <p class="text-lg mb-2">This group is empty.</p>
+            <p class="text-sm">Translate something and click <strong>Save</strong> to add entries here.</p>
+          </template>
+          <template v-else>
+            <p class="text-lg mb-2">No entries match the current filter.</p>
+            <p class="text-sm">Clear the color filter to see all entries in this group.</p>
+          </template>
         </div>
 
         <!-- Entry grid -->
@@ -330,12 +313,9 @@
             <WordbookEntry
               :entry="entry"
               :is-drag-target="dragOverId === entry.id && (draggedTabId !== null || (draggedId !== null && draggedId !== entry.id))"
-              :group-name="uiStore.activeGroupId === null ? entryGroupNames[entry.id] : undefined"
               class="flex-1"
               @delete="handleDelete"
               @update="handleUpdate"
-              @ungroup="handleUngroup"
-              @filter-group="handleFilterByGroup"
             />
           </div>
         </div>
@@ -359,7 +339,7 @@
             >{{ panelWordLetterMap.get(entry.id) ?? '' }}</span>
             <button
               class="flex-1 min-w-0 text-left px-2 py-1 text-xs rounded truncate transition-colors"
-              :class="uiStore.getFocusedEntry(entry.group?.id ?? null) === entry.id
+              :class="uiStore.getFocusedEntry(entry.group.id) === entry.id
                 ? 'text-gray-300 bg-surface-800 hover:text-primary-300 hover:bg-surface-800'
                 : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
               :title="uiStore.swapDisplay ? entry.target_text : entry.source_text"
@@ -385,22 +365,11 @@
     <ConfirmDialog
       v-model="showDeleteTabDialog"
       title="Delete Group"
-      message="Are you sure you want to delete this group? Entries in it will be unassigned but not deleted."
+      message="Are you sure you want to delete this group? All entries in it will also be permanently deleted."
       confirm-text="Delete"
       cancel-text="Cancel"
       variant="danger"
       @confirm="confirmDeleteTab"
-    />
-
-    <!-- Batch delete confirmation dialog -->
-    <ConfirmDialog
-      v-model="showBatchDeleteDialog"
-      title="Delete Entries"
-      :message="batchDeleteMessage"
-      confirm-text="Delete"
-      cancel-text="Cancel"
-      variant="danger"
-      @confirm="confirmBatchDelete"
     />
   </div>
 </template>
@@ -446,10 +415,8 @@ const gridStyle = computed(() => ({
 
 // ─── Language filter ──────────────────────────────────────────────────────────
 
-const availableLangs = computed(() => {
-  const pairs = new Set(store.entries.map((e) => `${e.source_lang}→${e.target_lang}`))
-  return [...pairs].sort()
-})
+// Lang pairs come from the backend via the groups store (server-sourced).
+const availableLangs = computed(() => groupsStore.langPairs)
 
 function toggleLang(pair: string) {
   const current = [...uiStore.activeLangs]
@@ -459,9 +426,23 @@ function toggleLang(pair: string) {
   uiStore.activeLangs = current
 }
 
-// Drop any active lang-pair filters whose chip has disappeared because the
-// last entry of that pair was deleted. Without this the filter would stay
-// "on" invisibly and silently hide unrelated entries.
+// When the lang-pair filter changes, re-fetch groups (filtered) then entries.
+watch(
+  () => uiStore.activeLangs,
+  async (newLangs) => {
+    if (!viewIsActive.value) return
+    await groupsStore.fetchGroups(newLangs.length > 0 ? [...newLangs] : undefined)
+    uiStore.initActiveGroup(groupsStore.tabs)
+    if (uiStore.activeGroupId !== null) {
+      await store.fetchEntries(uiStore.activeGroupId)
+      uiStore.prune(store.entries.map((e) => e.id))
+    }
+  },
+  { deep: true },
+)
+
+// Stale activeLangs cleanup: drop any saved pairs that are no longer in the
+// backend list (e.g. user deleted all entries with that pair).
 watch(availableLangs, (pairs) => {
   if (uiStore.activeLangs.length === 0) return
   const valid = new Set(pairs)
@@ -473,22 +454,11 @@ watch(availableLangs, (pairs) => {
 
 // ─── Color filter ─────────────────────────────────────────────────────────
 
-// 'none' is a sentinel that matches uncolored entries; real palette values
-// follow in canonical order. Only options actually present in the entries
-// list are shown so the popup stays terse.
+// 'none' is a sentinel that matches uncolored entries.
 const COLOR_FILTER_NONE = 'none'
 
-const availableColors = computed<string[]>(() => {
-  const present = new Set<string>()
-  let hasUncolored = false
-  for (const entry of store.entries) {
-    if (isEntryColor(entry.color)) present.add(entry.color)
-    else hasUncolored = true
-  }
-  const result = ENTRY_COLORS.filter((c) => present.has(c)) as string[]
-  if (hasUncolored && result.length > 0) result.push(COLOR_FILTER_NONE)
-  return result
-})
+// Always show the full static palette — no scan of entries needed.
+const availableColors: string[] = [...ENTRY_COLORS, COLOR_FILTER_NONE]
 
 function toggleColor(color: string) {
   const current = [...uiStore.activeColors]
@@ -505,17 +475,6 @@ function colorSwatchBg(color: string): string {
 function colorOptionLabel(color: string): string {
   return color === COLOR_FILTER_NONE ? 'No color' : ENTRY_COLOR_LABEL[color as EntryColor]
 }
-
-// Drop any active color filter whose option disappeared (last entry of that
-// color removed / recolored). Same pattern as the lang-pair watcher above.
-watch(availableColors, (options) => {
-  if (uiStore.activeColors.length === 0) return
-  const valid = new Set(options)
-  const cleaned = uiStore.activeColors.filter((c) => valid.has(c))
-  if (cleaned.length !== uiStore.activeColors.length) {
-    uiStore.activeColors = cleaned
-  }
-})
 
 const showColorFilter = ref(false)
 const colorFilterContainerRef = ref<HTMLElement | null>(null)
@@ -541,21 +500,15 @@ onBeforeUnmount(() => {
 })
 
 // ─── Filtered entries ─────────────────────────────────────────────────────────
+// Group and lang-pair filtering is now server-side; only the color filter
+// is applied client-side on the current group's loaded entries.
 
 const filteredEntries = computed(() =>
   store.entries.filter((entry) => {
-    const pair = `${entry.source_lang}→${entry.target_lang}`
-    const langOk =
-      uiStore.activeLangs.length === 0 || uiStore.activeLangs.includes(pair)
-    const tabOk =
-      uiStore.activeGroupId === null ||
-      groupsStore.getAssignment(entry.id) === uiStore.activeGroupId
-    const colorOk =
-      uiStore.activeColors.length === 0 ||
-      (isEntryColor(entry.color)
-        ? uiStore.activeColors.includes(entry.color)
-        : uiStore.activeColors.includes(COLOR_FILTER_NONE))
-    return langOk && tabOk && colorOk
+    if (uiStore.activeColors.length === 0) return true
+    return isEntryColor(entry.color)
+      ? uiStore.activeColors.includes(entry.color)
+      : uiStore.activeColors.includes(COLOR_FILTER_NONE)
   }),
 )
 
@@ -594,8 +547,8 @@ const panelWordLetterMap = computed(() => {
 })
 
 function formatLangPair(pair: string): string {
-  if (!uiStore.swapDisplay) return pair.replace('→', ' → ')
-  const [src, tgt] = pair.split('→')
+  const [src, tgt] = pair.split(':', 2)
+  if (!uiStore.swapDisplay) return `${src} → ${tgt}`
   return `${tgt} ← ${src}`
 }
 
@@ -610,7 +563,7 @@ function formatLangPair(pair: string): string {
  */
 async function scrollToEntry(id: number) {
   const entry = store.entries.find((e) => e.id === id)
-  if (entry) uiStore.setFocusedEntry(id, entry.group?.id ?? null)
+  if (entry) uiStore.setFocusedEntry(id, entry.group.id)
   if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
     uiStore.closeActive()
   }
@@ -662,8 +615,10 @@ async function scrollToEntry(id: number) {
 async function handlePendingHighlight() {
   const id = uiStore.consumePendingHighlight()
   if (id === null) return
-  // Ensure entries are loaded so the card is rendered.
-  if (!store.isLoaded) await store.fetchEntries()
+  // Ensure entries are loaded for the current group.
+  if (!store.isLoaded && uiStore.activeGroupId !== null) {
+    await store.fetchEntries(uiStore.activeGroupId)
+  }
   await nextTick()
   await scrollToEntry(id)
 }
@@ -705,13 +660,17 @@ onBeforeRouteLeave(() => {
 
 watch(
   () => uiStore.activeGroupId,
-  (newGroupId, oldGroupId) => {
-    // Guard: do not read/write scrollTop while deactivated. The DOM may be
-    // detached (KeepAlive) so scrollTop is unreliable (often reset to 0 by
-    // the browser), and writing it corrupts previously-saved positions.
+  async (newGroupId, oldGroupId) => {
     if (!viewIsActive.value) return
     if (cardsAreaEl.value) {
       groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
+    }
+    // Re-fetch entries for the newly-activated group.
+    if (newGroupId !== null) {
+      await store.fetchEntries(newGroupId)
+      uiStore.prune(store.entries.map((e) => e.id))
+    } else {
+      store.reset()
     }
     nextTick(() => {
       if (cardsAreaEl.value) {
@@ -732,7 +691,7 @@ const tabEditName = ref('')
 
 function selectTab(id: number) {
   if (editingTabId.value === id) return
-  uiStore.activeGroupId = uiStore.activeGroupId === id ? null : id
+  uiStore.activeGroupId = id  // always activate; toggling off is not allowed
 }
 
 function startTabEdit(tab: WordGroup) {
@@ -778,9 +737,19 @@ async function confirmDeleteTab() {
   if (pendingDeleteTabId.value === null) return
   const id = pendingDeleteTabId.value
   pendingDeleteTabId.value = null
+  const wasActive = uiStore.activeGroupId === id
   try {
     await groupsStore.deleteTab(id)
-    if (uiStore.activeGroupId === id) uiStore.activeGroupId = null
+    if (wasActive) {
+      const first = groupsStore.tabs[0]
+      uiStore.activeGroupId = first?.id ?? null
+      if (first) {
+        await store.fetchEntries(first.id)
+        uiStore.prune(store.entries.map((e) => e.id))
+      } else {
+        store.reset()
+      }
+    }
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to delete group'))
   }
@@ -922,35 +891,6 @@ watch(
   () => { nextTick(() => checkGroupsFit()) },
 )
 
-// ─── Group name map for card badges ──────────────────────────────────
-
-const entryGroupNames = computed(() => {
-  const result: Record<number, string | undefined> = {}
-  for (const entry of store.entries) {
-    if (entry.group) result[entry.id] = entry.group.name
-  }
-  return result
-})
-
-async function handleUngroup(id: number) {
-  uiStore.clearFocusedEntryById(id)
-  try {
-    await groupsStore.assignEntry(id, null)
-  } catch (e: unknown) {
-    toast.error(extractErrorMessage(e, 'Failed to remove from group'))
-  }
-}
-
-/**
- * Switch the wordbook view's active group filter to the clicked entry's
- * own group. Emitted by the group badge inside `WordbookEntry.vue`, which
- * is only rendered when no group filter is active, so this is always a
- * "None → specific group" transition (never a toggle-off).
- */
-function handleFilterByGroup(groupId: number) {
-  uiStore.activeGroupId = groupId
-}
-
 // ─── Delete dialog ────────────────────────────────────────────────────────────
 
 const showDeleteDialog = ref(false)
@@ -966,35 +906,12 @@ async function confirmDelete() {
   try {
     await store.deleteEntry(pendingDeleteId.value)
     uiStore.clearFocusedEntryById(pendingDeleteId.value)
+    // Refresh lang-pairs in case this was the last entry with that pair.
+    groupsStore.fetchLangPairs().catch(() => {})
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to delete entry'))
   } finally {
     pendingDeleteId.value = null
-  }
-}
-
-// ─── Batch delete dialog ──────────────────────────────────────────────────────
-
-const showBatchDeleteDialog = ref(false)
-
-const batchDeleteMessage = computed(() => {
-  const n = filteredEntries.value.length
-  return `Delete ${n} ${n === 1 ? 'entry' : 'entries'} matching the current filters? This action cannot be undone.`
-})
-
-function handleBatchDelete() {
-  if (filteredEntries.value.length === 0) return
-  showBatchDeleteDialog.value = true
-}
-
-async function confirmBatchDelete() {
-  const ids = filteredEntries.value.map((e) => e.id)
-  if (ids.length === 0) return
-  try {
-    await store.batchDeleteEntries(ids)
-    uiStore.prune(store.entries.map((e) => e.id))
-  } catch (e: unknown) {
-    toast.error(extractErrorMessage(e, 'Failed to delete entries'))
   }
 }
 
@@ -1211,7 +1128,7 @@ function onCardGridPointerDown(e: PointerEvent) {
   if (isNaN(entryId)) return
   const entry = filteredEntries.value.find((en) => en.id === entryId)
   if (!entry) return
-  const groupId = entry.group?.id ?? null
+  const groupId = entry.group.id
   const focusedId = uiStore.getFocusedEntry(groupId)
   // Only arm the timer when there is a different focused card in the same group.
   if (!focusedId || focusedId === entryId) return
@@ -1226,7 +1143,7 @@ function onCardGridPointerDown(e: PointerEvent) {
     // Guard: focused entry must still be visible in the current filter.
     if (!filteredEntries.value.some((en) => en.id === currentFocused)) { clearCardLongPress(); return }
     performCardReorder(currentFocused, entryId)
-    _reorderFocusRestore = { entryId: currentFocused, groupId }
+    _reorderFocusRestore = { entryId: currentFocused, groupId: groupId as number | null }
     clearCardLongPress()
   }, LONG_PRESS_MS)
 }
@@ -1262,7 +1179,7 @@ function onDragStart(event: DragEvent, entryId: number) {
   }
   draggedId.value = entryId
   const draggedEntry = store.entries.find((e) => e.id === entryId)
-  if (draggedEntry) uiStore.setFocusedEntry(entryId, draggedEntry.group?.id ?? null)
+  if (draggedEntry) uiStore.setFocusedEntry(entryId, draggedEntry.group.id)
   if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
   cardDragSourceEl.value = event.currentTarget as HTMLElement
   cardDragSourceEl.value.style.opacity = '0.4'
@@ -1320,14 +1237,18 @@ const viewIsActive = ref(false)
 
 onMounted(async () => {
   viewIsActive.value = true
-  await Promise.all([store.fetchEntries(), groupsStore.fetchGroups()])
-  uiStore.prune(store.entries.map((e) => e.id))
+  // Fetch lang pairs + groups in parallel; then resolve which group to display.
+  await Promise.all([
+    groupsStore.fetchLangPairs(),
+    groupsStore.fetchGroups(uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined),
+  ])
+  uiStore.initActiveGroup(groupsStore.tabs)
+  if (uiStore.activeGroupId !== null) {
+    await store.fetchEntries(uiStore.activeGroupId)
+    uiStore.prune(store.entries.map((e) => e.id))
+  }
   await handlePendingHighlight()
 
-  // Refs are assigned and initial data is loaded, so the first measurement
-  // reflects the actual rendered content. Observe both the container (for
-  // window/parent resizes) and the controls element (for visibility
-  // changes of its children).
   if (typeof ResizeObserver !== 'undefined' && headerRowEl.value && controlsEl.value) {
     headerResizeObserver = new ResizeObserver(() => checkGroupsFit())
     headerResizeObserver.observe(headerRowEl.value)
@@ -1344,14 +1265,17 @@ onBeforeUnmount(() => {
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
 // (e.g. from TranslatorView via the “already in wordbook” checkmark).
-onActivated(() => {
+onActivated(async () => {
   viewIsActive.value = true
-  // Restore the saved scroll position for the current group. This is the
-  // reliable path: KeepAlive's DOM detachment does not always preserve
-  // scrollTop across browsers, and the watcher is now guarded so it won't
-  // touch the DOM while deactivated. If there is a pending highlight,
-  // handlePendingHighlight will scroll to the entry immediately after,
-  // which is the correct final position in that case.
+  // Run both fetches in parallel — they are independent and this halves the
+  // round-trip time. Old entries remain visible while the refresh is in flight
+  // (stale-while-revalidate), so no loading skeleton is shown on activation.
+  const langPairsTask = groupsStore.fetchLangPairs()
+  if (uiStore.activeGroupId !== null) {
+    await store.fetchEntries(uiStore.activeGroupId)
+    uiStore.prune(store.entries.map((e) => e.id))
+  }
+  await langPairsTask
   nextTick(() => {
     if (cardsAreaEl.value) {
       const saved = groupScrollPositions.get(uiStore.activeGroupId ?? null)

@@ -31,6 +31,7 @@ class WordbookEntryCreate(BaseModel):
     notes: str | None = None
     provider_code: str | None = None
     color: str | None = None
+    group_id: int | None = None
 
     @field_validator("source_text", "target_text")
     @classmethod
@@ -57,10 +58,6 @@ class WordbookEntryUpdate(BaseModel):
         return None if v == "" else v
 
 
-class WordbookEntryBatchDelete(BaseModel):
-    ids: list[int]
-
-
 class WordbookReorder(BaseModel):
     ids: list[int]
     offset: int = 0  # 0-based index of ids[0] in the full display list
@@ -76,7 +73,7 @@ class WordbookEntryResponse(BaseModel):
     position: int
     provider_code: str | None = None
     color: str | None = None
-    group: WordGroupResponse | None = None
+    group: WordGroupResponse
     created_at: datetime
     updated_at: datetime
     model_config = {"from_attributes": True}
@@ -89,3 +86,9 @@ class WordbookEntryResponse(BaseModel):
         from app.providers.registry import get_provider_by_code
         provider = get_provider_by_code(self.provider_code)
         return provider.abbrev if provider else None
+
+
+class WordbookLookupResult(BaseModel):
+    entry_id: int
+    group_id: int
+    color: str | None = None

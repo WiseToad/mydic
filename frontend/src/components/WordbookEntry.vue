@@ -247,16 +247,6 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     Open in Translator
                   </button>
                   <button
-                    v-if="isInGroup"
-                    class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-gray-300 hover:bg-surface-800 transition-colors flex items-center gap-2"
-                    @click="handleRemoveFromGroup"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-                    </svg>
-                    Remove from group
-                  </button>
-                  <button
                     class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-2"
                     @click="handleDelete"
                   >
@@ -309,31 +299,6 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
         <!-- Notes display -->
         <p v-if="entry.notes" class="mt-1 text-xs text-gray-500 italic">{{ entry.notes }}</p>
 
-        <!--
-          Group badge: shown only in the "All" view (no group filter active),
-          so a click here unambiguously means "switch to this group's filter".
-          The trailing × button keeps its existing meaning (ungroup the entry).
-        -->
-        <div v-if="groupName" class="mt-1 flex items-center gap-2 group/badge">
-          <button
-            type="button"
-            class="flex items-center gap-1 flex-1 min-w-0 text-left transition-colors hover:text-primary-400"
-            :title="`Filter by group: ${groupName}`"
-            @click.stop="handleFilterByGroup"
-          >
-            <span class="w-1.5 h-1.5 rounded-full bg-primary-500/50 shrink-0" />
-            <span class="text-xs text-gray-600 truncate leading-tight group-hover/badge:text-primary-400/70">{{ groupName }}</span>
-          </button>
-          <button
-            class="opacity-0 group-hover/badge:opacity-100 inline-flex items-center justify-center w-5 h-5 rounded-full shrink-0 text-gray-500 hover:text-red-400 hover:bg-red-500/10 transition-opacity -mr-1"
-            @click.stop="$emit('ungroup', entry.id)"
-            title="Remove from group"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
-            </svg>
-          </button>
-        </div>
 
       </template>
     </div>
@@ -448,12 +413,10 @@ import {
 } from '@/utils/entryColors'
 import type { ProviderItem, WordbookEntry } from '@/types'
 
-const props = defineProps<{ entry: WordbookEntry; groupName?: string; isDragTarget?: boolean }>()
+const props = defineProps<{ entry: WordbookEntry; isDragTarget?: boolean }>()
 const emit = defineEmits<{
   (e: 'delete', id: number): void
   (e: 'update', id: number, data: { source_text?: string; target_text?: string; notes?: string; provider_code?: string | null; color?: string | null }): void
-  (e: 'ungroup', id: number): void
-  (e: 'filter-group', groupId: number): void
 }>()
 
 const router = useRouter()
@@ -535,8 +498,6 @@ const isCompact = computed(
   () => uiStore.density === 'compact' && !editing.value && !expandedInfo.value,
 )
 
-const isInGroup = computed(() => props.entry.group != null)
-
 // ── Color tag ─────────────────────────────────────────────────────────
 const colorOptions = ENTRY_COLORS
 const swatchBg = (c: EntryColor) => ENTRY_COLOR_SWATCH_BG[c]
@@ -551,12 +512,12 @@ const cardBgClass = computed(() => {
 })
 
 const isFocused = computed(
-  () => uiStore.getFocusedEntry(props.entry.group?.id ?? null) === props.entry.id,
+  () => uiStore.getFocusedEntry(props.entry.group.id) === props.entry.id,
 )
 
 function setFocused() {
   if (uiStore.activeCardMode === 'editing') uiStore.closeActive()
-  uiStore.setFocusedEntry(props.entry.id, props.entry.group?.id ?? null)
+  uiStore.setFocusedEntry(props.entry.id, props.entry.group.id)
 }
 
 const editSource = ref('')
@@ -975,11 +936,6 @@ function handleDelete() {
   emit('delete', props.entry.id)
 }
 
-function handleRemoveFromGroup() {
-  showActionsMenu.value = false
-  emit('ungroup', props.entry.id)
-}
-
 function handleSetColor(color: EntryColor | null) {
   showActionsMenu.value = false
   // Avoid pointless backend round-trip if the user picks the active color again
@@ -987,17 +943,4 @@ function handleSetColor(color: EntryColor | null) {
   emit('update', props.entry.id, { color })
 }
 
-/**
- * Activate the wordbook view's group filter for the entry's own group.
- * Only invoked while the badge is visible — i.e. the All view is active
- * — so this is always a meaningful state transition (no group is currently
- * selected, the entry obviously belongs to one). The actual store mutation
- * lives in `WordbookView.vue` to keep this component free of view-level
- * concerns.
- */
-function handleFilterByGroup() {
-  const groupId = props.entry.group?.id
-  if (groupId == null) return
-  emit('filter-group', groupId)
-}
 </script>

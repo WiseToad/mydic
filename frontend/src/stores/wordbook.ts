@@ -11,10 +11,10 @@ export const useWordbookStore = defineStore('wordbook', () => {
   const isLoading = ref(false)
   const isLoaded = ref(false)
 
-  async function fetchEntries() {
+  async function fetchEntries(groupId: number) {
     isLoading.value = true
     try {
-      entries.value = await wordbookApi.list()
+      entries.value = await wordbookApi.list(groupId)
       isLoaded.value = true
     } catch (e: unknown) {
       useToastStore().error(extractErrorMessage(e, 'Failed to load wordbook'))
@@ -23,21 +23,12 @@ export const useWordbookStore = defineStore('wordbook', () => {
     }
   }
 
-  async function addEntry(data: WordbookEntryCreate): Promise<WordbookEntry> {
-    const entry = await wordbookApi.create({
+  async function addEntry(data: WordbookEntryCreate, groupId?: number): Promise<WordbookEntry> {
+    return wordbookApi.create({
       ...data,
       source_text: normalizeText(data.source_text),
       target_text: normalizeText(data.target_text),
-    })
-    entries.value.push(entry)  // newest last
-    return entry
-  }
-
-  function findDuplicate(sourceLang: string, targetLang: string, sourceText: string): WordbookEntry | null {
-    const normalized = normalizeText(sourceText)
-    return entries.value.find(
-      (e) => e.source_lang === sourceLang && e.target_lang === targetLang && normalizeText(e.source_text) === normalized
-    ) ?? null
+    }, groupId)
   }
 
   async function updateEntry(id: number, update: WordbookEntryUpdate): Promise<void> {
@@ -51,21 +42,14 @@ export const useWordbookStore = defineStore('wordbook', () => {
     entries.value = entries.value.filter((e) => e.id !== id)
   }
 
-  async function batchDeleteEntries(ids: number[]): Promise<void> {
-    if (ids.length === 0) return
-    await wordbookApi.batchRemove(ids)
-    const idSet = new Set(ids)
-    entries.value = entries.value.filter((e) => !idSet.has(e.id))
-  }
-
   /**
    * Reorder entries to match the given id order. Applies a sparse position
    * scheme (1000, 2000, …) locally then persists only the changed slice via
    * a single PUT /wordbook/reorder call.
-   * orderedIds should cover all entry ids; any missing ids are appended last.
+   * orderedIds should cover all entry ids in the current group view;
+   * any missing ids are appended last.
    */
   function reorderEntries(orderedIds: number[]): void {
-    // Capture the current order before mutating so we can diff it.
     const currentIds = entries.value.map((e) => e.id)
 
     const map = new Map(entries.value.map((e) => [e.id, e]))
@@ -74,25 +58,21 @@ export const useWordbookStore = defineStore('wordbook', () => {
       const entry = map.get(id)
       if (entry) reordered.push(entry)
     }
-    // Append any entries not covered by orderedIds
     const seen = new Set(orderedIds)
     for (const e of entries.value) {
       if (!seen.has(e.id)) reordered.push(e)
     }
-    // Assign sparse positions so server returns them in the right order
     reordered.forEach((e, i) => { e.position = (i + 1) * 1000 })
     entries.value = reordered
 
-    // Find the contiguous slice of ids that actually changed position.
     const n = Math.min(orderedIds.length, currentIds.length)
     let first = 0
     while (first < n && orderedIds[first] === currentIds[first]) first++
     let last = n - 1
     while (last >= first && orderedIds[last] === currentIds[last]) last--
 
-    if (first > last) return // nothing changed
+    if (first > last) return
 
-    // Persist the slice in a single request — ignore failure, non-critical.
     wordbookApi.reorder({ ids: orderedIds.slice(first, last + 1), offset: first }).catch(() => {})
   }
 
@@ -102,5 +82,5 @@ export const useWordbookStore = defineStore('wordbook', () => {
     isLoaded.value = false
   }
 
-  return { entries, isLoading, isLoaded, fetchEntries, addEntry, updateEntry, deleteEntry, batchDeleteEntries, findDuplicate, reorderEntries, reset }
+  return { entries, isLoading, isLoaded, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
 })
