@@ -275,13 +275,15 @@
     <!-- Content row: main grid + optional right word-list panel (fills remaining height) -->
     <div class="flex-1 min-h-0 flex gap-3 pb-3">
       <div ref="cardsAreaEl" class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
-        <!-- Loading skeleton: only when loading with no existing entries to show -->
-        <div v-if="store.isLoading && !filteredEntries.length" class="grid gap-3" :style="gridStyle">
+        <!-- Loading skeleton: shown after 200 ms regardless of previous content -->
+        <div v-if="showSkeleton" class="grid gap-3" :style="gridStyle">
           <div v-for="i in 6" :key="i" class="h-16 bg-surface-800 rounded-2xl animate-pulse" />
         </div>
 
-        <!-- Empty state -->
-        <div v-else-if="!store.isLoading && !filteredEntries.length" class="py-16 text-center text-gray-500">
+        <!-- Empty state: filteredEntries uses the frozen snapshot during loading,
+             so this condition naturally reflects the previous group's content until
+             the request completes or the skeleton kicks in. -->
+        <div v-else-if="!filteredEntries.length" class="py-16 text-center text-gray-500">
           <template v-if="!store.entries.length">
             <p class="text-lg mb-2">This group is empty.</p>
             <p class="text-sm">Translate something and click <strong>Save</strong> to add entries here.</p>
@@ -397,6 +399,35 @@ const toast = useToastStore()
 const uiStore = useWordbookUiStore()
 const groupsStore = useWordbookGroupsStore()
 
+// ─── Skeleton delay + display freeze ────────────────────────────────────────
+// stableEntries holds the last committed entry list. During the pre-skeleton
+// loading window (< 200 ms) the display uses it so the current content stays
+// frozen on screen — nothing flickers regardless of whether the outgoing or
+// incoming group is empty.
+// After 200 ms the skeleton replaces whatever was frozen.
+const showSkeleton = ref(false)
+const stableEntries = ref<typeof store.entries>([])
+let skeletonTimer: ReturnType<typeof setTimeout> | null = null
+watch(
+  () => store.isLoading,
+  (loading) => {
+    if (loading) {
+      skeletonTimer = setTimeout(() => { showSkeleton.value = true }, 200)
+    } else {
+      if (skeletonTimer !== null) { clearTimeout(skeletonTimer); skeletonTimer = null }
+      showSkeleton.value = false
+      stableEntries.value = store.entries
+    }
+  },
+)
+
+// Entries to use for display: frozen during the pre-skeleton window so that
+// the outgoing group's content remains visible, then live once loading ends
+// or the skeleton has taken over.
+const displayEntries = computed(() =>
+  (store.isLoading && !showSkeleton.value) ? stableEntries.value : store.entries
+)
+
 // ─── Density ─────────────────────────────────────────────────────────────────
 
 const densityLevels: DensityLevel[] = ['compact', 'normal', 'spacious']
@@ -434,7 +465,7 @@ watch(
     await groupsStore.fetchGroups(newLangs.length > 0 ? [...newLangs] : undefined)
     uiStore.initActiveGroup(groupsStore.tabs)
     if (uiStore.activeGroupId !== null) {
-      await store.fetchEntries(uiStore.activeGroupId)
+      await store.fetchEntries(uiStore.activeGroupId, newLangs.length > 0 ? [...newLangs] : undefined)
       uiStore.prune(store.entries.map((e) => e.id))
     }
   },
@@ -504,7 +535,7 @@ onBeforeUnmount(() => {
 // is applied client-side on the current group's loaded entries.
 
 const filteredEntries = computed(() =>
-  store.entries.filter((entry) => {
+  displayEntries.value.filter((entry) => {
     if (uiStore.activeColors.length === 0) return true
     return isEntryColor(entry.color)
       ? uiStore.activeColors.includes(entry.color)
@@ -617,7 +648,7 @@ async function handlePendingHighlight() {
   if (id === null) return
   // Ensure entries are loaded for the current group.
   if (!store.isLoaded && uiStore.activeGroupId !== null) {
-    await store.fetchEntries(uiStore.activeGroupId)
+    await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
   }
   await nextTick()
   await scrollToEntry(id)
@@ -665,9 +696,10 @@ watch(
     if (cardsAreaEl.value) {
       groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
     }
+    uiStore.switchGroup(newGroupId)
     // Re-fetch entries for the newly-activated group.
     if (newGroupId !== null) {
-      await store.fetchEntries(newGroupId)
+      await store.fetchEntries(newGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
       uiStore.prune(store.entries.map((e) => e.id))
     } else {
       store.reset()
@@ -717,8 +749,12 @@ function cancelTabEdit() {
 }
 
 async function addNewTab() {
+  const existingNames = new Set(groupsStore.tabs.map((t) => t.name))
+  let n = groupsStore.tabs.length + 1
+  while (existingNames.has(`Group ${n}`)) n++
   try {
-    const tab = await groupsStore.addTab(`Group ${groupsStore.tabs.length + 1}`)
+    const tab = await groupsStore.addTab(`Group ${n}`)
+    uiStore.activeGroupId = tab.id
     startTabEdit(tab)
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to create group'))
@@ -738,13 +774,16 @@ async function confirmDeleteTab() {
   const id = pendingDeleteTabId.value
   pendingDeleteTabId.value = null
   const wasActive = uiStore.activeGroupId === id
+  const deletedIndex = groupsStore.tabs.findIndex((t) => t.id === id)
   try {
     await groupsStore.deleteTab(id)
+    uiStore.deleteGroupEntries(id)
     if (wasActive) {
-      const first = groupsStore.tabs[0]
-      uiStore.activeGroupId = first?.id ?? null
-      if (first) {
-        await store.fetchEntries(first.id)
+      const next = groupsStore.tabs[deletedIndex] ?? groupsStore.tabs[groupsStore.tabs.length - 1] ?? null
+      uiStore.activeGroupId = next?.id ?? null
+      uiStore.switchGroup(next?.id ?? null)
+      if (next) {
+        await store.fetchEntries(next.id, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
         uiStore.prune(store.entries.map((e) => e.id))
       } else {
         store.reset()
@@ -1243,8 +1282,9 @@ onMounted(async () => {
     groupsStore.fetchGroups(uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined),
   ])
   uiStore.initActiveGroup(groupsStore.tabs)
+  uiStore.switchGroup(uiStore.activeGroupId)
   if (uiStore.activeGroupId !== null) {
-    await store.fetchEntries(uiStore.activeGroupId)
+    await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
     uiStore.prune(store.entries.map((e) => e.id))
   }
   await handlePendingHighlight()
@@ -1271,8 +1311,9 @@ onActivated(async () => {
   // round-trip time. Old entries remain visible while the refresh is in flight
   // (stale-while-revalidate), so no loading skeleton is shown on activation.
   const langPairsTask = groupsStore.fetchLangPairs()
+  uiStore.switchGroup(uiStore.activeGroupId)
   if (uiStore.activeGroupId !== null) {
-    await store.fetchEntries(uiStore.activeGroupId)
+    await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
     uiStore.prune(store.entries.map((e) => e.id))
   }
   await langPairsTask

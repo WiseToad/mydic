@@ -10,8 +10,13 @@ import type {
 } from '@/types'
 
 export const wordbookApi = {
-  async list(groupId: number): Promise<WordbookEntry[]> {
-    const { data } = await apiClient.get<WordbookEntry[]>('/wordbook', { params: { group_id: groupId } })
+  async list(groupId: number, langPairs?: string[]): Promise<WordbookEntry[]> {
+    const params = new URLSearchParams()
+    params.set('group_id', String(groupId))
+    if (langPairs && langPairs.length > 0) {
+      for (const p of langPairs) params.append('lang_pair', p)
+    }
+    const { data } = await apiClient.get<WordbookEntry[]>('/wordbook', { params })
     return data
   },
 

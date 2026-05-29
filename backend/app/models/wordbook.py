@@ -44,4 +44,4 @@ class WordGroup(Base):
     position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
 
     user: Mapped["User"] = relationship(back_populates="wordbookGroups")
-    entries: Mapped[list["WordbookEntry"]] = relationship(back_populates="group")
+    entries: Mapped[list["WordbookEntry"]] = relationship(back_populates="group", cascade="all, delete-orphan")

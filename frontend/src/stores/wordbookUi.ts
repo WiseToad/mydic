@@ -3,7 +3,6 @@ import { computed, reactive, ref } from 'vue'
 
 export interface EntryUiState {
   hintVisible?: boolean                              // translation hint revealed
-  contextOpen?: boolean                              // saved context examples expanded
   detailsTab?: 'definition' | 'context' | 'lexical'  // last active tab in the details panel
   defProvider?: string | null                        // last used definition provider code
   ctxProvider?: string | null                        // last used context provider code
@@ -24,14 +23,10 @@ interface GlobalPrefs {
 
 type UiMap = Record<number, EntryUiState>
 
-// Legacy keys superseded by mydicWordbookView
-const LEGACY_UI_KEY = 'lb_wordbook_ui'
-const LEGACY_PROV_KEY = 'lb_wb_lexical_providers'
-
 const DEFAULT_PREFS: GlobalPrefs = { density: 'normal', activeLangs: [], activeColors: [], activeGroupId: null, showTranslations: undefined, sidePanelVisible: false, swapDisplay: false }
 
 interface StorageNode {
-  entries?: UiMap
+  entriesByGroup?: Record<string, UiMap>  // keyed by String(groupId)
   density?: DensityLevel
   activeLangs?: string[]
   activeColors?: string[]
@@ -59,46 +54,36 @@ function _readNode(userId?: number): StorageNode {
   }
 }
 
-
-function load(userId?: number): UiMap {
+function loadGroupEntries(groupId: number, userId?: number): UiMap {
   try {
     const node = _readNode(userId)
-    if (node.entries !== undefined) return node.entries
-
-    if (userId !== undefined) return {}
-
-    // One-time migration from legacy separate keys
-    const oldUiRaw = localStorage.getItem(LEGACY_UI_KEY)
-    const oldProvRaw = localStorage.getItem(LEGACY_PROV_KEY)
-    if (!oldUiRaw && !oldProvRaw) return {}
-
-    const oldUi: UiMap = oldUiRaw ? JSON.parse(oldUiRaw) : {}
-    const oldProv: Record<number, { def?: string | null; ctx?: string | null }> =
-      oldProvRaw ? JSON.parse(oldProvRaw) : {}
-    const merged: UiMap = { ...oldUi }
-    for (const id of Object.keys(oldProv)) {
-      const n = Number(id)
-      const p = oldProv[n]
-      merged[n] = { ...merged[n], defProvider: p.def, ctxProvider: p.ctx }
-    }
-    save(merged)
-    localStorage.removeItem(LEGACY_UI_KEY)
-    localStorage.removeItem(LEGACY_PROV_KEY)
-    return merged
+    return node.entriesByGroup?.[String(groupId)] ?? {}
   } catch {
     return {}
   }
 }
 
-function save(map: UiMap) {
+function saveGroupEntries(groupId: number, map: UiMap): void {
   try {
     const key = _storageKey()
     const node = _readNode()
-    node.entries = map
+    if (!node.entriesByGroup) node.entriesByGroup = {}
+    node.entriesByGroup[String(groupId)] = map
     localStorage.setItem(key, JSON.stringify(node))
   } catch {
     localStorage.removeItem(_storageKey())
   }
+}
+
+function deleteStoredGroupEntries(groupId: number): void {
+  try {
+    const key = _storageKey()
+    const node = _readNode()
+    if (node.entriesByGroup) {
+      delete node.entriesByGroup[String(groupId)]
+      localStorage.setItem(key, JSON.stringify(node))
+    }
+  } catch {}
 }
 
 function loadPrefs(userId?: number): GlobalPrefs {
@@ -122,12 +107,13 @@ function savePrefs(p: GlobalPrefs) {
   try {
     const key = _storageKey()
     const node = _readNode()
-    localStorage.setItem(key, JSON.stringify({ entries: node.entries, ...p }))
+    localStorage.setItem(key, JSON.stringify({ entriesByGroup: node.entriesByGroup, ...p }))
   } catch {}
 }
 
 export const useWordbookUiStore = defineStore('wordbookUi', () => {
-  const map = ref<UiMap>(load())
+  const _currentGroupId = ref<number | null>(null)
+  const map = ref<UiMap>({})
   const prefs = ref<GlobalPrefs>(loadPrefs())
 
   // --- Global prefs ---
@@ -225,13 +211,10 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     return map.value[id] ?? {}
   }
 
-  function getReactive(id: number, key: 'hintVisible' | 'contextOpen'): boolean {
-    if (key === 'hintVisible') {
-      const perEntry = map.value[id]?.hintVisible
-      if (perEntry !== undefined) return perEntry
-      return prefs.value.showTranslations ?? false
-    }
-    return map.value[id]?.[key] ?? false
+  function getReactive(id: number, _key: 'hintVisible'): boolean {
+    const perEntry = map.value[id]?.hintVisible
+    if (perEntry !== undefined) return perEntry
+    return prefs.value.showTranslations ?? false
   }
 
   function getProvider(id: number, key: 'def' | 'ctx' | 'lex'): string | null | undefined {
@@ -243,7 +226,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
 
   function setState(id: number, patch: Partial<EntryUiState>) {
     map.value[id] = { ...map.value[id], ...patch }
-    save(map.value)
+    if (_currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
   }
 
   function setProvider(id: number, key: 'def' | 'ctx' | 'lex', code: string | null): void {
@@ -292,7 +275,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
         delete map.value[n].hintVisible
       }
     }
-    save(map.value)
+    if (_currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
     if (show) {
       prefs.value.showTranslations = true
     } else {
@@ -393,14 +376,36 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
         changed = true
       }
     }
-    if (changed) save(map.value)
+    if (changed && _currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
     for (const [gid, eid] of focusedByGroup) {
       if (!set.has(eid)) focusedByGroup.delete(gid)
     }
   }
 
-  function reinitialize(userId: number) {
-    map.value = load(userId)
+  /**
+   * Load the item-state map for `groupId` and make it the active map.
+   * Pass null to clear (when no group is selected).
+   */
+  function switchGroup(groupId: number | null): void {
+    _currentGroupId.value = groupId
+    map.value = groupId !== null ? loadGroupEntries(groupId) : {}
+  }
+
+  /**
+   * Remove the persisted item-state bunch for a deleted group and clear
+   * in-memory state if that group is currently active.
+   */
+  function deleteGroupEntries(groupId: number): void {
+    deleteStoredGroupEntries(groupId)
+    if (_currentGroupId.value === groupId) {
+      _currentGroupId.value = null
+      map.value = {}
+    }
+  }
+
+  function reinitialize(userId: number): void {
+    _currentGroupId.value = null
+    map.value = {}
     prefs.value = loadPrefs(userId)
     activeCardId.value = null
     activeCardMode.value = 'details'
@@ -422,6 +427,6 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
     setFocusedEntry, getFocusedEntry, clearFocusedEntryById,
     initActiveGroup,
-    reinitialize,
+    switchGroup, deleteGroupEntries, reinitialize,
   }
 })

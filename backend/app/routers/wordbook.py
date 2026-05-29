@@ -73,19 +73,34 @@ async def lookup_entry(
 @router.get("", response_model=list[WordbookEntryResponse])
 async def list_entries(
     group_id: int,
+    lang_pair: list[str] = Query(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    rows = (
-        await db.execute(
-            _entry_query()
-            .where(
-                WordbookEntry.user_id == current_user.id,
-                WordbookEntry.group_id == group_id,
-            )
-            .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
+    q = (
+        _entry_query()
+        .where(
+            WordbookEntry.user_id == current_user.id,
+            WordbookEntry.group_id == group_id,
         )
-    ).scalars().all()
+        .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
+    )
+    if lang_pair:
+        pairs = []
+        for p in lang_pair:
+            parts = p.split(":", 1)
+            if len(parts) == 2:
+                pairs.append((parts[0], parts[1]))
+        if pairs:
+            conditions = [
+                and_(
+                    WordbookEntry.source_lang == src,
+                    WordbookEntry.target_lang == tgt,
+                )
+                for src, tgt in pairs
+            ]
+            q = q.where(or_(*conditions))
+    rows = (await db.execute(q)).scalars().all()
     return rows
 
 
