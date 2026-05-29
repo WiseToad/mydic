@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from sqlalchemy import and_, distinct, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
@@ -40,7 +41,8 @@ async def list_lang_pairs(
     return [f"{src}:{tgt}" for src, tgt in rows]
 
 
-@router.get("/lookup", response_model=WordbookLookupResult)
+@router.get("/lookup", response_model=WordbookLookupResult,
+            responses={204: {"description": "Word not in wordbook"}})
 async def lookup_entry(
     source_lang: str,
     target_lang: str,
@@ -48,7 +50,7 @@ async def lookup_entry(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return entry_id/group_id/color for a matching entry, or 404."""
+    """Return entry_id/group_id/color for a matching entry, or 204 if not found."""
     from app.utils import normalize_text
     normalized = normalize_text(source_text)
     entry = (
@@ -62,7 +64,7 @@ async def lookup_entry(
         )
     ).scalar_one_or_none()
     if entry is None:
-        raise HTTPException(status_code=404)
+        return Response(status_code=204)
     return WordbookLookupResult(
         entry_id=entry.id,
         group_id=entry.group_id,

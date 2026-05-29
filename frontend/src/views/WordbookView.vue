@@ -386,6 +386,7 @@ import WordbookEntry from '@/components/WordbookEntry.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
+import { SPINNER_DELAY_MS } from '@/utils/ui'
 import {
   ENTRY_COLORS,
   ENTRY_COLOR_LABEL,
@@ -412,7 +413,7 @@ watch(
   () => store.isLoading,
   (loading) => {
     if (loading) {
-      skeletonTimer = setTimeout(() => { showSkeleton.value = true }, 200)
+      skeletonTimer = setTimeout(() => { showSkeleton.value = true }, SPINNER_DELAY_MS)
     } else {
       if (skeletonTimer !== null) { clearTimeout(skeletonTimer); skeletonTimer = null }
       showSkeleton.value = false

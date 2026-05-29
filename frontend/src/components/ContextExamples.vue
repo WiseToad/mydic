@@ -9,15 +9,13 @@
            grouped and avoids per-branch ml-auto bookkeeping when either is
            conditionally absent. -->
       <div class="ml-auto flex items-center gap-2">
-        <!-- Translator (non-compact) only: show/hide-translations icon button.
+        <!-- Show/hide-translations icon button (both compact and non-compact).
              Visually mirrors the wordbook view's global show/hide-translations
-             control so the affordance is consistent across the two views.
-             Compact mode (wordbook entry details panel) keeps the original
-             text-label toggle rendered below the header instead. Only shown
-             once results are in and at least one example carries a target
-             (monolingual providers → nothing to toggle). -->
+             control so the affordance is consistent across all views.
+             Only shown once results are in and at least one example carries a
+             target (monolingual providers → nothing to toggle). -->
         <button
-          v-if="!compact && showToggle && state === 'done' && examples.some(e => !!e.target)"
+          v-if="showToggle && state === 'done' && examples.some(e => !!e.target)"
           class="p-1 transition-colors rounded-lg border border-surface-700"
           :class="anyVisible() ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
           :title="anyVisible() ? 'Hide translations' : 'Show translations'"
@@ -119,15 +117,6 @@
 
     <!-- Results -->
     <template v-else-if="state === 'done' && examples.length">
-      <!-- Compact (wordbook entry details): text-label toggle. -->
-      <div v-if="compact && showToggle && examples.some(e => !!e.target)" class="flex justify-end mb-2">
-        <button
-          class="text-xs text-gray-500 hover:text-primary-400 transition-colors"
-          @click="toggleAllVisible"
-        >
-          {{ anyVisible() ? 'Hide translations' : 'Show translations' }}
-        </button>
-      </div>
 
       <div v-for="(ex, i) in examples" :key="i" class="mb-3">
         <!-- Source sentence + audio -->

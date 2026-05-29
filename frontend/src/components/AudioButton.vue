@@ -6,7 +6,7 @@
       :class="[
         'inline-flex items-center justify-center rounded-full disabled:opacity-30 disabled:cursor-not-allowed touch-none',
         isPlaying ? '' : 'transition-colors',
-        size === 'sm' ? 'w-6 h-6' : 'w-8 h-8',
+        size === 'sm' ? 'w-7 h-7' : 'w-8 h-8',
         isGenerating
           ? 'text-gray-400 hover:text-gray-300'
           : isPlaying
@@ -107,6 +107,7 @@ import {
 import { useSettingsStore } from '@/stores/settings'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
+import { SPINNER_DELAY_MS } from '@/utils/ui'
 import type { ProviderItem, TtsVoiceItem } from '@/types'
 
 const props = withDefaults(defineProps<{
@@ -254,7 +255,7 @@ async function _play(
   _spinnerTimer = setTimeout(() => {
     _spinnerTimer = null
     if (_inFlight) isGenerating.value = true
-  }, 200)
+  }, SPINNER_DELAY_MS)
   let result: PlaybackResult
   try {
     result = await playTts(

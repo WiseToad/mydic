@@ -153,7 +153,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
               <div class="relative" ref="actionsContainerRef">
                 <button
                   title="More actions"
-                  class="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-gray-300 hover:bg-surface-700 transition-colors"
+                  class="inline-flex items-center justify-center w-7 h-7 rounded-full text-gray-500 hover:text-primary-400 hover:bg-primary-500/10 transition-colors"
                   @click.stop="showActionsMenu = !showActionsMenu"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">

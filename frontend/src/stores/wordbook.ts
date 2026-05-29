@@ -17,6 +17,7 @@ export const useWordbookStore = defineStore('wordbook', () => {
       entries.value = await wordbookApi.list(groupId, langPairs && langPairs.length > 0 ? langPairs : undefined)
       isLoaded.value = true
     } catch (e: unknown) {
+      entries.value = []
       useToastStore().error(extractErrorMessage(e, 'Failed to load wordbook'))
     } finally {
       isLoading.value = false

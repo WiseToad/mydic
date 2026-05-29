@@ -50,12 +50,12 @@ export const wordbookApi = {
     return data
   },
 
-  /** Returns the entry's id/group_id/color, or throws (404) if not found. */
-  async lookup(sourceLang: string, targetLang: string, sourceText: string): Promise<WordbookLookupResult> {
-    const { data } = await apiClient.get<WordbookLookupResult>('/wordbook/lookup', {
+  /** Returns the entry's id/group_id/color, or null if not in wordbook (204). */
+  async lookup(sourceLang: string, targetLang: string, sourceText: string): Promise<WordbookLookupResult | null> {
+    const response = await apiClient.get<WordbookLookupResult | null>('/wordbook/lookup', {
       params: { source_lang: sourceLang, target_lang: targetLang, source_text: sourceText },
     })
-    return data
+    return response.status === 204 ? null : response.data
   },
 
   // ── Word groups ────────────────────────────────────────────────────────────

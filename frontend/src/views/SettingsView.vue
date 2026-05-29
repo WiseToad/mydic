@@ -102,6 +102,7 @@ import { useRouter } from 'vue-router'
 import { useSettingsStore, type Capability } from '@/stores/settings'
 import { useLanguageSettingsStore, type LangPref } from '@/stores/languageSettings'
 import { useToastStore } from '@/stores/toast'
+import { SPINNER_DELAY_MS } from '@/utils/ui'
 import { playTts, stopTts } from '@/api/tts'
 import { ttsSampleFor, ensureTtsSamplesLoaded } from '@/utils/ttsSamples'
 import { extractErrorMessage } from '@/utils/error'
@@ -199,14 +200,8 @@ async function playVoiceSample(
   // Delay spinner to avoid flicker for fast / cached responses.
   _sampleSpinnerTimer = setTimeout(() => {
     _sampleSpinnerTimer = null
-    if (
-      _sampleInFlight?.providerCode === provider.code &&
-      _sampleInFlight?.voiceId === voice.id &&
-      _sampleInFlight?.lang === lang
-    ) {
-      activeSample.value = { providerCode: provider.code, voiceId: voice.id, lang, phase: 'generating' }
-    }
-  }, 150)
+    if (_sampleInFlight) activeSample.value = { ..._sampleInFlight, phase: 'generating' }
+  }, SPINNER_DELAY_MS)
   try {
     await playTts(
       ttsSampleFor(lang), lang,

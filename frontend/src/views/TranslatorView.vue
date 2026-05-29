@@ -102,9 +102,20 @@
               {{ store.result.detected_lang }}
             </span>
             <div class="flex-1" />
+            <!-- Lookup in progress: spinner (shown only after SPINNER_DELAY_MS to avoid flicker) -->
+            <button
+              v-if="store.result && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'spinning'"
+              class="inline-flex items-center justify-center w-8 h-8 text-gray-400 rounded-full cursor-default"
+              disabled
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 animate-spin" viewBox="0 0 24 24" fill="none">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
+              </svg>
+            </button>
             <!-- Already saved: click to jump to the wordbook card -->
             <button
-              v-if="store.result && isAlreadyInWordbook && hasEnabledAvailableTranslationProvider"
+              v-else-if="store.result && isAlreadyInWordbook && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'idle'"
               title="Already in Wordbook — show it"
               class="inline-flex items-center justify-center w-8 h-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-full transition-colors"
               @click="openInWordbook"
@@ -113,7 +124,7 @@
             </button>
             <!-- Not yet saved: add button (long-press to pick a group) -->
             <button
-              v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled"
+              v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled && wordbookLookupState === 'idle'"
               ref="addToWordbookBtnRef"
               title="Add to Wordbook (long-press to pick group)"
               class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors"
@@ -471,6 +482,7 @@ import { contextApi } from '@/api/context'
 import { clearSlow, stopTts } from '@/api/tts'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
+import { SPINNER_DELAY_MS } from '@/utils/ui'
 import type { ProviderItem } from '@/types'
 
 const store = useTranslatorStore()
@@ -560,20 +572,47 @@ watch(isTargetLangDisabled, (disabled, wasDisabled) => {
 
 /** Cached result of the last wordbook lookup; null = not in wordbook. */
 const wordbookLookup = ref<WordbookLookupResult | null>(null)
+/**
+ * State machine for the wordbook button area:
+ *   'idle'     — no lookup in-flight; show ✓ or + depending on wordbookLookup
+ *   'pending'  — lookup started, < SPINNER_DELAY_MS elapsed; show nothing (avoids flicker)
+ *   'spinning' — lookup in-flight, ≥ SPINNER_DELAY_MS elapsed; show spinner
+ *   'error'    — lookup failed; show nothing until the next result arrives
+ */
+const wordbookLookupState = ref<'idle' | 'pending' | 'spinning' | 'error'>('idle')
+let _wordbookLookupSpinnerTimer: ReturnType<typeof setTimeout> | null = null
+
+function _cancelWordbookLookupSpinnerTimer() {
+  if (_wordbookLookupSpinnerTimer !== null) { clearTimeout(_wordbookLookupSpinnerTimer); _wordbookLookupSpinnerTimer = null }
+}
 
 // Re-check the wordbook whenever the translation result (or detected lang) changes.
 watch(
   () => store.result,
   async (result) => {
-    if (!result) { wordbookLookup.value = null; return }
+    wordbookLookup.value = null
+    _cancelWordbookLookupSpinnerTimer()
+    if (!result) {
+      wordbookLookupState.value = 'idle'
+      return
+    }
+    wordbookLookupState.value = 'pending'
+    _wordbookLookupSpinnerTimer = setTimeout(() => {
+      _wordbookLookupSpinnerTimer = null
+      if (wordbookLookupState.value === 'pending') wordbookLookupState.value = 'spinning'
+    }, SPINNER_DELAY_MS)
     try {
       wordbookLookup.value = await wordbookApi.lookup(
         resolvedSourceLang.value,
         store.targetLang,
         store.inputText.trim(),
       )
-    } catch {
-      wordbookLookup.value = null
+      wordbookLookupState.value = 'idle'
+    } catch (e: unknown) {
+      toast.error(extractErrorMessage(e, 'Failed to check wordbook'))
+      wordbookLookupState.value = 'error'
+    } finally {
+      _cancelWordbookLookupSpinnerTimer()
     }
   },
 )
@@ -1349,6 +1388,7 @@ onDeactivated(() => {
     clearTimeout(_addWbLongPressTimer)
     _addWbLongPressTimer = null
   }
+  _cancelWordbookLookupSpinnerTimer()
 })
 
 onUnmounted(() => {
@@ -1357,5 +1397,6 @@ onUnmounted(() => {
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
   window.removeEventListener('resize', _onWindowResize)
+  _cancelWordbookLookupSpinnerTimer()
 })
 </script>
