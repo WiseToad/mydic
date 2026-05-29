@@ -285,7 +285,8 @@
              the request completes or the skeleton kicks in. -->
         <div v-else-if="!filteredEntries.length && !store.isLoading" class="py-16 text-center text-gray-500">
           <template v-if="store.fetchError">
-            <p class="text-lg mb-2">Fetch error. Please try again later.</p>
+            <p class="text-lg mb-2">Fetch error.</p>
+            <p class="text-sm"> Please, try again later.</p>
           </template>
           <template v-else-if="!store.entries.length">
             <p class="text-lg mb-2">This group is empty.</p>
