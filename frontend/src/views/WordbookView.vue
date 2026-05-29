@@ -283,10 +283,13 @@
         <!-- Empty state: filteredEntries uses the frozen snapshot during loading,
              so this condition naturally reflects the previous group's content until
              the request completes or the skeleton kicks in. -->
-        <div v-else-if="!filteredEntries.length" class="py-16 text-center text-gray-500">
-          <template v-if="!store.entries.length">
+        <div v-else-if="!filteredEntries.length && !store.isLoading" class="py-16 text-center text-gray-500">
+          <template v-if="store.fetchError">
+            <p class="text-lg mb-2">Fetch error. Please try again later.</p>
+          </template>
+          <template v-else-if="!store.entries.length">
             <p class="text-lg mb-2">This group is empty.</p>
-            <p class="text-sm">Translate something and click <strong>Save</strong> to add entries here.</p>
+            <p class="text-sm">Translate something and click <strong>Add to Wordbook</strong> to add entries here.</p>
           </template>
           <template v-else>
             <p class="text-lg mb-2">No entries match the current filter.</p>

@@ -10,14 +10,17 @@ export const useWordbookStore = defineStore('wordbook', () => {
   const entries = ref<WordbookEntry[]>([])
   const isLoading = ref(false)
   const isLoaded = ref(false)
+  const fetchError = ref(false)
 
   async function fetchEntries(groupId: number, langPairs?: string[]) {
     isLoading.value = true
+    fetchError.value = false
     try {
       entries.value = await wordbookApi.list(groupId, langPairs && langPairs.length > 0 ? langPairs : undefined)
       isLoaded.value = true
     } catch (e: unknown) {
       entries.value = []
+      fetchError.value = true
       useToastStore().error(extractErrorMessage(e, 'Failed to load wordbook'))
     } finally {
       isLoading.value = false
@@ -81,7 +84,8 @@ export const useWordbookStore = defineStore('wordbook', () => {
     entries.value = []
     isLoading.value = false
     isLoaded.value = false
+    fetchError.value = false
   }
 
-  return { entries, isLoading, isLoaded, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
+  return { entries, isLoading, isLoaded, fetchError, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
 })
