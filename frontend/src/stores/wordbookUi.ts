@@ -377,16 +377,28 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
       }
     }
     if (changed && _currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
-    for (const [gid, eid] of focusedByGroup) {
-      if (!set.has(eid)) focusedByGroup.delete(gid)
+    // Only prune the focused entry for the currently-loaded group.
+    // Entries in other groups are not in memory — their focused IDs remain valid.
+    const currentGid = _currentGroupId.value
+    const focusedInCurrentGroup = focusedByGroup.get(currentGid)
+    if (focusedInCurrentGroup !== undefined && !set.has(focusedInCurrentGroup)) {
+      focusedByGroup.delete(currentGid)
     }
   }
 
   /**
    * Load the item-state map for `groupId` and make it the active map.
    * Pass null to clear (when no group is selected).
+   *
+   * Flushes the current in-memory state to localStorage before swapping so
+   * that any state accumulated since the last setState call (e.g. after a
+   * loadGroupEntries reload with no subsequent user action) is always
+   * persisted before the map is replaced.
    */
   function switchGroup(groupId: number | null): void {
+    if (_currentGroupId.value !== null) {
+      saveGroupEntries(_currentGroupId.value, map.value)
+    }
     _currentGroupId.value = groupId
     map.value = groupId !== null ? loadGroupEntries(groupId) : {}
   }

@@ -678,6 +678,33 @@ const cardsAreaEl = ref<HTMLElement | null>(null)
 const groupScrollPositions = new Map<number | null, number>()
 
 /**
+ * In-memory map of group id → entry id whose details panel was open.
+ * Saved when leaving a group; restored when returning to it if the entry
+ * still exists after the new group's entries have been loaded and pruned.
+ */
+const openDetailsByGroup = new Map<number | null, number>()
+
+/**
+ * Saved details card id across route-level deactivation (navigating to
+ * Translator / Settings and back). Only the details mode is preserved; an
+ * in-progress edit is intentionally discarded on navigation.
+ */
+const openDetailsBeforeLeave = ref<number | null>(null)
+
+function saveOpenDetailsForGroup(groupId: number | null): void {
+  if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
+    openDetailsByGroup.set(groupId, uiStore.activeCardId)
+  }
+}
+
+function restoreDetailsIfEntryExists(entryId: number | undefined | null): void {
+  if (entryId === undefined || entryId === null) return
+  if (!store.entries.some((e) => e.id === entryId)) return
+  uiStore.activeCardId = entryId
+  uiStore.activeCardMode = 'details'
+}
+
+/**
  * Watcher fires at `flush: 'pre'` — before Vue applies DOM updates — so
  * `cardsAreaEl.scrollTop` still reflects the *outgoing* group. We save it,
  * then restore the incoming group's position after the DOM settles.
@@ -701,11 +728,13 @@ watch(
     if (cardsAreaEl.value) {
       groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
     }
+    saveOpenDetailsForGroup(oldGroupId ?? null)
     uiStore.switchGroup(newGroupId)
     // Re-fetch entries for the newly-activated group.
     if (newGroupId !== null) {
       await store.fetchEntries(newGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
       uiStore.prune(store.entries.map((e) => e.id))
+      restoreDetailsIfEntryExists(openDetailsByGroup.get(newGroupId ?? null))
     } else {
       store.reset()
     }
@@ -1312,6 +1341,14 @@ onBeforeUnmount(() => {
 // (e.g. from TranslatorView via the “already in wordbook” checkmark).
 onActivated(async () => {
   viewIsActive.value = true
+  // Restore scroll immediately so the view appears at the saved position
+  // from the first visible frame, rather than jumping from 0 after the
+  // async fetch below completes. KeepAlive guarantees the DOM (and therefore
+  // cardsAreaEl) is already mounted when onActivated fires.
+  if (cardsAreaEl.value) {
+    const saved = groupScrollPositions.get(uiStore.activeGroupId ?? null)
+    if (saved !== undefined) cardsAreaEl.value.scrollTop = saved
+  }
   // Run both fetches in parallel — they are independent and this halves the
   // round-trip time. Old entries remain visible while the refresh is in flight
   // (stale-while-revalidate), so no loading skeleton is shown on activation.
@@ -1321,18 +1358,18 @@ onActivated(async () => {
     await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
     uiStore.prune(store.entries.map((e) => e.id))
   }
+  const savedDetailsId = openDetailsBeforeLeave.value
+  openDetailsBeforeLeave.value = null
+  restoreDetailsIfEntryExists(savedDetailsId)
   await langPairsTask
-  nextTick(() => {
-    if (cardsAreaEl.value) {
-      const saved = groupScrollPositions.get(uiStore.activeGroupId ?? null)
-      if (saved !== undefined) cardsAreaEl.value.scrollTop = saved
-    }
-  })
   handlePendingHighlight()
 })
 
 onDeactivated(() => {
   viewIsActive.value = false
+  if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
+    openDetailsBeforeLeave.value = uiStore.activeCardId
+  }
   // Close transient overlays so they don't linger when navigating away and back.
   showColorFilter.value = false
   uiStore.closeActive()

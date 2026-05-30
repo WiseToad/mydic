@@ -439,7 +439,11 @@
             ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
             : 'text-gray-200 hover:bg-surface-700'"
           :data-selected="(wordbookUiStore.activeGroupId === group.id) || undefined"
-          @click="addToWordbookInGroup(group.id)"
+          @pointerdown.stop="onGroupMenuPointerDown($event, group.id)"
+          @pointerup.stop="onGroupMenuPointerUp(group.id)"
+          @pointerleave="onGroupMenuCancelPress"
+          @pointercancel="onGroupMenuCancelPress"
+          @click.stop
         >
           <svg
             v-if="wordbookUiStore.activeGroupId === group.id"
@@ -587,6 +591,9 @@ function _cancelWordbookLookupSpinnerTimer() {
 }
 
 // Re-check the wordbook whenever the translation result (or detected lang) changes.
+// `immediate: true` handles the case where the store already has a result on
+// first mount (restored from persisted history) — without it the lookup never
+// fires and the + button shows for a word that is already in the wordbook.
 watch(
   () => store.result,
   async (result) => {
@@ -615,6 +622,7 @@ watch(
       _cancelWordbookLookupSpinnerTimer()
     }
   },
+  { immediate: true },
 )
 
 const isAlreadyInWordbook = computed(() => wordbookLookup.value !== null)
@@ -1315,7 +1323,13 @@ function _repositionGroupMenu(buttonRect: DOMRect) {
   }
 }
 
-function closeGroupMenu() { groupMenuVisible.value = false }
+function closeGroupMenu() {
+  groupMenuVisible.value = false
+  if (_groupMenuLongPressTimer !== null) {
+    clearTimeout(_groupMenuLongPressTimer)
+    _groupMenuLongPressTimer = null
+  }
+}
 watch(groupMenuVisible, (open) => {
   if (open) document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   else document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
@@ -1330,6 +1344,36 @@ function _onGroupMenuOutsidePointerDown(e: PointerEvent) {
 async function addToWordbookInGroup(groupId: number) {
   closeGroupMenu()
   await addToWordbook(groupId)
+}
+
+// ─── Group menu long-press: add to group AND activate it in WordBook ────────
+let _groupMenuLongPressTimer: ReturnType<typeof setTimeout> | null = null
+
+function onGroupMenuPointerDown(e: PointerEvent, groupId: number) {
+  if (e.button !== 0) return
+  if (_groupMenuLongPressTimer) clearTimeout(_groupMenuLongPressTimer)
+  _groupMenuLongPressTimer = setTimeout(async () => {
+    _groupMenuLongPressTimer = null
+    wordbookUiStore.activeGroupId = groupId
+    closeGroupMenu()
+    await addToWordbook(groupId)
+  }, LONG_PRESS_MS)
+}
+
+/** Short press → add to group without activating it. */
+function onGroupMenuPointerUp(groupId: number) {
+  if (_groupMenuLongPressTimer !== null) {
+    clearTimeout(_groupMenuLongPressTimer)
+    _groupMenuLongPressTimer = null
+    addToWordbookInGroup(groupId)
+  }
+}
+
+function onGroupMenuCancelPress() {
+  if (_groupMenuLongPressTimer !== null) {
+    clearTimeout(_groupMenuLongPressTimer)
+    _groupMenuLongPressTimer = null
+  }
 }
 
 // ─── Narrow-screen detection ─────────────────────────────────────
@@ -1395,6 +1439,7 @@ onUnmounted(() => {
   _cleanAddWbClickGuard()
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
   if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
+  if (_groupMenuLongPressTimer) clearTimeout(_groupMenuLongPressTimer)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
   window.removeEventListener('resize', _onWindowResize)
   _cancelWordbookLookupSpinnerTimer()
