@@ -366,8 +366,10 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
         :word="entry.source_text"
         :lang="entry.source_lang"
         :compact="true"
-      :initial-provider-code="savedDefProvider"
+        :initial-provider-code="savedDefProvider"
+        :initial-data="uiStore.getDetailsContent(entry.id)?.defData"
         @provider-changed="onDefProviderChanged"
+        @fetched="onDefFetched"
       />
       <ContextExamples
         v-else-if="activeTab === 'context'"
@@ -376,7 +378,9 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
         :target-lang="entry.target_lang"
         :compact="true"
         :initial-provider-code="savedCtxProvider"
+        :initial-examples="uiStore.getDetailsContent(entry.id)?.ctxData"
         @provider-changed="onCtxProviderChanged"
+        @fetched="onCtxFetched"
       />
       <LexicalPanel
         v-else
@@ -385,7 +389,9 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
         :target-lang="entry.target_lang"
         :compact="true"
         :initial-provider-code="savedLexProvider"
+        :initial-data="uiStore.getDetailsContent(entry.id)?.lexData"
         @provider-changed="onLexProviderChanged"
+        @fetched="onLexFetched"
       />
     </div>
   </div>
@@ -411,7 +417,7 @@ import {
   isEntryColor,
   type EntryColor,
 } from '@/utils/entryColors'
-import type { ProviderItem, WordbookEntry } from '@/types'
+import type { ProviderItem, WordbookEntry, Definition, ContextExample } from '@/types'
 
 const props = defineProps<{ entry: WordbookEntry; isDragTarget?: boolean }>()
 const emit = defineEmits<{
@@ -425,28 +431,44 @@ const uiStore = useWordbookUiStore()
 const settingsStore = useSettingsStore()
 
 // ── Per-entry lexical provider persistence ────────────────────────────
-const savedDefProvider = computed(() => uiStore.getProvider(props.entry.id, 'def'))
-const savedCtxProvider = computed(() => uiStore.getProvider(props.entry.id, 'ctx'))
-const savedLexProvider = computed(() => uiStore.getProvider(props.entry.id, 'lex'))
+// Group-scoped accessors ensure reads/writes always target the entry's own
+// group, even during group-switch transitions when this component may still
+// be mounted while a different group is loaded into map.value.
+const savedDefProvider = computed(() => uiStore.getProviderForGroup(props.entry.id, props.entry.group.id, 'def'))
+const savedCtxProvider = computed(() => uiStore.getProviderForGroup(props.entry.id, props.entry.group.id, 'ctx'))
+const savedLexProvider = computed(() => uiStore.getProviderForGroup(props.entry.id, props.entry.group.id, 'lex'))
 
 function onDefProviderChanged(code: string | null) {
-  uiStore.setProvider(props.entry.id, 'def', code)
+  uiStore.setProviderForGroup(props.entry.id, props.entry.group.id, 'def', code)
 }
 function onCtxProviderChanged(code: string | null) {
-  uiStore.setProvider(props.entry.id, 'ctx', code)
+  uiStore.setProviderForGroup(props.entry.id, props.entry.group.id, 'ctx', code)
 }
 function onLexProviderChanged(code: string | null) {
-  uiStore.setProvider(props.entry.id, 'lex', code)
+  uiStore.setProviderForGroup(props.entry.id, props.entry.group.id, 'lex', code)
+}
+
+// Cache fetched panel content so it can be restored without a re-fetch
+// when the details panel is reopened (e.g. after a group switch or navigation).
+// Not called on error — undefined cache means «fetch fresh on next open».
+function onDefFetched(data: Definition | null) {
+  uiStore.patchDetailsContent(props.entry.id, { defData: data })
+}
+function onCtxFetched(examples: ContextExample[]) {
+  uiStore.patchDetailsContent(props.entry.id, { ctxData: examples })
+}
+function onLexFetched(matches: string[]) {
+  uiStore.patchDetailsContent(props.entry.id, { lexData: matches })
 }
 
 const activeTab = computed({
-  get: () => (uiStore.getState(props.entry.id).detailsTab ?? 'definition') as 'definition' | 'context' | 'lexical',
-  set: (v: 'definition' | 'context' | 'lexical') => uiStore.setState(props.entry.id, { detailsTab: v }),
+  get: () => (uiStore.getStateForGroup(props.entry.id, props.entry.group.id).detailsTab ?? 'definition') as 'definition' | 'context' | 'lexical',
+  set: (v: 'definition' | 'context' | 'lexical') => uiStore.setStateForGroup(props.entry.id, props.entry.group.id, { detailsTab: v }),
 })
 
 const hintVisible = computed({
-  get: () => uiStore.getReactive(props.entry.id, 'hintVisible'),
-  set: (v) => uiStore.setState(props.entry.id, { hintVisible: v }),
+  get: () => uiStore.getReactiveForGroup(props.entry.id, props.entry.group.id, 'hintVisible'),
+  set: (v) => uiStore.setStateForGroup(props.entry.id, props.entry.group.id, { hintVisible: v }),
 })
 
 const swapDisplay = computed(() => uiStore.swapDisplay)

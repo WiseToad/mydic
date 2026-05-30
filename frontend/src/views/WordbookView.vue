@@ -677,28 +677,8 @@ const cardsAreaEl = ref<HTMLElement | null>(null)
  */
 const groupScrollPositions = new Map<number | null, number>()
 
-/**
- * In-memory map of group id → entry id whose details panel was open.
- * Saved when leaving a group; restored when returning to it if the entry
- * still exists after the new group's entries have been loaded and pruned.
- */
-const openDetailsByGroup = new Map<number | null, number>()
-
-/**
- * Saved details card id across route-level deactivation (navigating to
- * Translator / Settings and back). Only the details mode is preserved; an
- * in-progress edit is intentionally discarded on navigation.
- */
-const openDetailsBeforeLeave = ref<number | null>(null)
-
-function saveOpenDetailsForGroup(groupId: number | null): void {
-  if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
-    openDetailsByGroup.set(groupId, uiStore.activeCardId)
-  }
-}
-
-function restoreDetailsIfEntryExists(entryId: number | undefined | null): void {
-  if (entryId === undefined || entryId === null) return
+function restoreDetailsIfEntryExists(entryId: number | undefined): void {
+  if (entryId === undefined) return
   if (!store.entries.some((e) => e.id === entryId)) return
   uiStore.activeCardId = entryId
   uiStore.activeCardMode = 'details'
@@ -728,19 +708,24 @@ watch(
     if (cardsAreaEl.value) {
       groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
     }
-    saveOpenDetailsForGroup(oldGroupId ?? null)
+    uiStore.saveOpenDetailsForGroup(oldGroupId ?? null)
+    uiStore.closeActive()
     uiStore.switchGroup(newGroupId)
     // Re-fetch entries for the newly-activated group.
     if (newGroupId !== null) {
       await store.fetchEntries(newGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
+      // Guard: another group switch may have fired while this fetch was in flight.
+      // If the active group has already moved on, this call is stale — bail out
+      // so prune and restore don't run against the wrong group's in-memory map.
+      if (uiStore.activeGroupId !== newGroupId) return
       uiStore.prune(store.entries.map((e) => e.id))
-      restoreDetailsIfEntryExists(openDetailsByGroup.get(newGroupId ?? null))
+      restoreDetailsIfEntryExists(uiStore.getOpenDetailsForGroup(newGroupId))
     } else {
       store.reset()
     }
     nextTick(() => {
       if (cardsAreaEl.value) {
-        cardsAreaEl.value.scrollTop = groupScrollPositions.get(newGroupId ?? null) ?? 0
+        cardsAreaEl.value.scrollTop = groupScrollPositions.get(newGroupId) ?? 0
       }
     })
   },
@@ -814,14 +799,7 @@ async function confirmDeleteTab() {
     uiStore.deleteGroupEntries(id)
     if (wasActive) {
       const next = groupsStore.tabs[deletedIndex] ?? groupsStore.tabs[groupsStore.tabs.length - 1] ?? null
-      uiStore.activeGroupId = next?.id ?? null
-      uiStore.switchGroup(next?.id ?? null)
-      if (next) {
-        await store.fetchEntries(next.id, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
-        uiStore.prune(store.entries.map((e) => e.id))
-      } else {
-        store.reset()
-      }
+      uiStore.activeGroupId = next?.id ?? null  // the activeGroupId watcher handles the rest
     }
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to delete group'))
@@ -979,6 +957,7 @@ async function confirmDelete() {
   try {
     await store.deleteEntry(pendingDeleteId.value)
     uiStore.clearFocusedEntryById(pendingDeleteId.value)
+    uiStore.clearDetailsContent(pendingDeleteId.value)
     // Refresh lang-pairs in case this was the last entry with that pair.
     groupsStore.fetchLangPairs().catch(() => {})
   } catch (e: unknown) {
@@ -994,6 +973,9 @@ async function handleUpdate(
 ) {
   try {
     await store.updateEntry(id, data)
+    // Source text may have changed — clear cached panel content so the
+    // next time details opens it fetches fresh definitions/examples.
+    if (data.source_text !== undefined) uiStore.clearDetailsContent(id)
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to save changes'))
   }
@@ -1317,7 +1299,6 @@ function onDragEnd() {
 const viewIsActive = ref(false)
 
 onMounted(async () => {
-  viewIsActive.value = true
   // Fetch lang pairs + groups in parallel; then resolve which group to display.
   await Promise.all([
     groupsStore.fetchLangPairs(),
@@ -1329,6 +1310,7 @@ onMounted(async () => {
     await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
     uiStore.prune(store.entries.map((e) => e.id))
   }
+  viewIsActive.value = true  // activated after fetch so the watcher is inert during mount setup
   await handlePendingHighlight()
 
   if (typeof ResizeObserver !== 'undefined' && headerRowEl.value && controlsEl.value) {
@@ -1349,35 +1331,45 @@ onBeforeUnmount(() => {
 // (e.g. from TranslatorView via the “already in wordbook” checkmark).
 onActivated(async () => {
   viewIsActive.value = true
+  // Capture the target group at the start of this activation. If the user
+  // switches a group tab before the fetches below complete, the stale check
+  // below ensures we don't prune the wrong group's in-memory map.
+  const activatedGroupId = uiStore.activeGroupId
   // Restore scroll immediately so the view appears at the saved position
   // from the first visible frame, rather than jumping from 0 after the
   // async fetch below completes. KeepAlive guarantees the DOM (and therefore
   // cardsAreaEl) is already mounted when onActivated fires.
   if (cardsAreaEl.value) {
-    const saved = groupScrollPositions.get(uiStore.activeGroupId ?? null)
+    const saved = groupScrollPositions.get(activatedGroupId ?? null)
     if (saved !== undefined) cardsAreaEl.value.scrollTop = saved
   }
-  // Run both fetches in parallel — they are independent and this halves the
-  // round-trip time. Old entries remain visible while the refresh is in flight
-  // (stale-while-revalidate), so no loading skeleton is shown on activation.
+  // Restore the open card immediately using stale entries — eliminates the
+  // visible close/reopen flicker. prune() will clear activeCardId if the
+  // entry was deleted while away.
+  restoreDetailsIfEntryExists(uiStore.getOpenDetailsForGroup(activatedGroupId ?? null))
+  // Run all three fetches in parallel — they are independent. Old entries
+  // remain visible while the refresh is in flight (stale-while-revalidate),
+  // so no loading skeleton is shown on activation.
   const langPairsTask = groupsStore.fetchLangPairs()
-  uiStore.switchGroup(uiStore.activeGroupId)
-  if (uiStore.activeGroupId !== null) {
-    await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
-    uiStore.prune(store.entries.map((e) => e.id))
+  const groupsTask = groupsStore.fetchGroups(uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
+  uiStore.switchGroup(activatedGroupId)
+  if (activatedGroupId !== null) {
+    await store.fetchEntries(activatedGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
+    // Guard: if the user switched a group tab while the fetch was in flight,
+    // the group-switch watcher has already taken over — skip prune so it
+    // doesn't run against the wrong group's in-memory map.
+    if (uiStore.activeGroupId === activatedGroupId) {
+      uiStore.prune(store.entries.map((e) => e.id))
+    }
   }
-  const savedDetailsId = openDetailsBeforeLeave.value
-  openDetailsBeforeLeave.value = null
-  restoreDetailsIfEntryExists(savedDetailsId)
-  await langPairsTask
+  await Promise.all([langPairsTask, groupsTask])
   handlePendingHighlight()
 })
 
 onDeactivated(() => {
   viewIsActive.value = false
-  if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
-    openDetailsBeforeLeave.value = uiStore.activeCardId
-  }
+  // Save before closing so activeCardId is still set at snapshot time.
+  uiStore.saveOpenDetailsForGroup(uiStore.activeGroupId ?? null)
   // Close transient overlays so they don't linger when navigating away and back.
   showColorFilter.value = false
   uiStore.closeActive()

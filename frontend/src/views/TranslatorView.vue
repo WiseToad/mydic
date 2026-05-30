@@ -1185,13 +1185,16 @@ async function addToWordbook(groupId?: number) {
       provider_code: store.currentEntry?.providerCode ?? null,
     }, resolvedGroupId)
     // Copy def/ctx/lex provider codes to the wordbook UI store.
+    // Use setProviderForGroup so the codes land in the entry's own group map,
+    // not in whatever group _currentGroupId currently points to (they may differ
+    // when the user adds via the long-press group picker).
     const cur = store.currentEntry
     if (cur?.defProviderCode != null)
-      wordbookUiStore.setProvider(entry.id, 'def', cur.defProviderCode)
+      wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'def', cur.defProviderCode)
     if (cur?.ctxProviderCode != null)
-      wordbookUiStore.setProvider(entry.id, 'ctx', cur.ctxProviderCode)
+      wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'ctx', cur.ctxProviderCode)
     if (cur?.lexProviderCode != null)
-      wordbookUiStore.setProvider(entry.id, 'lex', cur.lexProviderCode)
+      wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'lex', cur.lexProviderCode)
     // Reflect the new entry in the lookup cache so the button switches to the ✓ state.
     wordbookLookup.value = { entry_id: entry.id, group_id: entry.group.id, color: entry.color ?? null }
     toast.success('Added to Wordbook')

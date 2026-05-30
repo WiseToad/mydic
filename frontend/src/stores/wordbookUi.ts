@@ -1,5 +1,17 @@
 import { defineStore } from 'pinia'
 import { computed, reactive, ref } from 'vue'
+import type { Definition, ContextExample } from '@/types'
+
+/**
+ * In-memory content cache for the details panel. NOT persisted to localStorage.
+ * undefined = never fetched or last fetch errored (panel will fetch fresh).
+ * null (defData) / [] (ctxData/lexData) = fetched and found nothing.
+ */
+export interface EntryDetailsContent {
+  defData?: Definition | null   // undefined = not cached; null = not found
+  ctxData?: ContextExample[]    // undefined = not cached; [] = none found
+  lexData?: string[]            // undefined = not cached; [] = none found
+}
 
 export interface EntryUiState {
   hintVisible?: boolean                              // translation hint revealed
@@ -90,14 +102,25 @@ function loadPrefs(userId?: number): GlobalPrefs {
   try {
     const node = _readNode(userId)
     if (node.density === undefined) return { ...DEFAULT_PREFS }
-    const parsed = node as Partial<GlobalPrefs>
     // Migrate: old activeGroupId was a string ("g_..."); now it must be a number.
-    const rawTabId = parsed.activeGroupId
+    const rawTabId = node.activeGroupId
     const activeGroupId: number | null =
       typeof rawTabId === 'number' ? rawTabId : null
     // Older saved prefs may not have activeColors; default-merge it.
-    const activeColors = Array.isArray(parsed.activeColors) ? parsed.activeColors : []
-    return { ...DEFAULT_PREFS, ...parsed, activeGroupId, activeColors }
+    const activeColors = Array.isArray(node.activeColors) ? node.activeColors : []
+    // Explicitly pick only known GlobalPrefs fields — never include entriesByGroup.
+    // If entriesByGroup were spread into prefs.value, savePrefs would later write
+    // a stale snapshot back to localStorage, corrupting per-entry tab state.
+    return {
+      ...DEFAULT_PREFS,
+      density: node.density,
+      activeLangs: node.activeLangs ?? DEFAULT_PREFS.activeLangs,
+      activeGroupId,
+      activeColors,
+      showTranslations: node.showTranslations,
+      sidePanelVisible: node.sidePanelVisible,
+      swapDisplay: node.swapDisplay,
+    }
   } catch {
     return { ...DEFAULT_PREFS }
   }
@@ -115,6 +138,22 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   const _currentGroupId = ref<number | null>(null)
   const map = ref<UiMap>({})
   const prefs = ref<GlobalPrefs>(loadPrefs())
+
+  // ── In-memory details content cache (not persisted) ─────────────────────────
+  const _detailsContent = new Map<number, EntryDetailsContent>()
+
+  function getDetailsContent(id: number): EntryDetailsContent | undefined {
+    return _detailsContent.get(id)
+  }
+
+  function patchDetailsContent(id: number, patch: Partial<EntryDetailsContent>): void {
+    const existing = _detailsContent.get(id) ?? {}
+    _detailsContent.set(id, { ...existing, ...patch })
+  }
+
+  function clearDetailsContent(id: number): void {
+    _detailsContent.delete(id)
+  }
 
   // --- Global prefs ---
 
@@ -200,19 +239,45 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    */
   const pendingHighlightId = ref<number | null>(null)
 
-  // ── Per-group focused entry (in-memory only) ──────────────────────────────────
+  // ── Per-group focused entry and open-details (in-memory only) ─────────────────
   /**
    * Tracks the focused entry id per group. Key = group id (null = ungrouped).
    * At most one focused entry per group. Not persisted.
    */
   const focusedByGroup = reactive(new Map<number | null, number>())
 
+  /**
+   * Tracks which card's details panel was open per group. Populated by
+   * saveOpenDetailsForGroup on navigation / tab-switch; read by
+   * getOpenDetailsForGroup on return. Not persisted.
+   */
+  const openDetailsByGroup = reactive(new Map<number | null, number>())
+
   function getState(id: number): EntryUiState {
     return map.value[id] ?? {}
   }
 
+  /**
+   * Read entry UI state scoped to the entry's own group.
+   * When groupId matches the currently loaded group, reads from the reactive
+   * in-memory map (fast, reactive). Otherwise reads directly from the entry's
+   * group storage — safe during group-switch transitions when old-group
+   * components are still mounted but a different group is already loaded.
+   */
+  function getStateForGroup(id: number, groupId: number | null): EntryUiState {
+    if (groupId === _currentGroupId.value) return map.value[id] ?? {}
+    if (groupId === null) return {}
+    return loadGroupEntries(groupId)[id] ?? {}
+  }
+
   function getReactive(id: number, _key: 'hintVisible'): boolean {
     const perEntry = map.value[id]?.hintVisible
+    if (perEntry !== undefined) return perEntry
+    return prefs.value.showTranslations ?? false
+  }
+
+  function getReactiveForGroup(id: number, groupId: number | null, _key: 'hintVisible'): boolean {
+    const perEntry = getStateForGroup(id, groupId).hintVisible
     if (perEntry !== undefined) return perEntry
     return prefs.value.showTranslations ?? false
   }
@@ -224,15 +289,46 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     return state?.lexProvider
   }
 
+  function getProviderForGroup(id: number, groupId: number | null, key: 'def' | 'ctx' | 'lex'): string | null | undefined {
+    const state = getStateForGroup(id, groupId)
+    if (key === 'def') return state.defProvider
+    if (key === 'ctx') return state.ctxProvider
+    return state.lexProvider
+  }
+
   function setState(id: number, patch: Partial<EntryUiState>) {
     map.value[id] = { ...map.value[id], ...patch }
     if (_currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
+  }
+
+  /**
+   * Write entry UI state scoped to the entry's own group.
+   * When groupId matches the currently loaded group, updates the reactive
+   * in-memory map and saves it. Otherwise, loads the target group's storage,
+   * applies the patch, and saves — without touching map.value.
+   * This prevents cross-group state corruption during group-switch transitions.
+   */
+  function setStateForGroup(id: number, groupId: number | null, patch: Partial<EntryUiState>): void {
+    if (groupId === _currentGroupId.value) {
+      map.value[id] = { ...map.value[id], ...patch }
+      if (_currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
+    } else if (groupId !== null) {
+      const otherMap = loadGroupEntries(groupId)
+      otherMap[id] = { ...otherMap[id], ...patch }
+      saveGroupEntries(groupId, otherMap)
+    }
   }
 
   function setProvider(id: number, key: 'def' | 'ctx' | 'lex', code: string | null): void {
     if (key === 'def') setState(id, { defProvider: code })
     else if (key === 'ctx') setState(id, { ctxProvider: code })
     else setState(id, { lexProvider: code })
+  }
+
+  function setProviderForGroup(id: number, groupId: number | null, key: 'def' | 'ctx' | 'lex', code: string | null): void {
+    if (key === 'def') setStateForGroup(id, groupId, { defProvider: code })
+    else if (key === 'ctx') setStateForGroup(id, groupId, { ctxProvider: code })
+    else setStateForGroup(id, groupId, { lexProvider: code })
   }
 
   /** Mark `entryId` as the focused entry for the given group. */
@@ -260,6 +356,22 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
         break
       }
     }
+  }
+
+  /**
+   * Snapshot the currently-open card for `groupId`. Clears the saved state
+   * when nothing is open, so closing a card then navigating away does not
+   * reopen it on return. An in-progress edit is treated as the card to
+   * restore in details mode (edit is cancelled on return).
+   */
+  function saveOpenDetailsForGroup(groupId: number | null): void {
+    if (activeCardId.value !== null) openDetailsByGroup.set(groupId, activeCardId.value)
+    else openDetailsByGroup.delete(groupId)
+  }
+
+  /** Return the saved open-card id for `groupId`, or undefined if none. */
+  function getOpenDetailsForGroup(groupId: number | null): number | undefined {
+    return openDetailsByGroup.get(groupId)
   }
 
   /**
@@ -373,6 +485,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     for (const k of Object.keys(map.value)) {
       if (!set.has(Number(k))) {
         delete map.value[Number(k)]
+        _detailsContent.delete(Number(k))
         changed = true
       }
     }
@@ -396,6 +509,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    * persisted before the map is replaced.
    */
   function switchGroup(groupId: number | null): void {
+    if (_currentGroupId.value === groupId) return
     if (_currentGroupId.value !== null) {
       saveGroupEntries(_currentGroupId.value, map.value)
     }
@@ -409,6 +523,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    */
   function deleteGroupEntries(groupId: number): void {
     deleteStoredGroupEntries(groupId)
+    openDetailsByGroup.delete(groupId)
     if (_currentGroupId.value === groupId) {
       _currentGroupId.value = null
       map.value = {}
@@ -418,6 +533,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   function reinitialize(userId: number): void {
     _currentGroupId.value = null
     map.value = {}
+    _detailsContent.clear()
     prefs.value = loadPrefs(userId)
     activeCardId.value = null
     activeCardMode.value = 'details'
@@ -426,10 +542,13 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightSeq.value = 0
     pendingHighlightId.value = null
     focusedByGroup.clear()
+    openDetailsByGroup.clear()
   }
 
   return {
     getState, setState, prune, getReactive, getProvider, setProvider,
+    getStateForGroup, setStateForGroup, getReactiveForGroup, getProviderForGroup, setProviderForGroup,
+    getDetailsContent, patchDetailsContent, clearDetailsContent,
     activeCardId, activeCardMode,
     toggleDetails, openEditing, closeActive,
     activeMenuId,
@@ -438,6 +557,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightId, highlightSeq, pendingHighlightId,
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
     setFocusedEntry, getFocusedEntry, clearFocusedEntryById,
+    saveOpenDetailsForGroup, getOpenDetailsForGroup,
     initActiveGroup,
     switchGroup, deleteGroupEntries, reinitialize,
   }
