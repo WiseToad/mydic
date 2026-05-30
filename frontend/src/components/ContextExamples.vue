@@ -2,7 +2,7 @@
   <div ref="containerRef">
     <!-- Header: label + (provider selector & translations toggle).
          Hidden in inline mode — TranslatorView renders the header. -->
-    <div v-if="!inline" class="flex items-center mb-3">
+    <div v-if="!inline" class="flex items-center gap-3 mb-3">
       <h3 class="text-xs font-semibold uppercase tracking-widest text-gray-500">Context examples</h3>
       <!-- Right cluster: provider selector + show/hide-translations toggle.
            Wrapping both in one `ml-auto` flex container keeps them tightly

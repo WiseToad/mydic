@@ -408,6 +408,12 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     }
   }
 
+  /** Open the details panel unconditionally (never toggles closed). */
+  function openDetails(id: number) {
+    activeCardId.value = id
+    activeCardMode.value = 'details'
+  }
+
   /** Open the edit form; collapses any other open overlay first. */
   function openEditing(id: number) {
     activeCardId.value = id
@@ -550,7 +556,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     getStateForGroup, setStateForGroup, getReactiveForGroup, getProviderForGroup, setProviderForGroup,
     getDetailsContent, patchDetailsContent, clearDetailsContent,
     activeCardId, activeCardMode,
-    toggleDetails, openEditing, closeActive,
+    toggleDetails, openDetails, openEditing, closeActive,
     activeMenuId,
     setAllHints, showTranslations,
     density, activeLangs, activeColors, activeGroupId, sidePanelVisible, swapDisplay,

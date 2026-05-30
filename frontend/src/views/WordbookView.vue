@@ -468,13 +468,16 @@ watch(
   async (newLangs) => {
     if (!viewIsActive.value) return
     await groupsStore.fetchGroups(newLangs.length > 0 ? [...newLangs] : undefined)
+    const groupIdBefore = uiStore.activeGroupId
     uiStore.initActiveGroup(groupsStore.tabs)
+    // If initActiveGroup changed the active group, the activeGroupId watcher
+    // will fetch entries for the new group — skip here to avoid a duplicate fetch.
+    if (uiStore.activeGroupId !== groupIdBefore) return
     if (uiStore.activeGroupId !== null) {
       await store.fetchEntries(uiStore.activeGroupId, newLangs.length > 0 ? [...newLangs] : undefined)
       uiStore.prune(store.entries.map((e) => e.id))
     }
   },
-  { deep: true },
 )
 
 // Stale activeLangs cleanup: drop any saved pairs that are no longer in the
@@ -680,8 +683,7 @@ const groupScrollPositions = new Map<number | null, number>()
 function restoreDetailsIfEntryExists(entryId: number | undefined): void {
   if (entryId === undefined) return
   if (!store.entries.some((e) => e.id === entryId)) return
-  uiStore.activeCardId = entryId
-  uiStore.activeCardMode = 'details'
+  uiStore.openDetails(entryId)
 }
 
 /**
@@ -1298,28 +1300,15 @@ function onDragEnd() {
 // has actually been activated and is ready to scroll.
 const viewIsActive = ref(false)
 
-onMounted(async () => {
-  // Fetch lang pairs + groups in parallel; then resolve which group to display.
-  await Promise.all([
-    groupsStore.fetchLangPairs(),
-    groupsStore.fetchGroups(uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined),
-  ])
-  uiStore.initActiveGroup(groupsStore.tabs)
-  uiStore.switchGroup(uiStore.activeGroupId)
-  if (uiStore.activeGroupId !== null) {
-    await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
-    uiStore.prune(store.entries.map((e) => e.id))
-  }
-  viewIsActive.value = true  // activated after fetch so the watcher is inert during mount setup
-  await handlePendingHighlight()
-
+onMounted(() => {
+  // Data fetching is handled entirely by onActivated (which fires on first
+  // mount too when inside <KeepAlive>). Only DOM-dependent setup goes here.
   if (typeof ResizeObserver !== 'undefined' && headerRowEl.value && controlsEl.value) {
     headerResizeObserver = new ResizeObserver(() => checkGroupsFit())
     headerResizeObserver.observe(headerRowEl.value)
     headerResizeObserver.observe(controlsEl.value)
   }
-  await nextTick()
-  checkGroupsFit()
+  nextTick(() => checkGroupsFit())
 })
 
 onBeforeUnmount(() => {
@@ -1363,6 +1352,7 @@ onActivated(async () => {
     }
   }
   await Promise.all([langPairsTask, groupsTask])
+  uiStore.initActiveGroup(groupsStore.tabs)
   handlePendingHighlight()
 })
 
