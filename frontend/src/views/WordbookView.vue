@@ -1186,7 +1186,14 @@ function onCardGridPointerDown(e: PointerEvent) {
   // Touch only: start a long-press timer to reorder the focused card into
   // this card's position (mirrors the desktop drag-and-drop drop behaviour).
   if (e.pointerType !== 'touch') return
-  const cardEl = (e.target as Element | null)?.closest('[data-entry-id]') as HTMLElement | null
+  const target = e.target as Element | null
+  if (!target) return
+  // Don't arm reorder when pressing on the open details overlay.
+  if (target.closest('[data-details-overlay]')) return
+  // Don't arm reorder when pressing on interactive card children
+  // (buttons, links, inputs, or the hint-toggle span).
+  if (target.closest('button, input, textarea, a, [data-hint-toggle]')) return
+  const cardEl = target.closest('[data-entry-id]') as HTMLElement | null
   if (!cardEl) return
   const entryId = Number(cardEl.getAttribute('data-entry-id'))
   if (isNaN(entryId)) return
