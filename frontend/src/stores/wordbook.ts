@@ -47,15 +47,12 @@ export const useWordbookStore = defineStore('wordbook', () => {
   }
 
   /**
-   * Reorder entries to match the given id order. Applies a sparse position
-   * scheme (1000, 2000, …) locally then persists only the changed slice via
-   * a single PUT /wordbook/reorder call.
-   * orderedIds should cover all entry ids in the current group view;
+   * Reorder entries to match the given id order, and persist the move via
+   * PUT /wordbook/reorder with just the two involved IDs.
+   * orderedIds covers all entry ids in the current group view (filter-aware);
    * any missing ids are appended last.
    */
-  function reorderEntries(orderedIds: number[]): void {
-    const currentIds = entries.value.map((e) => e.id)
-
+  function reorderEntries(orderedIds: number[], sourceId: number, targetId: number): void {
     const map = new Map(entries.value.map((e) => [e.id, e]))
     const reordered: WordbookEntry[] = []
     for (const id of orderedIds) {
@@ -69,15 +66,7 @@ export const useWordbookStore = defineStore('wordbook', () => {
     reordered.forEach((e, i) => { e.position = (i + 1) * 1000 })
     entries.value = reordered
 
-    const n = Math.min(orderedIds.length, currentIds.length)
-    let first = 0
-    while (first < n && orderedIds[first] === currentIds[first]) first++
-    let last = n - 1
-    while (last >= first && orderedIds[last] === currentIds[last]) last--
-
-    if (first > last) return
-
-    wordbookApi.reorder({ ids: orderedIds.slice(first, last + 1), offset: first }).catch(() => {})
+    wordbookApi.reorder({ source_id: sourceId, target_id: targetId }).catch(() => {})
   }
 
   function reset() {

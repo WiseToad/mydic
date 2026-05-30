@@ -13,7 +13,7 @@ from app.schemas.wordbook import (
     WordbookEntryResponse,
     WordbookEntryUpdate,
     WordbookLookupResult,
-    WordbookReorder,
+    WordbookMoveItem,
     WordGroupCreate,
     WordGroupResponse,
     WordGroupUpdate,
@@ -220,28 +220,59 @@ async def delete_entry(
 
 @router.put("/reorder", status_code=204)
 async def reorder_entries(
-    body: WordbookReorder,
+    body: WordbookMoveItem,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update positions for a contiguous slice of entries in one transaction.
+    """Move source_id to the position of target_id within the same group.
 
-    ``body.ids`` contains entry IDs in display order for the changed slice.
-    ``body.offset`` is the 0-based index of ``ids[0]`` in the full list.
-    Items outside the slice are not touched.
+    Both entries must belong to the current user and to the same group.
     """
+    if body.source_id == body.target_id:
+        raise HTTPException(status_code=422, detail="source_id and target_id must differ")
+
     rows = (
         await db.execute(
             select(WordbookEntry).where(
-                WordbookEntry.id.in_(body.ids),
+                WordbookEntry.id.in_([body.source_id, body.target_id]),
                 WordbookEntry.user_id == current_user.id,
             )
         )
     ).scalars().all()
     entry_map = {e.id: e for e in rows}
-    for i, entry_id in enumerate(body.ids):
-        if entry_id in entry_map:
-            entry_map[entry_id].position = (body.offset + i + 1) * 1000
+
+    if body.source_id not in entry_map or body.target_id not in entry_map:
+        raise HTTPException(status_code=404, detail="Entry not found")
+
+    source = entry_map[body.source_id]
+    target = entry_map[body.target_id]
+    if source.group_id != target.group_id:
+        raise HTTPException(status_code=422, detail="Entries must belong to the same group")
+
+    all_rows = (
+        await db.execute(
+            select(WordbookEntry)
+            .where(
+                WordbookEntry.user_id == current_user.id,
+                WordbookEntry.group_id == source.group_id,
+            )
+            .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
+        )
+    ).scalars().all()
+
+    ids = [e.id for e in all_rows]
+    src_idx = ids.index(body.source_id)
+    tgt_idx = ids.index(body.target_id)
+    moving_forward = src_idx < tgt_idx
+    new_ids = [i for i in ids if i != body.source_id]
+    insert_at = new_ids.index(body.target_id)
+    new_ids.insert(insert_at + 1 if moving_forward else insert_at, body.source_id)
+
+    first = min(src_idx, tgt_idx)
+    last = max(src_idx, tgt_idx)
+    all_map = {e.id: e for e in all_rows}
+    for i, eid in enumerate(new_ids[first:last + 1], start=first):
+        all_map[eid].position = (i + 1) * 1000
     await db.commit()
 
 
@@ -349,26 +380,38 @@ async def update_group(
 
 @router.put("/groups/reorder", status_code=204)
 async def reorder_groups(
-    body: WordbookReorder,
+    body: WordbookMoveItem,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Update positions for a contiguous slice of groups in one transaction.
+    """Move source_id to the position of target_id among the user's groups."""
+    if body.source_id == body.target_id:
+        raise HTTPException(status_code=422, detail="source_id and target_id must differ")
 
-    Same offset-based semantics as ``PUT /wordbook/reorder``.
-    """
-    rows = (
+    all_rows = (
         await db.execute(
-            select(WordGroup).where(
-                WordGroup.id.in_(body.ids),
-                WordGroup.user_id == current_user.id,
-            )
+            select(WordGroup)
+            .where(WordGroup.user_id == current_user.id)
+            .order_by(WordGroup.position, WordGroup.id)
         )
     ).scalars().all()
-    group_map = {g.id: g for g in rows}
-    for i, group_id in enumerate(body.ids):
-        if group_id in group_map:
-            group_map[group_id].position = (body.offset + i + 1) * 1000
+    group_map = {g.id: g for g in all_rows}
+
+    if body.source_id not in group_map or body.target_id not in group_map:
+        raise HTTPException(status_code=404, detail="Group not found")
+
+    ids = [g.id for g in all_rows]
+    src_idx = ids.index(body.source_id)
+    tgt_idx = ids.index(body.target_id)
+    moving_forward = src_idx < tgt_idx
+    new_ids = [i for i in ids if i != body.source_id]
+    insert_at = new_ids.index(body.target_id)
+    new_ids.insert(insert_at + 1 if moving_forward else insert_at, body.source_id)
+
+    first = min(src_idx, tgt_idx)
+    last = max(src_idx, tgt_idx)
+    for i, gid in enumerate(new_ids[first:last + 1], start=first):
+        group_map[gid].position = (i + 1) * 1000
     await db.commit()
 
 

@@ -58,9 +58,9 @@ class WordbookEntryUpdate(BaseModel):
         return None if v == "" else v
 
 
-class WordbookReorder(BaseModel):
-    ids: list[int]
-    offset: int = 0  # 0-based index of ids[0] in the full display list
+class WordbookMoveItem(BaseModel):
+    source_id: int
+    target_id: int
 
 
 class WordbookEntryResponse(BaseModel):

@@ -1147,16 +1147,7 @@ function onTabPointerUp(_event: PointerEvent) {
     } else if (dragOverTabId.value !== null && dragOverTabId.value !== state.tabId) {
       // Reorder tabs: insert dragged tab at the target's position. Mirrors
       // the entry reorder logic in onCardDrop.
-      const ids = groupsStore.tabs.map(t => t.id)
-      const draggedIdx = ids.indexOf(state.tabId)
-      const targetIdx = ids.indexOf(dragOverTabId.value)
-      if (draggedIdx !== -1 && targetIdx !== -1) {
-        const movingForward = draggedIdx < targetIdx
-        const newIds = ids.filter(id => id !== state.tabId)
-        const newTargetIdx = newIds.indexOf(dragOverTabId.value)
-        newIds.splice(movingForward ? newTargetIdx + 1 : newTargetIdx, 0, state.tabId)
-        groupsStore.reorderTabs(newIds)
-      }
+      groupsStore.reorderTabs(state.tabId, dragOverTabId.value)
     } else if (dragOverId.value !== null) {
       groupsStore.assignEntry(dragOverId.value, state.tabId).catch((e: unknown) => {
         toast.error(extractErrorMessage(e, 'Failed to assign group'))
@@ -1283,7 +1274,7 @@ function performCardReorder(draggedEntryId: number, targetEntryId: number) {
   const allIds = store.entries.map((e) => e.id)
   let fi = 0
   const newOrder = allIds.map((id) => (filteredSet.has(id) ? newFiltered[fi++] : id))
-  store.reorderEntries(newOrder)
+  store.reorderEntries(newOrder, draggedEntryId, targetEntryId)
 }
 
 function onCardDrop(targetEntryId: number) {

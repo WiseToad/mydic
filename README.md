@@ -5,10 +5,12 @@ MyDic, a tool for those who keen to dramatically improve their memorization of f
 ![mydic](mydic.png)
 
 Some non-obvious UI features:
+
 - Tapping MyDic title toggles browser fullscreen mode
 - Long-pressing the swap button clears the input text along with language swapping
 - In auto-detect mode, tapping detected language abbreviation sets it as a current
 - Long-pressing the "Add to wordbook" button allows you to select a group where to add to
+- Long-pressing a group in this popup sets it as current in wordbook, along with adding the word
 - Long-pressing an audio button pops up the voice selection menu
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
 - A small button appearing below selected text allows you to translate selection

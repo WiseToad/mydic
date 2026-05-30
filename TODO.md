@@ -10,6 +10,7 @@ Features:
 - Reorganize wordbook toolbars, collapse long group lists, reconsider layouts for different widths and densities. Fix wordbook layout for narrow Android screens. Maybe it would be better to completely disable different density selector, since it has no effect anyway
 - Implement searching in wordbook
 - Linked words feature
+- Hiding groups feature
 
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
@@ -29,6 +30,7 @@ Prepare to promotion:
 - UI localization
 - Light theme, theming in general
 - Definition providers with non-English output (non-English Wikitionary alternatives)
+- Share group feature
 - Store user requested provider along with cached results in db
 - Metrics for inner and external api calls
 - Per-user stats for external api usage

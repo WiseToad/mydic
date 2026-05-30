@@ -63,35 +63,27 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   }
 
   /**
-   * Reorder tabs to match the given id order. Applies a sparse position
-   * scheme (1000, 2000, …) locally then persists only the changed slice via
-   * a single PUT /wordbook/groups/reorder call.
+   * Move sourceId to the position of targetId among tabs. Applies a sparse
+   * position scheme (1000, 2000, …) locally and persists via
+   * PUT /wordbook/groups/reorder with just the two involved IDs.
    */
-  function reorderTabs(orderedIds: number[]): void {
-    const currentIds = tabs.value.map((t) => t.id)
+  function reorderTabs(sourceId: number, targetId: number): void {
+    const ids = tabs.value.map((t) => t.id)
+    const srcIdx = ids.indexOf(sourceId)
+    const tgtIdx = ids.indexOf(targetId)
+    if (srcIdx === -1 || tgtIdx === -1 || srcIdx === tgtIdx) return
+
+    const movingForward = srcIdx < tgtIdx
+    const newIds = ids.filter((id) => id !== sourceId)
+    const insertAt = newIds.indexOf(targetId)
+    newIds.splice(movingForward ? insertAt + 1 : insertAt, 0, sourceId)
 
     const map = new Map(tabs.value.map((t) => [t.id, t]))
-    const reordered: WordGroup[] = []
-    for (const id of orderedIds) {
-      const tab = map.get(id)
-      if (tab) reordered.push(tab)
-    }
-    const seen = new Set(orderedIds)
-    for (const t of tabs.value) {
-      if (!seen.has(t.id)) reordered.push(t)
-    }
+    const reordered: WordGroup[] = newIds.map((id) => map.get(id)!)
     reordered.forEach((t, i) => { t.position = (i + 1) * 1000 })
     tabs.value = reordered
 
-    const n = Math.min(orderedIds.length, currentIds.length)
-    let first = 0
-    while (first < n && orderedIds[first] === currentIds[first]) first++
-    let last = n - 1
-    while (last >= first && orderedIds[last] === currentIds[last]) last--
-
-    if (first > last) return
-
-    wordbookApi.reorderGroups({ ids: orderedIds.slice(first, last + 1), offset: first }).catch(() => {})
+    wordbookApi.reorderGroups({ source_id: sourceId, target_id: targetId }).catch(() => {})
   }
 
   function reset() {

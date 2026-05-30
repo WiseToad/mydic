@@ -70,9 +70,9 @@ export interface WordbookEntryUpdate {
   color?: string | null
 }
 
-export interface WordbookReorder {
-  ids: number[]
-  offset?: number  // 0-based index of ids[0] in the full display list; defaults to 0
+export interface WordbookMoveItem {
+  source_id: number
+  target_id: number
 }
 
 export interface ContextExample {

@@ -4,7 +4,7 @@ import type {
   WordbookEntryCreate,
   WordbookEntryUpdate,
   WordbookLookupResult,
-  WordbookReorder,
+  WordbookMoveItem,
   WordGroup,
   WordGroupUpdate,
 } from '@/types'
@@ -37,11 +37,11 @@ export const wordbookApi = {
     await apiClient.delete(`/wordbook/${id}`)
   },
 
-  async reorder(body: WordbookReorder): Promise<void> {
+  async reorder(body: WordbookMoveItem): Promise<void> {
     await apiClient.put('/wordbook/reorder', body)
   },
 
-  async reorderGroups(body: WordbookReorder): Promise<void> {
+  async reorderGroups(body: WordbookMoveItem): Promise<void> {
     await apiClient.put('/wordbook/groups/reorder', body)
   },
 
