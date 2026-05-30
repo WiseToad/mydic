@@ -95,6 +95,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
+import { useLongPress } from '@/composables/useLongPress'
 import {
   claimSlow,
   clearSlow,
@@ -121,9 +122,6 @@ const emit = defineEmits<{
   (e: 'longpress'): void
 }>()
 
-/** Time the user must hold the button before the voice-picker popup opens. */
-const LONG_PRESS_MS = 500
-
 const buttonId = Symbol('AudioButton')
 
 const settings = useSettingsStore()
@@ -147,36 +145,11 @@ const popupVisible = ref(false)
 const popupLeft = ref(0)
 const popupTop = ref(0)
 
-let pressTimer: ReturnType<typeof setTimeout> | null = null
 let _longPressPointerId: number | null = null
-
-// One-shot guard: swallows the spurious click that fires after long-press release,
-// unless it lands inside the popup.
-let _longPressClickGuard: ((e: MouseEvent) => void) | null = null
 
 // One-shot guard: intercepts the pointerup that ends the long-press gesture so
 // it cannot focus a different wordbook card.  Keyed by pointerId.
 let _longPressPointerUpGuard: ((e: PointerEvent) => void) | null = null
-
-function _registerLongPressClickGuard() {
-  _cleanLongPressClickGuard()
-  const handler = (e: MouseEvent) => {
-    document.removeEventListener('click', handler, true)
-    _longPressClickGuard = null
-    if ((e.target as Element | null)?.closest('[data-audio-popup]')) return
-    e.stopPropagation()
-    e.preventDefault()
-  }
-  _longPressClickGuard = handler
-  document.addEventListener('click', handler, true)
-}
-
-function _cleanLongPressClickGuard() {
-  if (_longPressClickGuard) {
-    document.removeEventListener('click', _longPressClickGuard, true)
-    _longPressClickGuard = null
-  }
-}
 
 function _registerLongPressPointerUpGuard() {
   _cleanLongPressPointerUpGuard()
@@ -287,31 +260,14 @@ async function _play(
   // NORMAL + interrupted: stay normal.
 }
 
+const { onPointerDown: _lpPointerDown, onPointerUp, onCancel: cancelPress } = useLongPress(
+  openPopup,
+  { onShortPress: () => void _play(), popupRef },
+)
+
 function onPointerDown(e: PointerEvent) {
-  if (e.button !== 0) return
   _longPressPointerId = e.pointerId
-  if (pressTimer) clearTimeout(pressTimer)
-  pressTimer = setTimeout(() => {
-    pressTimer = null
-    openPopup()
-  }, LONG_PRESS_MS)
-}
-
-/** Pointer released on the button — short press → play audio. */
-function onPointerUp() {
-  if (pressTimer !== null) {
-    clearTimeout(pressTimer)
-    pressTimer = null
-    void _play()
-  }
-}
-
-/** Pointer left the button or was cancelled — just kill the timer. */
-function cancelPress() {
-  if (pressTimer !== null) {
-    clearTimeout(pressTimer)
-    pressTimer = null
-  }
+  _lpPointerDown(e)
 }
 
 /** Opens the voice-picker popup, placed below/left the button with viewport-edge flipping.
@@ -328,7 +284,7 @@ function openPopup() {
   emit('longpress')
   // Stop any current playback so the next one is the user's chosen voice.
   stopTts()
-  _registerLongPressClickGuard()   // swallow post-long-press click
+  // Click swallowing is handled by useLongPress (popupRef guard).
   _registerLongPressPointerUpGuard()  // prevent focusing a different card on release
   void nextTick(() => { positionPopup(rect); scrollToSelectedVoice() })  // second-pass: refine position once rendered
 }
@@ -401,23 +357,18 @@ function onChoosePopup(providerCode: string, voiceId: string) {
 
 // KeepAlive deactivation: teleported popup stays in <body>, close it manually.
 onDeactivated(() => {
-  _cleanLongPressClickGuard()
   _cleanLongPressPointerUpGuard()
   closePopup()
-  if (pressTimer) {
-    clearTimeout(pressTimer)
-    pressTimer = null
-  }
+  // pressTimer and click guard are handled by useLongPress
 })
 
 onBeforeUnmount(() => {
-  if (pressTimer) clearTimeout(pressTimer)
   _cancelSpinnerTimer()
-  _cleanLongPressClickGuard()
   _cleanLongPressPointerUpGuard()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
   if (isPlaying.value || _inFlight) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()
+  // pressTimer and click guard are handled by useLongPress
 })
 </script>

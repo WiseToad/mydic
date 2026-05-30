@@ -440,7 +440,7 @@
             : 'text-gray-200 hover:bg-surface-700'"
           :data-selected="(wordbookUiStore.activeGroupId === group.id) || undefined"
           @pointerdown.stop="onGroupMenuPointerDown($event, group.id)"
-          @pointerup.stop="onGroupMenuPointerUp(group.id)"
+          @pointerup.stop="onGroupMenuPointerUp"
           @pointerleave="onGroupMenuCancelPress"
           @pointercancel="onGroupMenuCancelPress"
           @click.stop
@@ -464,6 +464,7 @@
 
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onUnmounted, onDeactivated, watch } from 'vue'
+import { useLongPress } from '@/composables/useLongPress'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
 import { useLanguageSettingsStore } from '@/stores/languageSettings'
@@ -1130,44 +1131,22 @@ async function onCtrlEnter() {
   }
 }
 
-/** Time the user must hold a button before the long-press action fires. */
-const LONG_PRESS_MS = 500
-
-// Long press on swap button: clear input + swap langs
-let longPressTimer: ReturnType<typeof setTimeout> | null = null
-
-function onSwapPointerDown() {
-  if (longPressTimer) clearTimeout(longPressTimer)
-  longPressTimer = setTimeout(() => {
-    longPressTimer = null
-    resetAudioContext()
-    clearInput()
-    store.swapLangs()
-  }, LONG_PRESS_MS)
-}
-
-/** Short press → swap languages. */
-async function onSwapPointerUp() {
-  if (longPressTimer !== null) {
-    clearTimeout(longPressTimer)
-    longPressTimer = null
-    resetAudioContext()
-    store.reverse(false)
-    if (store.inputText.trim() && !noTargetLangs.value && !isTargetLangDisabled.value) {
-      // Reload providers for the swapped pair so the selection carries across.
-      await loadTranslationProviders()
-      const code = effectiveTranslationCode.value
-      if (code) store.translate(code, false, resolvedCarryLexCode.value, resolvedCarryDefCode.value, resolvedCarryCtxCode.value)
-    }
+// Long press on swap button: clear input + swap langs; short press: swap only
+async function _onSwapShortPress() {
+  resetAudioContext()
+  store.reverse(false)
+  if (store.inputText.trim() && !noTargetLangs.value && !isTargetLangDisabled.value) {
+    // Reload providers for the swapped pair so the selection carries across.
+    await loadTranslationProviders()
+    const code = effectiveTranslationCode.value
+    if (code) store.translate(code, false, resolvedCarryLexCode.value, resolvedCarryDefCode.value, resolvedCarryCtxCode.value)
   }
 }
 
-function cancelSwapPress() {
-  if (longPressTimer !== null) {
-    clearTimeout(longPressTimer)
-    longPressTimer = null
-  }
-}
+const { onPointerDown: onSwapPointerDown, onPointerUp: onSwapPointerUp, onCancel: cancelSwapPress } = useLongPress(
+  () => { resetAudioContext(); clearInput(); store.swapLangs() },
+  { onShortPress: _onSwapShortPress },
+)
 
 function clearInput() {
   store.inputText = ''
@@ -1228,58 +1207,15 @@ const groupMenuScrollRef = ref<HTMLElement | null>(null)
 const groupMenuVisible = ref(false)
 const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
-let _addWbLongPressTimer: ReturnType<typeof setTimeout> | null = null
-
-// One-shot guard: swallows the post-long-press click unless it lands inside the popup.
-let _addWbClickGuard: ((e: MouseEvent) => void) | null = null
-
-function _registerAddWbClickGuard() {
-  if (_addWbClickGuard) document.removeEventListener('click', _addWbClickGuard, true)
-  const handler = (e: MouseEvent) => {
-    document.removeEventListener('click', handler, true)
-    _addWbClickGuard = null
-    if (groupMenuPopupRef.value?.contains(e.target as Node)) return
-    e.stopPropagation()
-    e.preventDefault()
-  }
-  _addWbClickGuard = handler
-  document.addEventListener('click', handler, true)
-}
-
-function _cleanAddWbClickGuard() {
-  if (_addWbClickGuard) {
-    document.removeEventListener('click', _addWbClickGuard, true)
-    _addWbClickGuard = null
-  }
-}
-
-function onAddWordbookPointerDown(e: PointerEvent) {
-  if (e.button !== 0) return
-  if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
-  _addWbLongPressTimer = setTimeout(async () => {
-    _addWbLongPressTimer = null
+const { onPointerDown: onAddWordbookPointerDown, onPointerUp: onAddWordbookPointerUp, onCancel: onAddWordbookCancelPress } = useLongPress(
+  async () => {
     if (wordbookGroupsStore.tabs.length === 0) {
       try { await wordbookGroupsStore.fetchGroups() } catch { /* non-critical */ }
     }
     _openGroupMenu()
-  }, LONG_PRESS_MS)
-}
-
-/** Short press → add to wordbook. */
-async function onAddWordbookPointerUp() {
-  if (_addWbLongPressTimer !== null) {
-    clearTimeout(_addWbLongPressTimer)
-    _addWbLongPressTimer = null
-    await addToWordbook()
-  }
-}
-
-function onAddWordbookCancelPress() {
-  if (_addWbLongPressTimer !== null) {
-    clearTimeout(_addWbLongPressTimer)
-    _addWbLongPressTimer = null
-  }
-}
+  },
+  { onShortPress: () => void addToWordbook(), popupRef: groupMenuPopupRef },
+)
 
 function _openGroupMenu() {
   const btn = addToWordbookBtnRef.value
@@ -1289,8 +1225,7 @@ function _openGroupMenu() {
   groupMenuLeft.value = Math.max(8, rect.right - 160)
   groupMenuTop.value = rect.bottom + 4
   groupMenuVisible.value = true
-  // Swallow the click that follows the long-press release.
-  _registerAddWbClickGuard()
+  // Click swallowing is handled by useLongPress (groupMenuPopupRef guard).
   nextTick(() => { _repositionGroupMenu(rect); _scrollToActiveGroup() })
 }
 
@@ -1325,10 +1260,7 @@ function _repositionGroupMenu(buttonRect: DOMRect) {
 
 function closeGroupMenu() {
   groupMenuVisible.value = false
-  if (_groupMenuLongPressTimer !== null) {
-    clearTimeout(_groupMenuLongPressTimer)
-    _groupMenuLongPressTimer = null
-  }
+  onGroupMenuCancelPress()
 }
 watch(groupMenuVisible, (open) => {
   if (open) document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
@@ -1347,33 +1279,30 @@ async function addToWordbookInGroup(groupId: number) {
 }
 
 // ─── Group menu long-press: add to group AND activate it in WordBook ────────
-let _groupMenuLongPressTimer: ReturnType<typeof setTimeout> | null = null
+// The pressed groupId is captured at pointerdown and read by the callbacks.
+let _groupMenuCurrentId: number | null = null
 
-function onGroupMenuPointerDown(e: PointerEvent, groupId: number) {
-  if (e.button !== 0) return
-  if (_groupMenuLongPressTimer) clearTimeout(_groupMenuLongPressTimer)
-  _groupMenuLongPressTimer = setTimeout(async () => {
-    _groupMenuLongPressTimer = null
-    wordbookUiStore.activeGroupId = groupId
+const { onPointerDown: _gmPointerDown, onPointerUp: onGroupMenuPointerUp, onCancel: onGroupMenuCancelPress } = useLongPress(
+  async () => {
+    const id = _groupMenuCurrentId
+    if (id === null) return
+    wordbookUiStore.activeGroupId = id
     closeGroupMenu()
-    await addToWordbook(groupId)
-  }, LONG_PRESS_MS)
-}
+    await addToWordbook(id)
+  },
+  {
+    onShortPress: () => {
+      const id = _groupMenuCurrentId
+      if (id === null) return
+      void addToWordbookInGroup(id)
+    },
+  },
+)
 
-/** Short press → add to group without activating it. */
-function onGroupMenuPointerUp(groupId: number) {
-  if (_groupMenuLongPressTimer !== null) {
-    clearTimeout(_groupMenuLongPressTimer)
-    _groupMenuLongPressTimer = null
-    addToWordbookInGroup(groupId)
-  }
-}
-
-function onGroupMenuCancelPress() {
-  if (_groupMenuLongPressTimer !== null) {
-    clearTimeout(_groupMenuLongPressTimer)
-    _groupMenuLongPressTimer = null
-  }
+/** Stores the pressed groupId, then delegates to useLongPress. */
+function onGroupMenuPointerDown(e: PointerEvent, groupId: number) {
+  _groupMenuCurrentId = groupId
+  _gmPointerDown(e)
 }
 
 // ─── Narrow-screen detection ─────────────────────────────────────
@@ -1426,22 +1355,16 @@ onMounted(() => {
 
 // KeepAlive deactivation: teleported popups stay in <body>, close them manually.
 onDeactivated(() => {
-  _cleanAddWbClickGuard()
-  closeGroupMenu()
-  if (_addWbLongPressTimer) {
-    clearTimeout(_addWbLongPressTimer)
-    _addWbLongPressTimer = null
-  }
+  closeGroupMenu()  // also cancels any pending group menu timer via cancelGroupMenuPress
   _cancelWordbookLookupSpinnerTimer()
+  // add-to-wordbook timer and click guard are handled by useLongPress
 })
 
 onUnmounted(() => {
-  _cleanAddWbClickGuard()
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-  if (_addWbLongPressTimer) clearTimeout(_addWbLongPressTimer)
-  if (_groupMenuLongPressTimer) clearTimeout(_groupMenuLongPressTimer)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
   window.removeEventListener('resize', _onWindowResize)
   _cancelWordbookLookupSpinnerTimer()
+  // timers and click guards are handled by useLongPress
 })
 </script>

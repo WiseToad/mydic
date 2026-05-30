@@ -390,7 +390,7 @@ import WordbookEntry from '@/components/WordbookEntry.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
-import { SPINNER_DELAY_MS } from '@/utils/ui'
+import { SPINNER_DELAY_MS, LONG_PRESS_MS } from '@/utils/ui'
 import {
   ENTRY_COLORS,
   ENTRY_COLOR_LABEL,
@@ -1034,7 +1034,6 @@ const dragOverTabId = ref<number | null>(null)
 const dragOverDeleteZone = ref(false)
 
 const DRAG_THRESHOLD = 5
-const LONG_PRESS_MS = 500
 
 const longPressReadyTabId = ref<number | null>(null)
 let longPressTimerId: ReturnType<typeof setTimeout> | null = null
@@ -1079,6 +1078,14 @@ function onTabPointerDown(event: PointerEvent, tabId: number) {
     sourceEl, grabOffsetX: event.clientX - rect.left, grabOffsetY: event.clientY - rect.top,
   }
   if (!onDeleteButton) {
+    // Tab long-press uses a two-step mechanism deliberately:
+    //  1. The timer fires at LONG_PRESS_MS and sets longPressReadyTabId, which
+    //     only changes the cursor to cursor-text — a mid-hold visual cue that
+    //     "releasing now will rename this tab".
+    //  2. The actual rename action is committed in onTabPointerUp via an elapsed
+    //     check, so it triggers on release rather than mid-gesture.
+    // This action-on-release pattern gives the user a clear visual signal
+    // before committing, and lets them abort by dragging instead of releasing.
     clearLongPressTimer()
     longPressTimerId = setTimeout(() => {
       longPressTimerId = null
@@ -1159,6 +1166,9 @@ function onTabPointerUp(_event: PointerEvent) {
     dragOverDeleteZone.value = false
     return
   }
+  // Elapsed check is the second half of the two-step tab long-press (see
+  // onTabPointerDown). The timer already showed the visual preview; this
+  // commits the rename (or falls back to select) on release.
   const elapsed = Date.now() - state.startTime
   if (state.onDeleteButton) {
     deleteTab(state.tabId)
