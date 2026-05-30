@@ -299,7 +299,11 @@
         </div>
 
         <!-- Entry grid -->
-        <div v-else class="grid gap-3" :style="gridStyle"
+        <div
+          v-else
+          ref="gridEl"
+          class="grid gap-3"
+          :style="gridStyle"
           @pointerdown.capture="onCardGridPointerDown"
           @pointermove="onCardGridPointerMove"
           @pointerup="onCardGridPointerUpOrCancel"
@@ -325,6 +329,15 @@
             />
           </div>
         </div>
+        <!-- Spacer: prevents scroll-height flicker when the details overlay collapses.
+             Height = largest observed overlay-overflow past the grid bottom.
+             Only shrinks once its dead zone scrolls below the visible area. -->
+        <div
+          ref="spacerEl"
+          aria-hidden="true"
+          class="pointer-events-none"
+          :style="{ height: spacerHeight + 'px' }"
+        />
       </div>
 
       <!--
@@ -1294,6 +1307,95 @@ function onDragEnd() {
   dragOverId.value = null
 }
 
+// ─── Bottom-spacer flicker prevention ─────────────────────────────────────────
+// The details overlay (`position: absolute; top: 100%`) causes cardsAreaEl to
+// expand its scroll height when it extends past the grid's bottom edge.
+// Switching to another entry (or tab) briefly collapses the old overlay before
+// the new one grows, shrinking the scroll height and producing a visible jump.
+//
+// Fix: keep a zero-height spacer div anchored right after the grid. When the
+// active overlay extends past the grid bottom, the spacer grows to exactly
+// cover that overflow — holding the scroll height stable. It only shrinks
+// once its "dead zone" (from the current overlay bottom down to the spacer
+// bottom) scrolls entirely below the visible area of cardsAreaEl.
+
+const gridEl = ref<HTMLElement | null>(null)
+const spacerEl = ref<HTMLElement | null>(null)
+const spacerHeight = ref(0)
+let _overlayResizeObs: ResizeObserver | null = null
+
+/** Pixels by which the active overlay extends past the grid's bottom edge. */
+function _getOverlayOverflow(): number {
+  if (!gridEl.value || uiStore.activeCardId === null || uiStore.activeCardMode !== 'details') return 0
+  const overlayEl = cardsAreaEl.value?.querySelector<HTMLElement>(
+    `[data-details-overlay][data-entry-id="${uiStore.activeCardId}"]`,
+  )
+  if (!overlayEl) return 0
+  return Math.max(0, overlayEl.getBoundingClientRect().bottom - gridEl.value.getBoundingClientRect().bottom)
+}
+
+/** Grow the spacer when the active overlay overflows past the grid bottom. */
+function updateSpacer() {
+  const overflow = _getOverlayOverflow()
+  if (overflow > spacerHeight.value) spacerHeight.value = overflow
+}
+
+/**
+ * Shrink the spacer when its dead zone (between the current overlay's bottom
+ * and the spacer's bottom) scrolls entirely below cardsAreaEl's visible fold.
+ * Since both measurements are viewport-relative their difference is
+ * scroll-invariant, making the comparison correct regardless of scroll offset.
+ */
+function checkSpacerShrink() {
+  if (spacerHeight.value <= 0 || !cardsAreaEl.value || !gridEl.value) return
+  const scrollBottom = cardsAreaEl.value.getBoundingClientRect().bottom
+  // Dead-zone top = where the current overlay ends in the viewport.
+  // Falls back to the grid bottom when no overlay is active.
+  let deadZoneTop: number
+  if (uiStore.activeCardId !== null && uiStore.activeCardMode === 'details') {
+    const ov = cardsAreaEl.value.querySelector<HTMLElement>(
+      `[data-details-overlay][data-entry-id="${uiStore.activeCardId}"]`,
+    )
+    deadZoneTop = ov
+      ? ov.getBoundingClientRect().bottom
+      : gridEl.value.getBoundingClientRect().bottom
+  } else {
+    deadZoneTop = gridEl.value.getBoundingClientRect().bottom
+  }
+  if (deadZoneTop >= scrollBottom || cardsAreaEl.value.scrollTop === 0) {
+    const newH = Math.max(0, _getOverlayOverflow())
+    if (newH < spacerHeight.value) spacerHeight.value = newH
+  }
+}
+
+function _disconnectOverlayObs() {
+  _overlayResizeObs?.disconnect()
+  _overlayResizeObs = null
+}
+
+async function _connectOverlayObs() {
+  _disconnectOverlayObs()
+  const targetId = uiStore.activeCardId
+  if (targetId === null || uiStore.activeCardMode !== 'details') return
+  await nextTick()
+  await new Promise<void>((r) => requestAnimationFrame(() => r()))
+  // Guard: active card may have changed during the awaits.
+  if (uiStore.activeCardId !== targetId || uiStore.activeCardMode !== 'details') return
+  const overlayEl = cardsAreaEl.value?.querySelector<HTMLElement>(
+    `[data-details-overlay][data-entry-id="${targetId}"]`,
+  )
+  if (!overlayEl || typeof ResizeObserver === 'undefined') return
+  _overlayResizeObs = new ResizeObserver(updateSpacer)
+  _overlayResizeObs.observe(overlayEl)
+  updateSpacer()
+}
+
+// Reconnect the observer whenever the active card or mode changes.
+watch(
+  [() => uiStore.activeCardId, () => uiStore.activeCardMode],
+  () => _connectOverlayObs(),
+)
+
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 // True while this view is the active route. Used to prevent the
 // pendingHighlightId watcher from consuming the ID before the kept-alive view
@@ -1309,11 +1411,14 @@ onMounted(() => {
     headerResizeObserver.observe(controlsEl.value)
   }
   nextTick(() => checkGroupsFit())
+  cardsAreaEl.value?.addEventListener('scroll', checkSpacerShrink, { passive: true })
 })
 
 onBeforeUnmount(() => {
   headerResizeObserver?.disconnect()
   clearCardLongPress()
+  _disconnectOverlayObs()
+  cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
