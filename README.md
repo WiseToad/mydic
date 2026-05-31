@@ -1,6 +1,6 @@
 # MyDic
 
-MyDic, a tool for those who keen to dramatically improve their memorization of foreign words.
+The tool for those, who keen to improve their memorization of foreign words.
 
 ![mydic](mydic.png)
 

@@ -10,7 +10,9 @@
           v-if="modelValue"
           class="bg-surface-800 border border-surface-700 rounded-2xl shadow-2xl max-w-xs w-full p-6"
         >
-          <h3 class="text-lg font-semibold text-gray-100 mb-4">About MyDic</h3>
+          <h3 class="text-lg font-semibold text-gray-100 mb-1">MyDic</h3>
+
+          <p class="text-sm text-gray-400 mb-4">The tool for those, who keen to improve their memorization of foreign words.</p>
 
           <dl class="space-y-2 mb-6">
             <div class="flex justify-between text-sm">
