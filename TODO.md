@@ -6,7 +6,6 @@ Bugs:
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-- Reorganize wordbook toolbars, collapse long group lists, reconsider layouts for different widths and densities. Fix wordbook layout for narrow Android screens. Maybe it would be better to completely disable different density selector, since it has no effect anyway
 - Implement searching in wordbook
 - Linked words feature
 - Hidden group attribute

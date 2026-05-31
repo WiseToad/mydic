@@ -46,6 +46,11 @@ export interface WordbookEntry {
   updated_at: string
 }
 
+export interface WordbookListResponse {
+  entries: WordbookEntry[]
+  total: number
+}
+
 export interface WordbookLookupResult {
   entry_id: number
   group_id: number

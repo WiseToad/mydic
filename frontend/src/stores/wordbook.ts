@@ -8,6 +8,7 @@ import type { WordbookEntry, WordbookEntryCreate, WordbookEntryUpdate } from '@/
 
 export const useWordbookStore = defineStore('wordbook', () => {
   const entries = ref<WordbookEntry[]>([])
+  const totalEntries = ref(0)
   const isLoading = ref(false)
   const isLoaded = ref(false)
   const fetchError = ref(false)
@@ -16,10 +17,13 @@ export const useWordbookStore = defineStore('wordbook', () => {
     isLoading.value = true
     fetchError.value = false
     try {
-      entries.value = await wordbookApi.list(groupId, langPairs && langPairs.length > 0 ? langPairs : undefined)
+      const result = await wordbookApi.list(groupId, langPairs && langPairs.length > 0 ? langPairs : undefined)
+      entries.value = result.entries
+      totalEntries.value = result.total
       isLoaded.value = true
     } catch (e: unknown) {
       entries.value = []
+      totalEntries.value = 0
       fetchError.value = true
       useToastStore().error(extractErrorMessage(e, 'Failed to load wordbook'))
     } finally {
@@ -44,6 +48,7 @@ export const useWordbookStore = defineStore('wordbook', () => {
   async function deleteEntry(id: number): Promise<void> {
     await wordbookApi.remove(id)
     entries.value = entries.value.filter((e) => e.id !== id)
+    if (totalEntries.value > 0) totalEntries.value--
   }
 
   /**
@@ -71,10 +76,11 @@ export const useWordbookStore = defineStore('wordbook', () => {
 
   function reset() {
     entries.value = []
+    totalEntries.value = 0
     isLoading.value = false
     isLoaded.value = false
     fetchError.value = false
   }
 
-  return { entries, isLoading, isLoaded, fetchError, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
+  return { entries, totalEntries, isLoading, isLoaded, fetchError, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
 })

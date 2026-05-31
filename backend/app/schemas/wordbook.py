@@ -88,6 +88,11 @@ class WordbookEntryResponse(BaseModel):
         return provider.abbrev if provider else None
 
 
+class WordbookListResponse(BaseModel):
+    entries: list[WordbookEntryResponse]
+    total: int
+
+
 class WordbookLookupResult(BaseModel):
     entry_id: int
     group_id: int

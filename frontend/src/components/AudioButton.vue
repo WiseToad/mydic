@@ -65,11 +65,11 @@
             :title="isCurrentDefault(c) ? 'Current default voice' : undefined"
             @click="onChoosePopup(c.provider.code, c.voice.id)"
           >
-            <!--
-              The current default for this lang gets a leading check so the
-              highlight is unambiguous (the bg tint alone could be misread as
-              a focus/hover style on touch devices).
-            -->
+            <span
+              class="text-xs uppercase shrink-0"
+              :class="isCurrentDefault(c) ? 'text-primary-300' : 'text-primary-400'"
+            >{{ c.provider.abbrev || c.provider.code }}</span>
+            <span class="flex-1 truncate">{{ c.voice.name || c.voice.id }}</span>
             <svg
               v-if="isCurrentDefault(c)"
               xmlns="http://www.w3.org/2000/svg"
@@ -80,12 +80,6 @@
             >
               <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
             </svg>
-            <span class="w-3.5 h-3.5 shrink-0" v-else aria-hidden="true" />
-            <span
-              class="text-xs uppercase shrink-0"
-              :class="isCurrentDefault(c) ? 'text-primary-300' : 'text-primary-400'"
-            >{{ c.provider.abbrev || c.provider.code }}</span>
-            <span class="truncate">{{ c.voice.name || c.voice.id }}</span>
           </button>
         </div>
       </div>

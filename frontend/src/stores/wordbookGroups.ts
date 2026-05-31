@@ -60,6 +60,7 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     wordbookStore.entries.splice(
       wordbookStore.entries.findIndex((e) => e.id === entryId), 1,
     )
+    if (wordbookStore.totalEntries > 0) wordbookStore.totalEntries--
   }
 
   /**

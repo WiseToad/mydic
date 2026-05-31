@@ -1,133 +1,70 @@
 <template>
   <div class="flex-1 min-h-0 flex flex-col">
-    <!-- Header row: title + tab bar + right controls (fixed, does not scroll) -->
-    <!--
-      Layout switches between three modes via JS measurement (see
-      `checkGroupsFit` in script):
-        - inline:        [title] [groups (flex-1)] [controls]
-        - with-controls: row 1 [title (w-full)] /
-                         row 2 [groups (flex-1)] [controls]
-        - standalone:    row 1 [title] [controls (ml-auto)] /
-                         row 2 [groups (basis-full)]
-      The `w-full` on the title in `with-controls` mode is what forces the
-      flex-wrap break: a 100%-wide item leaves no room for its siblings,
-      so groups + controls wrap together to the next row.
-    -->
-    <div
-      class="flex-none overflow-visible"
-      :class="headerLayout === 'with-controls' ? 'pt-2 pb-3' : 'pt-8 pb-3'"
-    >
-    <div ref="headerRowEl" class="flex items-center gap-3 flex-wrap">
+    <!-- Header: two fixed rows, does not scroll -->
+    <div class="flex-none pt-3 pb-3">
 
-      <h1
-        ref="titleEl"
-        class="text-xl font-bold text-gray-100"
-        :class="headerLayout === 'with-controls' ? 'w-full' : 'shrink-0'"
-      >Wordbook</h1>
+      <!-- Row 1: Wordbook title · [lang chips or collapsed popup] · toolbar buttons -->
+      <div ref="headerRow1El" class="flex items-center gap-2 overflow-visible">
+        <h1 ref="titleEl" class="text-xl font-bold text-gray-100 shrink-0">Wordbook</h1>
+        <div class="flex-1 min-w-0" />
 
-      <!-- Word group tabs -->
-      <div
-        ref="groupsEl"
-        class="flex items-center gap-1 flex-wrap"
-        :class="headerLayout === 'standalone' ? 'order-1 basis-full' : 'flex-1 min-w-0'"
-      >
-        <!-- Each group tab -->
-        <div
-          v-for="tab in groupsStore.tabs"
-          :key="tab.id"
-          :data-tab-id="tab.id"
-          class="relative flex items-center gap-0 rounded-full border transition-colors select-none"
-          :class="[
-            uiStore.activeGroupId === tab.id
-              ? 'border-primary-500/50 bg-primary-500/10'
-              : 'border-surface-700',
-            draggedTabId === tab.id
-              ? 'opacity-40 cursor-grabbing'
-              : longPressReadyTabId === tab.id
-                ? 'cursor-text'
-                : 'cursor-default',
-            dragOverTabId === tab.id ? 'ring-2 ring-primary-500/50' : '',
-          ]"
-          style="touch-action: none"
-          @pointerdown="onTabPointerDown($event, tab.id)"
-          @pointermove="onTabPointerMove"
-          @pointerup="onTabPointerUp"
-          @pointercancel="onTabPointerCancel"
-          @contextmenu.prevent
-        >
-          <!-- Name or inline edit input -->
-          <template v-if="editingTabId !== tab.id">
-            <span
-              class="px-3 py-1 text-xs transition-colors rounded-l-full"
-              :class="uiStore.activeGroupId === tab.id ? 'text-primary-300' : 'text-gray-400'"
-            >{{ tab.name }}</span>
-            <button
-              data-delete-tab
-              class="pr-3 pl-1.5 py-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-r-full text-xs leading-none"
-              title="Delete group"
-            >×</button>
-          </template>
-          <template v-else>
-            <!-- Sizer: keeps the pill width as the user types (matches view-mode content) -->
-            <span class="px-3 py-1 text-xs invisible pointer-events-none" aria-hidden="true">{{ tabEditName }}</span>
-            <span class="pr-2 pl-1 py-1 text-xs invisible pointer-events-none" aria-hidden="true">×</span>
-            <input
-              v-focus-select
-              type="text"
-              v-model="tabEditName"
-              :maxlength="GROUP_NAME_MAX_LEN"
-              class="absolute inset-0 px-3 py-1 text-xs bg-transparent text-gray-200 outline-none rounded-full"
-              @blur="saveTabEdit(tab.id)"
-              @keydown.enter.prevent="saveTabEdit(tab.id)"
-              @keydown.escape.prevent="cancelTabEdit"
-              @pointerdown.stop
-            />
-          </template>
+        <!-- Inline lang-pair chips (when not collapsed) -->
+        <div v-if="!langChipsCollapsed && availableLangs.length > 0" class="flex items-center gap-1">
+
+          <button
+            v-for="lang in availableLangs"
+            :key="lang"
+            @click="toggleLang(lang)"
+            :class="[
+              'inline-flex items-center px-2 h-5 rounded-md text-xs leading-none transition-colors border',
+              uiStore.activeLangs.length === 0
+                ? 'text-gray-500 border-surface-700 hover:text-gray-300 hover:border-surface-500'
+                : uiStore.activeLangs.includes(lang)
+                  ? 'bg-primary-500/20 text-primary-400 border-primary-500/40'
+                  : 'text-gray-700 border-surface-800 hover:text-gray-500',
+            ]"
+          ><span class="block -translate-y-px">{{ formatLangPair(lang) }}</span></button>
         </div>
 
-        <!-- Add group button / Delete zone while dragging a group tab -->
-        <button
-          v-if="!draggedTabId"
-          class="px-2.5 py-1 text-xs text-gray-600 hover:text-gray-300 border border-dashed border-surface-700 hover:border-surface-500 rounded-full transition-colors"
-          @click="addNewTab"
-          title="Add word group"
-        >+ group</button>
-        <div
-          v-else
-          data-delete-tab-zone
-          class="px-2.5 py-1 text-xs rounded-full border border-dashed transition-colors select-none"
-          :class="dragOverDeleteZone
-            ? 'text-red-400 bg-red-500/10 border-red-500/50'
-            : 'text-gray-500 border-surface-600'"
-        >Delete</div>
-      </div>
+        <!-- Toolbar buttons -->
+        <div ref="toolbarEl" class="flex items-center gap-2 shrink-0">
 
-      <!-- Right controls: translation toggle + lang filter + count + density -->
-      <div
-        ref="controlsEl"
-        class="flex items-center gap-2 shrink-0 flex-wrap justify-end"
-        :class="headerLayout === 'standalone' ? 'ml-auto' : ''"
-      >
-
-        <!-- Language filter chips + Translation toggle + Density toggler -->
-        <div class="relative flex items-center gap-2">
-          <span class="absolute bottom-full right-0 mb-1.5 text-xs text-gray-500 whitespace-nowrap text-center">{{ filteredEntries.length }} entries</span>
-
-          <!-- Language filter chips (only when at least one source lang present) -->
-          <div v-if="availableLangs.length > 0" class="flex items-center gap-1">
+          <!-- Collapsed lang-pair popup button (when chips don't fit) -->
+          <div v-if="langChipsCollapsed && availableLangs.length > 0" class="relative" ref="langPopupContainerRef">
             <button
-              v-for="lang in availableLangs"
-              :key="lang"
-              @click="toggleLang(lang)"
-              :class="[
-                'inline-flex items-center px-2 h-5 rounded-md text-xs leading-none transition-colors border',
-                uiStore.activeLangs.length === 0
-                  ? 'text-gray-500 border-surface-700 hover:text-gray-300 hover:border-surface-500'
+              class="p-1.5 transition-colors rounded-lg border border-surface-700"
+              :class="uiStore.activeLangs.length > 0 ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+              @click.stop="showLangPopup = !showLangPopup"
+              title="Filter by language pair"
+            >
+              <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.3">
+                <circle cx="8" cy="8" r="6.5"/>
+                <ellipse cx="8" cy="8" rx="2.8" ry="6.5"/>
+                <line x1="1.5" y1="8" x2="14.5" y2="8"/>
+                <line x1="2.2" y1="5" x2="13.8" y2="5"/>
+                <line x1="2.2" y1="11" x2="13.8" y2="11"/>
+              </svg>
+            </button>
+            <div
+              v-if="showLangPopup"
+              class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[110px]"
+              @click.stop
+            >
+              <button
+                v-for="lang in availableLangs"
+                :key="lang"
+                class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
+                :class="uiStore.activeLangs.length === 0
+                  ? 'text-gray-300 hover:bg-surface-800'
                   : uiStore.activeLangs.includes(lang)
-                    ? 'bg-primary-500/20 text-primary-400 border-primary-500/40'
-                    : 'text-gray-700 border-surface-800 hover:text-gray-500',
-              ]"
-            ><span class="block -translate-y-px">{{ formatLangPair(lang) }}</span></button>
+                    ? 'text-primary-400 bg-primary-500/10'
+                    : 'text-gray-300 hover:bg-surface-800'"
+                @click="toggleLang(lang); showLangPopup = false"
+              >
+                <span class="flex-1 -translate-y-px">{{ formatLangPair(lang) }}</span>
+                <span v-if="uiStore.activeLangs.length > 0 && uiStore.activeLangs.includes(lang)" class="shrink-0 text-primary-400">✓</span>
+              </button>
+            </div>
           </div>
 
           <!-- Filter by color (icon + popup) -->
@@ -150,7 +87,7 @@
             </button>
             <div
               v-if="showColorFilter"
-              class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[140px]"
+              class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[120px]"
               @click.stop
             >
               <button
@@ -160,18 +97,19 @@
                 :class="uiStore.activeColors.includes(opt)
                   ? 'text-primary-400 bg-primary-500/10'
                   : 'text-gray-300 hover:bg-surface-800'"
-                @click="toggleColor(opt)"
+                @click="toggleColor(opt); showColorFilter = false"
               >
                 <span
                   v-if="opt === 'none'"
-                  class="inline-flex w-3 h-3 rounded-full border border-surface-600"
+                  class="shrink-0 inline-flex w-3 h-3 rounded-full border border-surface-600"
                 />
                 <span
                   v-else
-                  class="inline-flex w-3 h-3 rounded-full"
+                  class="shrink-0 inline-flex w-3 h-3 rounded-full"
                   :class="colorSwatchBg(opt)"
                 />
-                {{ colorOptionLabel(opt) }}
+                <span class="flex-1">{{ colorOptionLabel(opt) }}</span>
+                <span v-if="uiStore.activeColors.includes(opt)" class="shrink-0 text-primary-400">✓</span>
               </button>
             </div>
           </div>
@@ -215,6 +153,7 @@
 
           <!-- Side word-list panel toggle (icon) -->
           <button
+            ref="sidePanelToggleBtnEl"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
             :class="store.entries.length === 0
               ? 'text-gray-700 cursor-not-allowed'
@@ -232,48 +171,154 @@
             </svg>
           </button>
 
-          <!-- Density toggler -->
-          <div class="flex items-center border border-surface-700 rounded-lg overflow-hidden">
-          <button
-            v-for="level in densityLevels"
-            :key="level"
-            @click="uiStore.density = level"
-            :title="level.charAt(0).toUpperCase() + level.slice(1)"
-            :class="[
-              'p-1.5 transition-colors',
-              uiStore.density === level
-                ? 'text-primary-400 bg-primary-500/10'
-                : 'text-gray-500 hover:text-gray-300',
-            ]"
-          >
-            <!-- Compact: 5 thin columns -->
-            <svg v-if="level === 'compact'" viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
-              <rect x="0"   y="1" width="1.5" height="12" rx="0.4"/>
-              <rect x="3"   y="1" width="1.5" height="12" rx="0.4"/>
-              <rect x="6"   y="1" width="1.5" height="12" rx="0.4"/>
-              <rect x="9"   y="1" width="1.5" height="12" rx="0.4"/>
-              <rect x="12"  y="1" width="1.5" height="12" rx="0.4"/>
-            </svg>
-            <!-- Normal: 3 medium columns -->
-            <svg v-else-if="level === 'normal'" viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
-              <rect x="0"  y="1" width="3" height="12" rx="0.4"/>
-              <rect x="5"  y="1" width="3" height="12" rx="0.4"/>
-              <rect x="10" y="1" width="3" height="12" rx="0.4"/>
-            </svg>
-            <!-- Spacious: 2 wide columns -->
-            <svg v-else viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
-              <rect x="0" y="1" width="5.5" height="12" rx="0.4"/>
-              <rect x="8" y="1" width="5.5" height="12" rx="0.4"/>
-            </svg>
-          </button>
+          <!-- Density toggler (hidden on very narrow screens) -->
+          <div v-if="!isVeryNarrow" class="flex items-center border border-surface-700 rounded-lg overflow-hidden">
+            <button
+              v-for="level in densityLevels"
+              :key="level"
+              @click="uiStore.density = level"
+              :title="level.charAt(0).toUpperCase() + level.slice(1)"
+              :class="[
+                'p-1.5 transition-colors',
+                uiStore.density === level
+                  ? 'text-primary-400 bg-primary-500/10'
+                  : 'text-gray-500 hover:text-gray-300',
+              ]"
+            >
+              <svg v-if="level === 'compact'" viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
+                <rect x="0"   y="1" width="1.5" height="12" rx="0.4"/>
+                <rect x="3"   y="1" width="1.5" height="12" rx="0.4"/>
+                <rect x="6"   y="1" width="1.5" height="12" rx="0.4"/>
+                <rect x="9"   y="1" width="1.5" height="12" rx="0.4"/>
+                <rect x="12"  y="1" width="1.5" height="12" rx="0.4"/>
+              </svg>
+              <svg v-else-if="level === 'normal'" viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
+                <rect x="0"  y="1" width="3" height="12" rx="0.4"/>
+                <rect x="5"  y="1" width="3" height="12" rx="0.4"/>
+                <rect x="10" y="1" width="3" height="12" rx="0.4"/>
+              </svg>
+              <svg v-else viewBox="0 0 14 14" class="w-3.5 h-3.5" fill="currentColor">
+                <rect x="0" y="1" width="5.5" height="12" rx="0.4"/>
+                <rect x="8" y="1" width="5.5" height="12" rx="0.4"/>
+              </svg>
+            </button>
           </div>
+
         </div>
       </div>
-    </div>
+
+      <!-- Row 2: group tabs · [more... / + group] · entry count -->
+      <div ref="groupsRowEl" class="flex items-center gap-1 flex-wrap mt-2">
+
+        <!-- Each group tab -->
+        <div
+          v-for="tab in groupsStore.tabs"
+          v-show="!overflowedTabIds.has(tab.id)"
+          :key="tab.id"
+          :data-tab-id="tab.id"
+          class="relative flex items-center gap-0 rounded-full border transition-colors select-none"
+          :class="[
+            uiStore.activeGroupId === tab.id
+              ? 'border-primary-500/50 bg-primary-500/10'
+              : 'border-surface-700',
+            draggedTabId === tab.id
+              ? 'opacity-40 cursor-grabbing'
+              : longPressReadyTabId === tab.id
+                ? 'cursor-text'
+                : 'cursor-default',
+            dragOverTabId === tab.id ? 'ring-2 ring-primary-500/50' : '',
+          ]"
+          style="touch-action: none"
+          @pointerdown="onTabPointerDown($event, tab.id)"
+          @pointermove="onTabPointerMove"
+          @pointerup="onTabPointerUp"
+          @pointercancel="onTabPointerCancel"
+          @contextmenu.prevent
+        >
+          <template v-if="editingTabId !== tab.id">
+            <span
+              class="px-3 py-1 text-xs transition-colors rounded-l-full"
+              :class="uiStore.activeGroupId === tab.id ? 'text-primary-300' : 'text-gray-400'"
+            >{{ tab.name }}</span>
+            <button
+              data-delete-tab
+              class="pr-3 pl-1.5 py-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-r-full text-xs leading-none"
+              title="Delete group"
+            >×</button>
+          </template>
+          <template v-else>
+            <span class="px-3 py-1 text-xs invisible pointer-events-none" aria-hidden="true">{{ tabEditName }}</span>
+            <span class="pr-2 pl-1 py-1 text-xs invisible pointer-events-none" aria-hidden="true">×</span>
+            <input
+              v-focus-select
+              type="text"
+              v-model="tabEditName"
+              :maxlength="GROUP_NAME_MAX_LEN"
+              class="absolute inset-0 px-3 py-1 text-xs bg-transparent text-gray-200 outline-none rounded-full"
+              @blur="saveTabEdit(tab.id)"
+              @keydown.enter.prevent="saveTabEdit(tab.id)"
+              @keydown.escape.prevent="cancelTabEdit"
+              @pointerdown.stop
+            />
+          </template>
+        </div>
+
+        <!-- Add group / more... popup / Delete zone while dragging -->
+        <div v-if="!draggedTabId" class="relative" ref="addGroupBtnContainerEl">
+          <button
+            ref="addGroupBtnEl"
+            class="px-2.5 py-1 text-xs border border-dashed rounded-full transition-colors"
+            :class="groupsOverflow
+              ? 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'
+              : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
+            @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
+            :title="groupsOverflow ? 'Show all groups' : 'Add word group'"
+          >{{ groupsOverflow ? 'more ...' : '+ group' }}</button>
+
+          <!-- Groups overflow popup -->
+          <div
+            v-if="showGroupsPopup"
+            ref="groupsPopupEl"
+            class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-64 overflow-y-auto"
+            @click.stop
+          >
+            <button
+              v-for="tab in groupsStore.tabs"
+              :key="tab.id"
+              :data-popup-group-item="tab.id"
+              class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
+              :class="uiStore.activeGroupId === tab.id
+                ? 'text-primary-400 bg-primary-500/10'
+                : 'text-gray-300 hover:bg-surface-800'"
+              @click="selectTabFromPopup(tab.id)"
+            >
+              <span class="flex-1 truncate">{{ tab.name }}</span>
+              <span v-if="uiStore.activeGroupId === tab.id" class="shrink-0 text-primary-400">✓</span>
+            </button>
+            <div class="border-t border-surface-700 mt-1 pt-1">
+              <button
+                class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
+                @click="addNewTabFromPopup"
+              >+ Add group</button>
+            </div>
+          </div>
+        </div>
+        <div
+          v-else
+          data-delete-tab-zone
+          class="px-2.5 py-1 text-xs rounded-full border border-dashed transition-colors select-none"
+          :class="dragOverDeleteZone
+            ? 'text-red-400 bg-red-500/10 border-red-500/50'
+            : 'text-gray-500 border-surface-600'"
+        >Delete</div>
+
+        <!-- Entry count, right-aligned -->
+        <span ref="entryCountLabelEl" class="ml-auto shrink-0 text-xs text-gray-500 select-none tabular-nums">{{ entryCountLabel }}</span>
+      </div>
     </div>
 
     <!-- Content row: main grid + optional right word-list panel (fills remaining height) -->
-    <div class="flex-1 min-h-0 flex gap-3 pb-3">
+    <div class="flex-1 min-h-0 flex gap-3 pb-3 relative">
       <div ref="cardsAreaEl" class="flex-1 min-w-0 overflow-y-auto -mx-0.5 p-0.5">
         <!-- Loading skeleton: shown after 200 ms regardless of previous content -->
         <div v-if="showSkeleton" class="grid gap-3" :style="gridStyle">
@@ -342,13 +387,17 @@
 
       <!--
         Right-side vertical word-list panel.
-        Shrinks to fit when few words; caps at available height with internal
-        scroll when many words. pt-3/pb-3 on the parent provides equal top/bottom
-        spacing so the panel never touches the screen edges.
+        Portrait: ephemeral overlay (absolute, does not affect grid width).
+        Landscape: static sidebar that shrinks/caps to available height.
       -->
       <aside
         v-if="uiStore.sidePanelVisible && filteredEntries.length > 0"
-        class="shrink-0 w-44 sm:w-56 self-start max-h-full overflow-y-auto card p-2"
+        ref="sidePanelEl"
+        class="shrink-0 w-44 sm:w-56 card p-2"
+        :class="isPortrait
+          ? 'absolute right-0 top-0 bottom-3 z-20 overflow-y-auto'
+          : 'self-start max-h-full overflow-y-auto'"
+        @click.stop
       >
         <ul class="space-y-0.5">
           <li v-for="entry in sortedPanelWords" :key="entry.id" class="flex items-center">
@@ -362,7 +411,7 @@
                 ? 'text-gray-300 bg-surface-800 hover:text-primary-300 hover:bg-surface-800'
                 : 'text-gray-300 hover:text-primary-300 hover:bg-surface-800'"
               :title="uiStore.swapDisplay ? entry.target_text : entry.source_text"
-              @click="scrollToEntry(entry.id)"
+              @click="onSidePanelWordClick(entry.id)"
             >{{ uiStore.swapDisplay ? entry.target_text : entry.source_text }}</button>
           </li>
         </ul>
@@ -547,9 +596,6 @@ watch(showColorFilter, (open) => {
   if (open) document.addEventListener('click', onColorFilterOutsideClick, true)
   else document.removeEventListener('click', onColorFilterOutsideClick, true)
 })
-onBeforeUnmount(() => {
-  document.removeEventListener('click', onColorFilterOutsideClick, true)
-})
 
 // ─── Filtered entries ─────────────────────────────────────────────────────────
 // Group and lang-pair filtering is now server-side; only the color filter
@@ -574,7 +620,20 @@ watch(filteredEntries, (entries) => {
   }
 })
 
-// ─── Side panel (alphabetical word list) ─────────────────────────────────────
+// ─── Entry count label ─────────────────────────────────────────────────────────────────
+// Shows total when no filter active; filtered/total when any filter
+// (color or lang-pair) actually reduces the visible count.
+
+const entryCountLabel = computed(() => {
+  const filtered = filteredEntries.value.length
+  const total = store.totalEntries
+  const anyFilterActive = uiStore.activeColors.length > 0 || uiStore.activeLangs.length > 0
+  const suffix = isVeryNarrow.value ? '' : ' entries'
+  if (anyFilterActive && filtered < total) return `${filtered}/${total}${suffix}`
+  return `${total}${suffix}`
+})
+
+// ─── Side panel (alphabetical word list) ───────────────────────────────────────────────────
 
 const sortedPanelWords = computed(() =>
   [...filteredEntries.value].sort((a, b) => {
@@ -821,141 +880,311 @@ async function confirmDeleteTab() {
   }
 }
 
-// ─── Header layout overflow detection ──────────────────────────────
+// ─── Header layout measurement ───────────────────────────────────────────────
 
-// Maximum length for a word group name. Mirrors the Pydantic `Field(
-// max_length=...)` constraint on `WordGroupCreate`/`WordGroupUpdate`.
 const GROUP_NAME_MAX_LEN = 25
 
-// Refs to the three header sections + the active layout mode. See the
-// matching template comment for what each mode looks like visually.
-//   - 'inline'        : everything fits on a single row.
-//   - 'with-controls' : groups doesn't fit alongside title + controls,
-//                       but groups + controls *do* fit on a row of
-//                       their own — so both drop together below title.
-//   - 'standalone'    : groups is wider than the row even without the
-//                       title, so it takes a full-width row of its own
-//                       and controls stays on row 1 with the title.
-type HeaderLayout = 'inline' | 'with-controls' | 'standalone'
-const headerRowEl = ref<HTMLElement | null>(null)
+// Row 1 refs
+const headerRow1El = ref<HTMLElement | null>(null)
 const titleEl = ref<HTMLElement | null>(null)
-const groupsEl = ref<HTMLElement | null>(null)
-const controlsEl = ref<HTMLElement | null>(null)
-const headerLayout = ref<HeaderLayout>('inline')
+const toolbarEl = ref<HTMLElement | null>(null)
+const langChipsCollapsed = ref(false)
 
-// Pixel values matching the Tailwind gap classes on the corresponding
-// containers (gap-3 outer, gap-1 between group pills).
-const HEADER_OUTER_GAP_PX = 12
-const HEADER_GROUPS_GAP_PX = 4
+// Lang popup
+const showLangPopup = ref(false)
+const langPopupContainerRef = ref<HTMLElement | null>(null)
 
-/**
- * Fractional width of `el` via `getBoundingClientRect`. We deliberately
- * avoid `offsetWidth` here because it is integer-rounded — over many
- * children that rounding can accumulate to a several-pixel error and
- * cause the wrap detector to falsely conclude that the group row "fits".
- */
+function onLangPopupOutsideClick(e: MouseEvent) {
+  if (!(e.target as Node | null)) return
+  if (langPopupContainerRef.value?.contains(e.target as Node)) return
+  showLangPopup.value = false
+}
+watch(showLangPopup, (open) => {
+  if (open) document.addEventListener('click', onLangPopupOutsideClick, true)
+  else document.removeEventListener('click', onLangPopupOutsideClick, true)
+})
+
+// Row 2 refs
+const groupsRowEl = ref<HTMLElement | null>(null)
+const addGroupBtnContainerEl = ref<HTMLElement | null>(null)
+const addGroupBtnEl = ref<HTMLElement | null>(null)
+const entryCountLabelEl = ref<HTMLElement | null>(null)
+const tabWidths = new Map<number, number>()
+const overflowedTabIds = ref(new Set<number>())
+const groupsOverflow = ref(false)
+const visibleTabCount = ref(0)
+
+// Groups popup
+const showGroupsPopup = ref(false)
+const groupsPopupEl = ref<HTMLElement | null>(null)
+
+function onGroupsPopupOutsideClick(e: MouseEvent) {
+  if (!(e.target as Node | null)) return
+  if (addGroupBtnContainerEl.value?.contains(e.target as Node)) return
+  showGroupsPopup.value = false
+}
+watch(showGroupsPopup, (open) => {
+  if (open) document.addEventListener('click', onGroupsPopupOutsideClick, true)
+  else document.removeEventListener('click', onGroupsPopupOutsideClick, true)
+})
+
+// Portrait / narrow detection
+const isPortrait = ref(false)
+const isVeryNarrow = ref(false)
+let portraitMq: MediaQueryList | null = null
+
+function onPortraitChange() {
+  const newPortrait = portraitMq?.matches ?? false
+  if (isPortrait.value !== newPortrait) {
+    isPortrait.value = newPortrait
+    if (uiStore.sidePanelVisible) dismissSidePanel()
+    nextTick(() => checkTabsFit())
+  }
+}
+
+watch(isVeryNarrow, (narrow) => {
+  if (narrow && uiStore.density !== 'normal') uiStore.density = 'normal'
+})
+
+// Side panel portrait overlay
+const sidePanelEl = ref<HTMLElement | null>(null)
+const sidePanelToggleBtnEl = ref<HTMLElement | null>(null)
+
+function dismissSidePanel() {
+  uiStore.sidePanelVisible = false
+}
+
+function onSidePanelOutsideClick(e: MouseEvent) {
+  const target = e.target as Node | null
+  if (!target || !sidePanelEl.value) return
+  if (sidePanelEl.value.contains(target)) return
+  // The toggle button manages its own state via @click; skip here so the
+  // capture-phase dismiss doesn't race with the button's bubble-phase toggle.
+  if (sidePanelToggleBtnEl.value?.contains(target)) return
+  dismissSidePanel()
+}
+
+watch(
+  [() => uiStore.sidePanelVisible, isPortrait],
+  ([visible, portrait]) => {
+    if (visible && portrait) document.addEventListener('click', onSidePanelOutsideClick, true)
+    else document.removeEventListener('click', onSidePanelOutsideClick, true)
+  },
+)
+
+async function onSidePanelWordClick(id: number) {
+  if (isPortrait.value) dismissSidePanel()
+  await scrollToEntry(id)
+}
+
+// ─── Row 1: lang chips fit check ─────────────────────────────────────────────
+
 function getWidth(el: HTMLElement): number {
   return el.getBoundingClientRect().width
 }
 
-/**
- * Natural rendered width of an element's contents, independent of its
- * own layout box.
- *
- * `getBoundingClientRect()` on the element itself reports the box width,
- * which equals the full container width when the element has been given
- * `w-full` (as the title does in `with-controls` mode). A `Range` over
- * the contents reports only the painted glyph extent — i.e. the natural
- * intrinsic width of the content — which is what the fit calculation
- * actually needs. Without this, `inlineTotal` would stay permanently
- * over the container width while in `with-controls` mode, blocking the
- * transition back to `inline` even after the groups shrink.
- */
 function getContentWidth(el: HTMLElement): number {
   const range = document.createRange()
   range.selectNodeContents(el)
   return range.getBoundingClientRect().width
 }
 
-/**
- * Sum the rendered widths of `el`'s direct children plus the inter-child
- * gap. This gives the natural single-line width of a flex container with
- * `flex-wrap`, regardless of whether the children are currently wrapping.
- */
-function sumChildrenWidth(el: HTMLElement, gapPx: number): number {
-  const children = Array.from(el.children) as HTMLElement[]
-  if (children.length === 0) return 0
-  const sum = children.reduce((s, c) => s + getWidth(c), 0)
-  return sum + Math.max(0, children.length - 1) * gapPx
+function checkLangFit() {
+  const row1 = headerRow1El.value
+  const title = titleEl.value
+  const toolbar = toolbarEl.value
+  if (!row1 || !title || !toolbar) return
+  const containerWidth = getWidth(row1)
+  langChipsCollapsed.value = (getContentWidth(title) + getWidth(toolbar)) > containerWidth / 2
 }
 
-// Slack required between the natural row width and the container width
-// before we consider the row to fit inline. Without it, the row can
-// nominally fit by a fraction of a pixel yet still trigger an internal
-// `flex-wrap` inside the groups container — producing a multi-line tab
-// row sandwiched between the title and the right controls. Sized to one
-// inter-pill gap so the inline row always has at least one gap of
-// breathing room before flipping to the wrapped layout.
-const HEADER_FIT_SLACK_PX = HEADER_GROUPS_GAP_PX
+// ─── Row 2: tab overflow fit check ───────────────────────────────────────────
 
-/**
- * Pick the active header layout mode.
- *
- * Two natural-width totals are computed and compared (with a small
- * slack buffer) against the container width:
- *   - `inlineTotal`      = title + groups + controls + 2 outer gaps
- *                          — the width needed for the inline mode.
- *   - `groupsControlsRow` = groups + controls + 1 outer gap
- *                          — the width needed when title is on its own
- *                            row above and groups + controls share row 2.
- *
- * The widest fit wins:
- *   inlineTotal fits        → 'inline'
- *   else groupsControlsRow  → 'with-controls'
- *   else                    → 'standalone'
- *
- * `controls` is `shrink-0`, so its measured box width is already its
- * natural width. `title` gets `w-full` in `with-controls` mode (so its
- * box width is unreliable) — we use `getContentWidth` instead, which
- * reports just the rendered text extent. `groups` is laid out via
- * `flex-1` or `basis-full`, neither of which equals its natural width
- * — hence the explicit `sumChildrenWidth` for it.
- */
-function checkGroupsFit() {
-  const container = headerRowEl.value
-  const title = titleEl.value
-  const groups = groupsEl.value
-  const controls = controlsEl.value
-  if (!container || !title || !groups || !controls) return
-  const containerWidth = getWidth(container)
-  const titleWidth = getContentWidth(title)
-  const groupsWidth = sumChildrenWidth(groups, HEADER_GROUPS_GAP_PX)
-  const controlsWidth = getWidth(controls)
-  const inlineTotal = titleWidth + groupsWidth + controlsWidth + 2 * HEADER_OUTER_GAP_PX
-  const groupsControlsRow = groupsWidth + controlsWidth + HEADER_OUTER_GAP_PX
-  const limit = containerWidth - HEADER_FIT_SLACK_PX
+const HEADER_GROUPS_GAP_PX = 4
+// Tracks the largest button width seen across both "+ group" and "more ..."
+// states. Using the running max prevents the simulation from oscillating:
+// if the two texts have different rendered widths, alternating between them
+// causes each checkTabsFit call to flip groupsOverflow, which triggers
+// another call, which flips again — an infinite resize feedback loop.
+let _maxSeenBtnW = 0
 
-  if (inlineTotal <= limit) {
-    headerLayout.value = 'inline'
-  } else if (groupsControlsRow <= limit) {
-    headerLayout.value = 'with-controls'
-  } else {
-    headerLayout.value = 'standalone'
+function measureTabWidths() {
+  const rowEl = groupsRowEl.value
+  if (!rowEl) return
+  for (const el of Array.from(rowEl.querySelectorAll<HTMLElement>('[data-tab-id]'))) {
+    const id = Number(el.getAttribute('data-tab-id'))
+    if (isNaN(id)) continue
+    const w = el.getBoundingClientRect().width
+    if (w > 0) tabWidths.set(id, w)
   }
 }
 
-// ResizeObserver on the container catches window/parent resizes; the one
-// on the controls catches changes to controls children sizes (e.g. lang
-// chips appearing when entries with new lang pairs are added).
-// A separate watcher below covers groups changes (rename / add / delete /
-// inline edit), since the groups container's rendered width does not
-// change with content while in inline `flex-1` mode.
+/**
+ * Simulate flex-wrap placement of all tabs + the add/more button.
+ * Hides tabs (via overflowedTabIds) that would push the button beyond
+ * maxLines (1 for landscape, 2 for portrait).
+ */
+function checkTabsFit() {
+  measureTabWidths()
+  const rowEl = groupsRowEl.value
+  const addBtn = addGroupBtnEl.value
+  if (!rowEl || !addBtn) return
+
+  const tabs = groupsStore.tabs
+  const containerWidth = getWidth(rowEl)
+  let btnW = getWidth(addBtn)
+  if (btnW === 0) btnW = 64
+  // Always use the largest button width seen so far. This prevents oscillation
+  // between the "+ group" and "more ..." states whose rendered widths differ:
+  // once we've seen the wider state we keep using it, so the simulation's
+  // outcome is identical on every call for the same container width.
+  _maxSeenBtnW = Math.max(_maxSeenBtnW, btnW)
+  btnW = _maxSeenBtnW
+  // Count label is a flex item (ml-auto only adds margin, not layout width).
+  // Include its natural width in the simulation so it doesn't cause unexpected wrapping.
+  const labelW = entryCountLabelEl.value ? getWidth(entryCountLabelEl.value) : 0
+  // If the label element exists but returned 0 it hasn't been laid out yet — defer.
+  if (entryCountLabelEl.value && labelW === 0) {
+    if (containerWidth > 0) nextTick(() => checkTabsFit())
+    return
+  }
+  const maxLines = isPortrait.value ? 2 : 1
+  const gap = HEADER_GROUPS_GAP_PX
+
+  for (const tab of tabs) {
+    if (!tabWidths.has(tab.id)) {
+      overflowedTabIds.value = new Set()
+      groupsOverflow.value = false
+      visibleTabCount.value = tabs.length
+      if (containerWidth > 0) nextTick(() => checkTabsFit())
+      return
+    }
+  }
+
+  /**
+   * Place tab[i] at cursor position x (on line `line`), then simulate where
+   * the button and label would land.  Returns true if labelLine > maxLines.
+   */
+  function wouldOverflow(x: number, line: number, w: number): boolean {
+    if (x > 0 && x + gap + w > containerWidth) { line++; x = w }
+    else { x = x === 0 ? w : x + gap + w }
+
+    let btnEndX: number, btnLine: number
+    if (x + gap + btnW <= containerWidth) {
+      btnLine = line; btnEndX = x + gap + btnW
+    } else {
+      btnLine = line + 1; btnEndX = btnW
+    }
+    const labelLine = (labelW === 0 || btnEndX + gap + labelW <= containerWidth)
+      ? btnLine : btnLine + 1
+    // Overflow when label would land on a later line than the button.
+    // This prevents portrait mode (maxLines=2) from allowing a layout where
+    // the label wraps to line 2 alone while the button is still on line 1.
+    return labelLine > maxLines || labelLine > btnLine
+  }
+
+  let x = 0, line = 1
+  for (let i = 0; i < tabs.length; i++) {
+    const w = tabWidths.get(tabs[i].id)!
+    if (wouldOverflow(x, line, w)) {
+      overflowedTabIds.value = new Set(tabs.slice(i).map(t => t.id))
+      groupsOverflow.value = true
+      visibleTabCount.value = i
+      return
+    }
+    // Actually advance x/line for real.
+    if (x > 0 && x + gap + w > containerWidth) { line++; x = w }
+    else { x = x === 0 ? w : x + gap + w }
+  }
+
+  // Post-loop: verify button + label fit after all visible tabs.
+  // This also handles the zero-tabs case where the loop body never ran.
+  {
+    let btnEndX: number, btnLine: number
+    if (x === 0) {
+      // No tabs placed: button is the first item on a fresh line.
+      btnLine = line; btnEndX = btnW
+    } else if (x + gap + btnW <= containerWidth) {
+      btnLine = line; btnEndX = x + gap + btnW
+    } else {
+      btnLine = line + 1; btnEndX = btnW
+    }
+    const labelLine = (labelW === 0 || btnEndX + gap + labelW <= containerWidth)
+      ? btnLine : btnLine + 1
+    if ((labelLine > maxLines || labelLine > btnLine) && tabs.length > 0) {
+      // This shouldn't happen if the loop above is correct, but guard anyway.
+      const lastIdx = tabs.length - 1
+      overflowedTabIds.value = new Set([tabs[lastIdx].id])
+      groupsOverflow.value = true
+      visibleTabCount.value = lastIdx
+      return
+    }
+  }
+
+  overflowedTabIds.value = new Set()
+  groupsOverflow.value = false
+  visibleTabCount.value = tabs.length
+}
+
+async function toggleGroupsPopup() {
+  if (showGroupsPopup.value) { showGroupsPopup.value = false; return }
+  showGroupsPopup.value = true
+  await nextTick()
+  const popup = groupsPopupEl.value
+  if (!popup) return
+  const activeId = uiStore.activeGroupId
+  const tabs = groupsStore.tabs
+  const activeIndex = tabs.findIndex(t => t.id === activeId)
+  if (activeIndex === -1) return
+  const items = Array.from(popup.querySelectorAll<HTMLElement>('[data-popup-group-item]'))
+  if (items.length === 0) return
+  const itemH = items[0].offsetHeight || 28
+  if (activeIndex < visibleTabCount.value) {
+    popup.scrollTop = visibleTabCount.value * itemH
+  } else {
+    popup.scrollTop = activeIndex * itemH - popup.clientHeight / 2 + itemH / 2
+  }
+}
+
+function selectTabFromPopup(id: number) {
+  selectTab(id)
+  showGroupsPopup.value = false
+}
+
+async function addNewTabFromPopup() {
+  showGroupsPopup.value = false
+  await addNewTab()
+}
+
+// ─── Combined header layout check ────────────────────────────────────────────
+
+function checkHeaderLayout() {
+  const row1 = headerRow1El.value
+  if (!row1) return
+  const w = getWidth(row1)
+  // When the view is deactivated via KeepAlive, elements are detached and
+  // getBoundingClientRect returns 0. Scheduling checkTabsFit from a detached
+  // state causes an infinite loop (labelW stays 0 → endless nextTick retries).
+  if (w === 0) return
+  const wasVeryNarrow = isVeryNarrow.value
+  isVeryNarrow.value = w < 480
+  if (!wasVeryNarrow && isVeryNarrow.value && uiStore.density !== 'normal') uiStore.density = 'normal'
+  checkLangFit()
+  nextTick(() => checkTabsFit())
+}
+
 let headerResizeObserver: ResizeObserver | null = null
 
 watch(
   [() => groupsStore.tabs.map((t) => t.name).join('|'), tabEditName],
-  () => { nextTick(() => checkGroupsFit()) },
+  () => { nextTick(() => checkHeaderLayout()) },
 )
+watch(
+  () => groupsStore.tabs.length,
+  () => { nextTick(() => checkTabsFit()) },
+)
+// Re-check when label text changes (width may change: "42" vs "42 entries")
+watch(entryCountLabel, () => { nextTick(() => checkTabsFit()) })
 
 // ─── Delete dialog ────────────────────────────────────────────────────────────
 
@@ -1403,22 +1632,36 @@ watch(
 const viewIsActive = ref(false)
 
 onMounted(() => {
-  // Data fetching is handled entirely by onActivated (which fires on first
-  // mount too when inside <KeepAlive>). Only DOM-dependent setup goes here.
-  if (typeof ResizeObserver !== 'undefined' && headerRowEl.value && controlsEl.value) {
-    headerResizeObserver = new ResizeObserver(() => checkGroupsFit())
-    headerResizeObserver.observe(headerRowEl.value)
-    headerResizeObserver.observe(controlsEl.value)
+  // Portrait detection
+  if (window.matchMedia) {
+    portraitMq = window.matchMedia('(orientation: portrait)')
+    isPortrait.value = portraitMq.matches
+    portraitMq.addEventListener('change', onPortraitChange)
   }
-  nextTick(() => checkGroupsFit())
+  // ResizeObserver on header rows + toolbar for layout re-checks
+  if (typeof ResizeObserver !== 'undefined') {
+    headerResizeObserver = new ResizeObserver(() => {
+      checkHeaderLayout()
+      if (uiStore.sidePanelVisible && isPortrait.value) dismissSidePanel()
+    })
+    if (headerRow1El.value) headerResizeObserver.observe(headerRow1El.value)
+    if (toolbarEl.value) headerResizeObserver.observe(toolbarEl.value)
+    if (groupsRowEl.value) headerResizeObserver.observe(groupsRowEl.value)
+  }
+  nextTick(() => checkHeaderLayout())
   cardsAreaEl.value?.addEventListener('scroll', checkSpacerShrink, { passive: true })
 })
 
 onBeforeUnmount(() => {
+  portraitMq?.removeEventListener('change', onPortraitChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
+  document.removeEventListener('click', onColorFilterOutsideClick, true)
+  document.removeEventListener('click', onLangPopupOutsideClick, true)
+  document.removeEventListener('click', onGroupsPopupOutsideClick, true)
+  document.removeEventListener('click', onSidePanelOutsideClick, true)
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
@@ -1463,10 +1706,11 @@ onActivated(async () => {
 
 onDeactivated(() => {
   viewIsActive.value = false
-  // Save before closing so activeCardId is still set at snapshot time.
   uiStore.saveOpenDetailsForGroup(uiStore.activeGroupId ?? null)
-  // Close transient overlays so they don't linger when navigating away and back.
   showColorFilter.value = false
+  showLangPopup.value = false
+  showGroupsPopup.value = false
+  dismissSidePanel()
   uiStore.closeActive()
   uiStore.activeMenuId = null
 })

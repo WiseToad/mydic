@@ -445,6 +445,7 @@
           @pointercancel="onGroupMenuCancelPress"
           @click.stop
         >
+          <span class="flex-1">{{ group.name }}</span>
           <svg
             v-if="wordbookUiStore.activeGroupId === group.id"
             xmlns="http://www.w3.org/2000/svg"
@@ -453,8 +454,6 @@
             fill="currentColor"
             aria-hidden="true"
           ><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-          <span v-else class="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-          {{ group.name }}
         </button>
         <p v-if="wordbookGroupsStore.tabs.length === 0" class="px-3 py-1.5 text-sm text-gray-500 italic">No groups yet</p>
       </div>

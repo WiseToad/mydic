@@ -12,6 +12,7 @@ from app.schemas.wordbook import (
     WordbookEntryCreate,
     WordbookEntryResponse,
     WordbookEntryUpdate,
+    WordbookListResponse,
     WordbookLookupResult,
     WordbookMoveItem,
     WordGroupCreate,
@@ -72,19 +73,27 @@ async def lookup_entry(
     )
 
 
-@router.get("", response_model=list[WordbookEntryResponse])
+@router.get("", response_model=WordbookListResponse)
 async def list_entries(
     group_id: int,
     lang_pair: list[str] = Query(default=[]),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    base_where = (
+        WordbookEntry.user_id == current_user.id,
+        WordbookEntry.group_id == group_id,
+    )
+    # Unfiltered total — no lang_pair constraint.
+    total: int = (
+        await db.execute(
+            select(func.count()).where(*base_where)
+        )
+    ).scalar_one()
+
     q = (
         _entry_query()
-        .where(
-            WordbookEntry.user_id == current_user.id,
-            WordbookEntry.group_id == group_id,
-        )
+        .where(*base_where)
         .order_by(WordbookEntry.position.asc(), WordbookEntry.created_at.asc())
     )
     if lang_pair:
@@ -103,7 +112,7 @@ async def list_entries(
             ]
             q = q.where(or_(*conditions))
     rows = (await db.execute(q)).scalars().all()
-    return rows
+    return WordbookListResponse(entries=list(rows), total=total)
 
 
 @router.post("", response_model=WordbookEntryResponse, status_code=201)
