@@ -264,7 +264,8 @@
       </div>
 
       <!-- Row 2: group tabs · [more... / + group] · entry count -->
-      <div ref="groupsRowEl" class="flex items-center gap-1 flex-wrap mt-2">
+      <div class="flex items-start gap-1 mt-2 min-w-0">
+        <div ref="groupsRowEl" class="flex items-center gap-1 flex-wrap min-w-0 flex-1">
 
         <!-- Each group tab -->
         <div
@@ -402,9 +403,10 @@
             ? 'text-red-400 bg-red-500/10 border-red-500/50'
             : 'text-gray-500 border-surface-600'"
         >Delete</div>
+        </div>
 
         <!-- Entry count, right-aligned -->
-        <span ref="entryCountLabelEl" class="ml-auto shrink-0 text-xs text-gray-500 select-none tabular-nums">{{ entryCountLabel }}</span>
+        <span ref="entryCountLabelEl" class="pt-1 shrink-0 text-xs text-gray-500 select-none tabular-nums">{{ entryCountLabel }}</span>
       </div>
     </div>
 
@@ -1180,14 +1182,6 @@ function checkTabsFit() {
   // outcome is identical on every call for the same container width.
   _maxSeenBtnW = Math.max(_maxSeenBtnW, btnW)
   btnW = _maxSeenBtnW
-  // Count label is a flex item (ml-auto only adds margin, not layout width).
-  // Include its natural width in the simulation so it doesn't cause unexpected wrapping.
-  const labelW = entryCountLabelEl.value ? getWidth(entryCountLabelEl.value) : 0
-  // If the label element exists but returned 0 it hasn't been laid out yet — defer.
-  if (entryCountLabelEl.value && labelW === 0) {
-    if (containerWidth > 0) nextTick(() => checkTabsFit())
-    return
-  }
   const maxLines = isPortrait.value ? 2 : 1
   const gap = HEADER_GROUPS_GAP_PX
 
@@ -1203,24 +1197,13 @@ function checkTabsFit() {
 
   /**
    * Place tab[i] at cursor position x (on line `line`), then simulate where
-   * the button and label would land.  Returns true if labelLine > maxLines.
+   * the button would land. Returns true if the button would exceed maxLines.
    */
   function wouldOverflow(x: number, line: number, w: number): boolean {
     if (x > 0 && x + gap + w > containerWidth) { line++; x = w }
     else { x = x === 0 ? w : x + gap + w }
-
-    let btnEndX: number, btnLine: number
-    if (x + gap + btnW <= containerWidth) {
-      btnLine = line; btnEndX = x + gap + btnW
-    } else {
-      btnLine = line + 1; btnEndX = btnW
-    }
-    const labelLine = (labelW === 0 || btnEndX + gap + labelW <= containerWidth)
-      ? btnLine : btnLine + 1
-    // Overflow when label would land on a later line than the button.
-    // This prevents portrait mode (maxLines=2) from allowing a layout where
-    // the label wraps to line 2 alone while the button is still on line 1.
-    return labelLine > maxLines || labelLine > btnLine
+    const btnLine = (x + gap + btnW <= containerWidth) ? line : line + 1
+    return btnLine > maxLines
   }
 
   let x = 0, line = 1
@@ -1237,21 +1220,11 @@ function checkTabsFit() {
     else { x = x === 0 ? w : x + gap + w }
   }
 
-  // Post-loop: verify button + label fit after all visible tabs.
+  // Post-loop: verify button fits after all visible tabs.
   // This also handles the zero-tabs case where the loop body never ran.
   {
-    let btnEndX: number, btnLine: number
-    if (x === 0) {
-      // No tabs placed: button is the first item on a fresh line.
-      btnLine = line; btnEndX = btnW
-    } else if (x + gap + btnW <= containerWidth) {
-      btnLine = line; btnEndX = x + gap + btnW
-    } else {
-      btnLine = line + 1; btnEndX = btnW
-    }
-    const labelLine = (labelW === 0 || btnEndX + gap + labelW <= containerWidth)
-      ? btnLine : btnLine + 1
-    if ((labelLine > maxLines || labelLine > btnLine) && tabs.length > 0) {
+    const btnLine = (x === 0 || x + gap + btnW <= containerWidth) ? line : line + 1
+    if (btnLine > maxLines && tabs.length > 0) {
       // This shouldn't happen if the loop above is correct, but guard anyway.
       const lastIdx = tabs.length - 1
       overflowedTabIds.value = new Set([tabs[lastIdx].id])
@@ -1388,6 +1361,12 @@ watch(
 )
 // Re-check when label text changes (width may change: "42" vs "42 entries")
 watch(entryCountLabel, () => { nextTick(() => checkTabsFit()) })
+// Re-check when the overflow flag flips: the button text toggles between
+// "New" and "more...", which have different widths. The first checkTabsFit
+// call that sets groupsOverflow uses the old button width; this watch fires
+// after Vue re-renders the button so the follow-up call measures the new
+// width and updates _maxSeenBtnW before the browser paints.
+watch(groupsOverflow, () => { nextTick(() => checkTabsFit()) })
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
