@@ -273,7 +273,7 @@
               : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
             @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
             :title="groupsOverflow ? 'Show all groups' : 'Add word group'"
-          >{{ groupsOverflow ? 'more ...' : '+ group' }}</button>
+          >{{ groupsOverflow ? 'more ...' : 'New' }}</button>
 
           <!-- Groups overflow popup -->
           <div
@@ -282,19 +282,54 @@
             class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-64 overflow-y-auto"
             @click.stop
           >
-            <button
-              v-for="tab in groupsStore.tabs"
-              :key="tab.id"
-              :data-popup-group-item="tab.id"
-              class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
-              :class="uiStore.activeGroupId === tab.id
+          <div
+            v-for="tab in groupsStore.tabs"
+            :key="tab.id"
+            :data-popup-group-item="tab.id"
+            class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none"
+            :class="[
+              uiStore.activeGroupId === tab.id
                 ? 'text-primary-400 bg-primary-500/10'
-                : 'text-gray-300 hover:bg-surface-800'"
-              @click="selectTabFromPopup(tab.id)"
-            >
-              <span class="flex-1 truncate">{{ tab.name }}</span>
-              <span v-if="uiStore.activeGroupId === tab.id" class="shrink-0 text-primary-400">✓</span>
-            </button>
+                : 'text-gray-300 hover:bg-surface-800',
+              longPressReadyPopupTabId === tab.id ? 'cursor-text' : 'cursor-default',
+            ]"
+            @mouseenter="hoveredPopupTabId = tab.id"
+            @mouseleave="hoveredPopupTabId = null"
+            @pointerdown="onPopupItemPointerDown($event, tab.id)"
+            @pointermove="onPopupItemPointerMove"
+            @pointerup="onPopupItemPointerUp"
+            @pointercancel="onPopupItemPointerCancel"
+          >
+            <template v-if="editingPopupTabId !== tab.id">
+              <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
+              <span
+                v-if="uiStore.activeGroupId === tab.id && hoveredPopupTabId !== tab.id"
+                class="shrink-0 pr-3 text-primary-400"
+              >✓</span>
+              <button
+                v-if="hoveredPopupTabId === tab.id"
+                class="shrink-0 pr-3 pl-2 py-1.5 text-gray-600 hover:text-red-400 transition-colors leading-none"
+                title="Delete group"
+                @pointerdown.stop
+                @click.stop="deleteTabFromPopup(tab.id)"
+              >×</button>
+            </template>
+            <template v-else>
+              <span class="flex-1 px-3 py-1.5 invisible pointer-events-none" aria-hidden="true">{{ tabEditName }}</span>
+              <input
+                v-focus-select
+                type="text"
+                v-model="tabEditName"
+                :maxlength="GROUP_NAME_MAX_LEN"
+                class="absolute inset-0 px-3 py-1.5 text-xs bg-transparent text-gray-200 outline-none"
+                @blur="saveTabEdit(tab.id)"
+                @keydown.enter.prevent="saveTabEdit(tab.id)"
+                @keydown.escape.prevent="cancelTabEdit"
+                @pointerdown.stop
+                @click.stop
+              />
+            </template>
+          </div>
             <div class="border-t border-surface-700 mt-1 pt-1">
               <button
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
@@ -812,6 +847,7 @@ const vFocusSelect = {
 }
 
 const editingTabId = ref<number | null>(null)
+const editingPopupTabId = ref<number | null>(null)
 const tabEditName = ref('')
 
 function selectTab(id: number) {
@@ -821,13 +857,21 @@ function selectTab(id: number) {
 
 function startTabEdit(tab: WordGroup) {
   editingTabId.value = tab.id
+  editingPopupTabId.value = null
+  tabEditName.value = tab.name
+}
+
+function startPopupTabEdit(tab: WordGroup) {
+  editingPopupTabId.value = tab.id
+  editingTabId.value = null
   tabEditName.value = tab.name
 }
 
 async function saveTabEdit(id: number) {
-  if (editingTabId.value !== id) return
+  if (editingTabId.value !== id && editingPopupTabId.value !== id) return
   const name = tabEditName.value.trim()
   editingTabId.value = null
+  editingPopupTabId.value = null
   if (name) {
     try {
       await groupsStore.renameTab(id, name)
@@ -839,6 +883,7 @@ async function saveTabEdit(id: number) {
 
 function cancelTabEdit() {
   editingTabId.value = null
+  editingPopupTabId.value = null
 }
 
 async function addNewTab() {
@@ -924,8 +969,15 @@ function onGroupsPopupOutsideClick(e: MouseEvent) {
   showGroupsPopup.value = false
 }
 watch(showGroupsPopup, (open) => {
-  if (open) document.addEventListener('click', onGroupsPopupOutsideClick, true)
-  else document.removeEventListener('click', onGroupsPopupOutsideClick, true)
+  if (open) {
+    document.addEventListener('click', onGroupsPopupOutsideClick, true)
+  } else {
+    document.removeEventListener('click', onGroupsPopupOutsideClick, true)
+    hoveredPopupTabId.value = null
+    clearPopupLongPressTimer()
+    popupItemInteraction.value = null
+    if (editingPopupTabId.value !== null) cancelTabEdit()
+  }
 })
 
 // Portrait / narrow detection
@@ -1156,6 +1208,73 @@ async function addNewTabFromPopup() {
   await addNewTab()
 }
 
+// ─── Groups popup item interactions ──────────────────────────────────────────
+const hoveredPopupTabId = ref<number | null>(null)
+
+interface PopupItemInteraction {
+  tabId: number
+  startX: number
+  startY: number
+  startTime: number
+}
+const popupItemInteraction = ref<PopupItemInteraction | null>(null)
+const longPressReadyPopupTabId = ref<number | null>(null)
+let popupLongPressTimerId: ReturnType<typeof setTimeout> | null = null
+
+function clearPopupLongPressTimer() {
+  if (popupLongPressTimerId !== null) { clearTimeout(popupLongPressTimerId); popupLongPressTimerId = null }
+  longPressReadyPopupTabId.value = null
+}
+
+function onPopupItemPointerDown(event: PointerEvent, tabId: number) {
+  if (editingPopupTabId.value === tabId || editingTabId.value === tabId) return
+  if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
+  if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
+  popupItemInteraction.value = { tabId, startX: event.clientX, startY: event.clientY, startTime: Date.now() }
+  clearPopupLongPressTimer()
+  // Same two-step pattern as the tab row: timer sets the visual cursor-text cue;
+  // the actual commit (rename or select) happens on pointer-up via elapsed check.
+  popupLongPressTimerId = setTimeout(() => {
+    popupLongPressTimerId = null
+    if (popupItemInteraction.value?.tabId === tabId) longPressReadyPopupTabId.value = tabId
+  }, LONG_PRESS_MS)
+}
+
+function onPopupItemPointerMove(event: PointerEvent) {
+  const state = popupItemInteraction.value
+  if (!state) return
+  const dx = event.clientX - state.startX
+  const dy = event.clientY - state.startY
+  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
+    clearPopupLongPressTimer()
+    popupItemInteraction.value = null
+  }
+}
+
+function onPopupItemPointerUp(_event: PointerEvent) {
+  clearPopupLongPressTimer()
+  const state = popupItemInteraction.value
+  popupItemInteraction.value = null
+  if (!state) return
+  const elapsed = Date.now() - state.startTime
+  if (elapsed >= LONG_PRESS_MS) {
+    const tab = groupsStore.tabs.find(t => t.id === state.tabId)
+    if (tab) startPopupTabEdit(tab)
+  } else {
+    selectTabFromPopup(state.tabId)
+  }
+}
+
+function onPopupItemPointerCancel() {
+  clearPopupLongPressTimer()
+  popupItemInteraction.value = null
+}
+
+function deleteTabFromPopup(id: number) {
+  showGroupsPopup.value = false
+  deleteTab(id)
+}
+
 // ─── Combined header layout check ────────────────────────────────────────────
 
 function checkHeaderLayout() {
@@ -1293,6 +1412,7 @@ const tabInteraction = ref<TabInteraction | null>(null)
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
+  if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
   event.preventDefault()
   const sourceEl = event.currentTarget as HTMLElement
   sourceEl.setPointerCapture(event.pointerId)
@@ -1656,6 +1776,7 @@ onBeforeUnmount(() => {
   portraitMq?.removeEventListener('change', onPortraitChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
+  clearPopupLongPressTimer()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
   document.removeEventListener('click', onColorFilterOutsideClick, true)
