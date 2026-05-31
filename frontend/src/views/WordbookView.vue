@@ -3,34 +3,90 @@
     <!-- Header: two fixed rows, does not scroll -->
     <div class="flex-none pt-3 pb-3">
 
-      <!-- Row 1: Wordbook title · [lang chips or collapsed popup] · toolbar buttons -->
+      <!-- Row 1: Wordbook title · [lang popup button] · toolbar buttons -->
       <div ref="headerRow1El" class="flex items-center gap-2 overflow-visible">
         <h1 ref="titleEl" class="text-xl font-bold text-gray-100 shrink-0">Wordbook</h1>
-        <div class="flex-1 min-w-0" />
 
-        <!-- Inline lang-pair chips (when not collapsed) -->
-        <div v-if="!langChipsCollapsed && availableLangs.length > 0" class="flex items-center gap-1">
+        <!-- Search trigger button (hidden when search mode is active) -->
+        <button
+          v-if="!searchActive"
+          class="p-1.5 transition-colors text-gray-500 hover:text-gray-300 shrink-0"
+          title="Search wordbook"
+          @click.stop="activateSearch"
+        >
+          <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6.5" cy="6.5" r="4.5"/>
+            <line x1="10" y1="10" x2="14" y2="14"/>
+          </svg>
+        </button>
 
-          <button
-            v-for="lang in availableLangs"
-            :key="lang"
-            @click="toggleLang(lang)"
-            :class="[
-              'inline-flex items-center px-2 h-5 rounded-md text-xs leading-none transition-colors border',
-              uiStore.activeLangs.length === 0
-                ? 'text-gray-500 border-surface-700 hover:text-gray-300 hover:border-surface-500'
-                : uiStore.activeLangs.includes(lang)
-                  ? 'bg-primary-500/20 text-primary-400 border-primary-500/40'
-                  : 'text-gray-700 border-surface-800 hover:text-gray-500',
-            ]"
-          ><span class="block -translate-y-px">{{ formatLangPair(lang) }}</span></button>
+        <!-- Flex spacer (hidden when search active; search input is flex-1 instead) -->
+        <div v-if="!searchActive" class="flex-1 min-w-0" />
+
+        <!-- Search input + dropdown (shown when search mode is active) -->
+        <div
+          v-if="searchActive"
+          ref="searchContainerEl"
+          class="relative"
+          :style="searchToolbarHidden
+            ? 'flex: 1 1 auto; min-width: 0'
+            : `flex: 0 0 ${SEARCH_FIXED_WIDTH}px`"
+          @click.stop
+        >
+          <input
+            ref="searchInputEl"
+            v-model="searchQuery"
+            type="text"
+            placeholder="Search…"
+            autocomplete="off"
+            spellcheck="false"
+            class="w-full px-3 py-1 text-sm bg-surface-800 border border-surface-600 rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
+            @input="onSearchInput"
+            @keydown="onSearchKeydown"
+          />
+          <!-- Results dropdown -->
+          <div
+            v-if="searchResults.length > 0"
+            class="absolute top-full left-0 right-0 mt-1 z-40 bg-surface-900 border border-surface-700 rounded-xl shadow-xl overflow-hidden"
+          >
+          <table ref="searchResultsTableEl" class="w-full text-xs border-collapse">
+              <tbody>
+                <tr
+                  v-for="(result, resultIdx) in searchResults"
+                  :key="result.id"
+                  class="cursor-pointer transition-colors"
+                  :class="[result.in_filter ? 'text-gray-300' : 'text-gray-500', (hoveredResultId === result.id || focusedResultIndex === resultIdx) ? (resultColorBgHover(result) || 'bg-surface-800') : resultColorBg(result)]"
+                  @mouseenter="hoveredResultId = result.id"
+                  @mouseleave="hoveredResultId = null"
+                  @click="navigateToResult(result)"
+                >
+                  <td class="pl-3 pr-2 py-2 font-mono text-gray-500 whitespace-nowrap align-baseline">{{ formatSearchLangPair(result) }}</td>
+                  <td class="py-2 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
+                  <td class="py-2 pr-3 text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <!-- No-results state -->
+          <div
+            v-else-if="searchDone && !searchLoading && searchQuery.length >= 2"
+            class="absolute top-full left-0 right-0 mt-1 z-40 bg-surface-900 border border-surface-700 rounded-xl shadow-xl px-3 py-2 text-xs text-gray-500"
+          >
+            No results
+          </div>
         </div>
 
-        <!-- Toolbar buttons -->
-        <div ref="toolbarEl" class="flex items-center gap-2 shrink-0">
+        <!-- Toolbar buttons (hidden when search is active and there's insufficient space) -->
+        <!-- ml-auto: right-aligns the toolbar when search is active (no spacer, single gap). -->
+        <div
+          ref="toolbarEl"
+          class="flex items-center gap-2 shrink-0"
+          :class="{ 'ml-auto': searchActive && !searchToolbarHidden }"
+          v-show="!searchActive || !searchToolbarHidden"
+        >
 
-          <!-- Collapsed lang-pair popup button (when chips don't fit) -->
-          <div v-if="langChipsCollapsed && availableLangs.length > 0" class="relative" ref="langPopupContainerRef">
+          <!-- Lang-pair filter popup button -->
+          <div v-if="availableLangs.length > 0" class="relative" ref="langPopupContainerRef">
             <button
               class="p-1.5 transition-colors rounded-lg border border-surface-700"
               :class="uiStore.activeLangs.length > 0 ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
@@ -272,7 +328,7 @@
               ? 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'
               : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
             @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
-            :title="groupsOverflow ? 'Show all groups' : 'Add word group'"
+            :title="groupsOverflow ? 'Show all groups' : 'Add group'"
           >{{ groupsOverflow ? 'more ...' : 'New' }}</button>
 
           <!-- Groups overflow popup -->
@@ -334,7 +390,7 @@
               <button
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
                 @click="addNewTabFromPopup"
-              >New group</button>
+              >Add group</button>
             </div>
           </div>
         </div>
@@ -493,9 +549,13 @@ import {
   ENTRY_COLORS,
   ENTRY_COLOR_LABEL,
   ENTRY_COLOR_SWATCH_BG,
+  ENTRY_COLOR_CARD_BG,
+  ENTRY_COLOR_CARD_BG_FOCUSED,
   isEntryColor,
   type EntryColor,
 } from '@/utils/entryColors'
+import { wordbookApi } from '@/api/wordbook'
+import type { WordbookSearchEntry } from '@/types'
 
 const store = useWordbookStore()
 const toast = useToastStore()
@@ -762,8 +822,20 @@ async function scrollToEntry(id: number) {
 async function handlePendingHighlight() {
   const id = uiStore.consumePendingHighlight()
   if (id === null) return
-  // Ensure entries are loaded for the current group.
-  if (!store.isLoaded && uiStore.activeGroupId !== null) {
+  // If a group-switch fetch is already in flight (started by the activeGroupId
+  // watcher), wait for it to complete — that watcher owns the fetch and prune.
+  // Starting a second fetch here would race against it and corrupt the result.
+  if (store.isLoading) {
+    await new Promise<void>((resolve) => {
+      const stop = watch(() => store.isLoading, (loading) => {
+        if (!loading) { stop(); resolve() }
+      })
+    })
+    // After the load completes, the activeGroupId watcher schedules a nextTick
+    // to restore cardsAreaEl.scrollTop. Use setTimeout(0) to let all pending
+    // microtasks (Vue ticks, scroll restoration) settle before scrolling.
+    await new Promise<void>(resolve => setTimeout(resolve, 0))
+  } else if (!store.isLoaded && uiStore.activeGroupId !== null) {
     await store.fetchEntries(uiStore.activeGroupId, uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined)
   }
   await nextTick()
@@ -934,8 +1006,6 @@ const GROUP_NAME_MAX_LEN = 25
 const headerRow1El = ref<HTMLElement | null>(null)
 const titleEl = ref<HTMLElement | null>(null)
 const toolbarEl = ref<HTMLElement | null>(null)
-const langChipsCollapsed = ref(false)
-
 // Lang popup
 const showLangPopup = ref(false)
 const langPopupContainerRef = ref<HTMLElement | null>(null)
@@ -1030,7 +1100,7 @@ async function onSidePanelWordClick(id: number) {
   await scrollToEntry(id)
 }
 
-// ─── Row 1: lang chips fit check ─────────────────────────────────────────────
+// ─── Row 1: search toolbar fit check ─────────────────────────────────────────
 
 function getWidth(el: HTMLElement): number {
   return el.getBoundingClientRect().width
@@ -1042,13 +1112,30 @@ function getContentWidth(el: HTMLElement): number {
   return range.getBoundingClientRect().width
 }
 
+let _lastToolbarWidth = 0
+
 function checkLangFit() {
   const row1 = headerRow1El.value
   const title = titleEl.value
   const toolbar = toolbarEl.value
   if (!row1 || !title || !toolbar) return
   const containerWidth = getWidth(row1)
-  langChipsCollapsed.value = (getContentWidth(title) + getWidth(toolbar)) > containerWidth / 2
+
+  // Cache toolbar width whenever it is rendered (v-show keeps it in the DOM
+  // but collapses to 0 when searchToolbarHidden is true).
+  const toolbarW = getWidth(toolbar)
+  if (toolbarW > 0) _lastToolbarWidth = toolbarW
+  const effectiveToolbarW = toolbarW > 0 ? toolbarW : _lastToolbarWidth
+
+  if (searchActive.value) {
+    // In search mode: determine whether the toolbar must be hidden entirely.
+    // gap-2 between flex items = 8 px; account for two gaps (title|input, input|toolbar).
+    const ROW_GAP = 8
+    searchToolbarHidden.value =
+      getContentWidth(title) + ROW_GAP + SEARCH_FIXED_WIDTH + ROW_GAP + effectiveToolbarW > containerWidth
+  } else {
+    searchToolbarHidden.value = false
+  }
 }
 
 // ─── Row 2: tab overflow fit check ───────────────────────────────────────────
@@ -1301,6 +1388,149 @@ watch(
 )
 // Re-check when label text changes (width may change: "42" vs "42 entries")
 watch(entryCountLabel, () => { nextTick(() => checkTabsFit()) })
+
+// ─── Search ──────────────────────────────────────────────────────────────────
+
+const SEARCH_FIXED_WIDTH = 250  // px — fixed width of the search input box
+
+const searchActive = ref(false)
+const searchQuery = ref('')
+const searchResults = ref<WordbookSearchEntry[]>([])
+const searchLoading = ref(false)
+const searchDone = ref(false)
+const searchContainerEl = ref<HTMLElement | null>(null)
+const searchInputEl = ref<HTMLInputElement | null>(null)
+const searchResultsTableEl = ref<HTMLElement | null>(null)
+const searchToolbarHidden = ref(false)
+const focusedResultIndex = ref(-1)
+
+let _searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
+let _searchSeq = 0
+
+async function activateSearch() {
+  searchActive.value = true
+  await nextTick()
+  searchInputEl.value?.focus()
+  document.addEventListener('click', onSearchOutsideClick, true)
+}
+
+function cancelSearch() {
+  if (_searchDebounceTimer !== null) { clearTimeout(_searchDebounceTimer); _searchDebounceTimer = null }
+  searchActive.value = false
+  searchQuery.value = ''
+  searchResults.value = []
+  searchLoading.value = false
+  searchDone.value = false
+  focusedResultIndex.value = -1
+  document.removeEventListener('click', onSearchOutsideClick, true)
+}
+
+function onSearchOutsideClick(e: MouseEvent) {
+  const target = e.target as Node | null
+  if (!target || searchContainerEl.value?.contains(target)) return
+  cancelSearch()
+}
+
+function onSearchKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') { e.preventDefault(); cancelSearch(); return }
+  const count = searchResults.value.length
+  if (!count) return
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    focusedResultIndex.value = Math.min(focusedResultIndex.value + 1, count - 1)
+    nextTick(() => {
+      const rows = searchResultsTableEl.value?.querySelectorAll<HTMLElement>('tr')
+      rows?.[focusedResultIndex.value]?.scrollIntoView({ block: 'nearest' })
+    })
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    focusedResultIndex.value = Math.max(focusedResultIndex.value - 1, -1)
+    if (focusedResultIndex.value >= 0) {
+      nextTick(() => {
+        const rows = searchResultsTableEl.value?.querySelectorAll<HTMLElement>('tr')
+        rows?.[focusedResultIndex.value]?.scrollIntoView({ block: 'nearest' })
+      })
+    }
+  } else if (e.key === 'Enter' && focusedResultIndex.value >= 0) {
+    e.preventDefault()
+    navigateToResult(searchResults.value[focusedResultIndex.value])
+  }
+}
+
+function onSearchInput() {
+  searchResults.value = []
+  searchDone.value = false
+  focusedResultIndex.value = -1
+  if (_searchDebounceTimer !== null) { clearTimeout(_searchDebounceTimer); _searchDebounceTimer = null }
+  if (searchQuery.value.trim().length < 2) return
+  _searchDebounceTimer = setTimeout(runSearch, 300)
+}
+
+async function runSearch() {
+  const seq = ++_searchSeq
+  const q = searchQuery.value.trim()
+  if (q.length < 2) return
+  searchLoading.value = true
+  try {
+    const resp = await wordbookApi.search(q, uiStore.swapDisplay, uiStore.activeLangs, uiStore.activeColors)
+    if (seq !== _searchSeq) return
+    searchResults.value = resp.results
+  } catch {
+    if (seq !== _searchSeq) return
+    searchResults.value = []
+  } finally {
+    if (seq === _searchSeq) { searchLoading.value = false; searchDone.value = true }
+  }
+}
+
+function navigateToResult(result: WordbookSearchEntry) {
+  cancelSearch()
+  uiStore.requestShowEntry(
+    result.id,
+    `${result.source_lang}:${result.target_lang}`,
+    result.group.id,
+    result.color ?? null,
+  )
+}
+
+function resultColorBg(result: WordbookSearchEntry): string {
+  if (!result.in_filter || !result.color || !isEntryColor(result.color)) return ''
+  return ENTRY_COLOR_CARD_BG[result.color as EntryColor]
+}
+
+function resultColorBgHover(result: WordbookSearchEntry): string {
+  if (!result.in_filter || !result.color || !isEntryColor(result.color)) return ''
+  return ENTRY_COLOR_CARD_BG_FOCUSED[result.color as EntryColor]
+}
+
+const hoveredResultId = ref<number | null>(null)
+
+function formatSearchLangPair(result: WordbookSearchEntry): string {
+  if (!uiStore.swapDisplay) return `${result.source_lang}→${result.target_lang}`
+  return `${result.target_lang}←${result.source_lang}`
+}
+
+// Re-search when display or filter state changes while search is open.
+watch(() => uiStore.swapDisplay, () => {
+  if (searchActive.value && searchQuery.value.trim().length >= 2) {
+    searchResults.value = []
+    runSearch()
+  }
+})
+watch(() => uiStore.activeColors, () => {
+  if (searchActive.value && searchQuery.value.trim().length >= 2) {
+    searchResults.value = []
+    runSearch()
+  }
+})
+watch(() => uiStore.activeLangs, () => {
+  if (searchActive.value && searchQuery.value.trim().length >= 2) {
+    searchResults.value = []
+    runSearch()
+  }
+})
+// Recompute search layout whenever search mode is toggled.
+watch(searchActive, () => { nextTick(() => checkLangFit()) })
 
 // ─── Delete dialog ────────────────────────────────────────────────────────────
 
@@ -1791,6 +2021,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onLangPopupOutsideClick, true)
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
+  cancelSearch()
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
@@ -1842,6 +2073,7 @@ onDeactivated(() => {
   dismissSidePanel()
   uiStore.closeActive()
   uiStore.activeMenuId = null
+  cancelSearch()
 })
 
 // Defensive: if a pending highlight is set while the view is already active,

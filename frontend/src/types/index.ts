@@ -57,6 +57,22 @@ export interface WordbookLookupResult {
   color: string | null
 }
 
+export interface WordbookSearchEntry {
+  id: number
+  source_lang: string
+  target_lang: string
+  source_text: string
+  target_text: string
+  color: string | null
+  group: WordGroup
+  /** True when this result matched within the currently active filters. */
+  in_filter: boolean
+}
+
+export interface WordbookSearchResponse {
+  results: WordbookSearchEntry[]
+}
+
 export interface WordbookEntryCreate {
   source_lang: string
   target_lang: string

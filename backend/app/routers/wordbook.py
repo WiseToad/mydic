@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
-from sqlalchemy import and_, distinct, func, or_, select
+from sqlalchemy import and_, distinct, func, or_, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -15,6 +15,8 @@ from app.schemas.wordbook import (
     WordbookListResponse,
     WordbookLookupResult,
     WordbookMoveItem,
+    WordbookSearchEntry,
+    WordbookSearchResponse,
     WordGroupCreate,
     WordGroupResponse,
     WordGroupUpdate,
@@ -40,6 +42,134 @@ async def list_lang_pairs(
         )
     ).all()
     return [f"{src}:{tgt}" for src, tgt in rows]
+
+
+_SEARCH_LIMIT = 10
+_SEARCH_THRESHOLD = 0.15
+
+
+@router.get("/search", response_model=WordbookSearchResponse)
+async def search_entries(
+    q: str,
+    search_translated: bool = False,
+    color: list[str] = Query(default=[]),
+    lang_pair: list[str] = Query(default=[]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Trigram similarity search across the user's entire wordbook.
+
+    Phase 1: search with active filters (lang_pairs + colors).
+    Phase 2 (when phase-1 yields < _SEARCH_LIMIT results): unfiltered search,
+    excluding already-found IDs.
+
+    Results carry in_filter=True/False to distinguish the two phases.
+    """
+    q = q.strip()
+    if not q:
+        return WordbookSearchResponse(results=[])
+
+    search_col = "target_text" if search_translated else "source_text"
+
+    # Build parameterised lang-pair OR conditions
+    pair_clauses: list[str] = []
+    pair_params: dict = {}
+    for i, p in enumerate(lang_pair):
+        parts = p.split(":", 1)
+        if len(parts) == 2:
+            pair_clauses.append(
+                f"(we.source_lang = :sl_{i} AND we.target_lang = :tl_{i})"
+            )
+            pair_params[f"sl_{i}"] = parts[0]
+            pair_params[f"tl_{i}"] = parts[1]
+
+    lang_filter = f"AND ({' OR '.join(pair_clauses)})" if pair_clauses else ""
+
+    # Build color filter; 'none' sentinel matches entries with NULL color
+    has_none_color = "none" in color
+    real_colors = [c for c in color if c != "none"]
+    color_clauses: list[str] = []
+    color_params: dict = {}
+    for i, c in enumerate(real_colors):
+        color_clauses.append(f"we.color = :col_{i}")
+        color_params[f"col_{i}"] = c
+    if has_none_color:
+        color_clauses.append("we.color IS NULL")
+    color_filter = f"AND ({' OR '.join(color_clauses)})" if color_clauses else ""
+
+    base_params: dict = {
+        "uid": current_user.id,
+        "q": q,
+        "thr": _SEARCH_THRESHOLD,
+        **pair_params,
+        **color_params,
+    }
+
+    def _build_sql(extra_where: str) -> str:
+        return f"""
+            SELECT
+                we.id, we.source_lang, we.target_lang,
+                we.source_text, we.target_text, we.color,
+                wg.id       AS wg_id,
+                wg.name     AS wg_name,
+                wg.position AS wg_pos
+            FROM wordbook_entries we
+            JOIN word_groups wg ON wg.id = we.group_id
+            WHERE we.user_id = :uid
+              AND similarity(
+                    immutable_unaccent(lower(we.{search_col})),
+                    immutable_unaccent(lower(:q))
+                  ) > :thr
+              {extra_where}
+            ORDER BY similarity(
+                    immutable_unaccent(lower(we.{search_col})),
+                    immutable_unaccent(lower(:q))
+                ) DESC
+            LIMIT :lim
+        """
+
+    def _make_entry(row, in_filter: bool) -> WordbookSearchEntry:
+        return WordbookSearchEntry(
+            id=row.id,
+            source_lang=row.source_lang,
+            target_lang=row.target_lang,
+            source_text=row.source_text,
+            target_text=row.target_text,
+            color=row.color,
+            group=WordGroupResponse(
+                id=row.wg_id, name=row.wg_name, position=row.wg_pos
+            ),
+            in_filter=in_filter,
+        )
+
+    # ── Phase 1: with active filters ─────────────────────────────────────────
+    p1_rows = (
+        await db.execute(
+            text(_build_sql(f"{lang_filter} {color_filter}")),
+            {**base_params, "lim": _SEARCH_LIMIT},
+        )
+    ).fetchall()
+
+    results: list[WordbookSearchEntry] = [_make_entry(r, True) for r in p1_rows]
+    found_ids = {r.id for r in p1_rows}
+
+    # ── Phase 2: unfiltered, fill up to _SEARCH_LIMIT ────────────────────────
+    remaining = _SEARCH_LIMIT - len(results)
+    if remaining > 0:
+        # Integer IDs embedded directly — no injection risk
+        exclude = (
+            f"AND we.id NOT IN ({', '.join(str(i) for i in found_ids)})"
+            if found_ids else ""
+        )
+        p2_rows = (
+            await db.execute(
+                text(_build_sql(exclude)),
+                {**base_params, "lim": remaining},
+            )
+        ).fetchall()
+        results.extend(_make_entry(r, False) for r in p2_rows)
+
+    return WordbookSearchResponse(results=results)
 
 
 @router.get("/lookup", response_model=WordbookLookupResult,

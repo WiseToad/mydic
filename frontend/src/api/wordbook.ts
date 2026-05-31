@@ -6,6 +6,7 @@ import type {
   WordbookListResponse,
   WordbookLookupResult,
   WordbookMoveItem,
+  WordbookSearchResponse,
   WordGroup,
   WordGroupUpdate,
 } from '@/types'
@@ -48,6 +49,21 @@ export const wordbookApi = {
 
   async listLangPairs(): Promise<string[]> {
     const { data } = await apiClient.get<string[]>('/wordbook/lang-pairs')
+    return data
+  },
+
+  async search(
+    q: string,
+    searchTranslated: boolean,
+    langPairs: string[],
+    colors: string[],
+  ): Promise<WordbookSearchResponse> {
+    const params = new URLSearchParams()
+    params.set('q', q)
+    if (searchTranslated) params.set('search_translated', 'true')
+    for (const p of langPairs) params.append('lang_pair', p)
+    for (const c of colors) params.append('color', c)
+    const { data } = await apiClient.get<WordbookSearchResponse>('/wordbook/search', { params })
     return data
   },
 

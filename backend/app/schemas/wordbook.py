@@ -93,6 +93,22 @@ class WordbookListResponse(BaseModel):
     total: int
 
 
+class WordbookSearchEntry(BaseModel):
+    id: int
+    source_lang: str
+    target_lang: str
+    source_text: str
+    target_text: str
+    color: str | None = None
+    group: WordGroupResponse
+    in_filter: bool
+    model_config = {"from_attributes": True}
+
+
+class WordbookSearchResponse(BaseModel):
+    results: list[WordbookSearchEntry]
+
+
 class WordbookLookupResult(BaseModel):
     entry_id: int
     group_id: int
