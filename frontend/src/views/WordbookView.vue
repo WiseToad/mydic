@@ -334,7 +334,7 @@
               <button
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
                 @click="addNewTabFromPopup"
-              >+ Add group</button>
+              >New group</button>
             </div>
           </div>
         </div>
@@ -406,6 +406,7 @@
               class="flex-1"
               @delete="handleDelete"
               @update="handleUpdate"
+              @move="handleMoveEntry"
             />
           </div>
         </div>
@@ -1189,13 +1190,9 @@ async function toggleGroupsPopup() {
   const activeIndex = tabs.findIndex(t => t.id === activeId)
   if (activeIndex === -1) return
   const items = Array.from(popup.querySelectorAll<HTMLElement>('[data-popup-group-item]'))
-  if (items.length === 0) return
-  const itemH = items[0].offsetHeight || 28
-  if (activeIndex < visibleTabCount.value) {
-    popup.scrollTop = visibleTabCount.value * itemH
-  } else {
-    popup.scrollTop = activeIndex * itemH - popup.clientHeight / 2 + itemH / 2
-  }
+  if (items.length === 0 || activeIndex >= items.length) return
+  const activeItem = items[activeIndex]
+  popup.scrollTop = activeItem.offsetTop - popup.clientHeight / 2 + activeItem.offsetHeight / 2
 }
 
 function selectTabFromPopup(id: number) {
@@ -1327,6 +1324,17 @@ async function confirmDelete() {
     toast.error(extractErrorMessage(e, 'Failed to delete entry'))
   } finally {
     pendingDeleteId.value = null
+  }
+}
+
+async function handleMoveEntry(id: number, groupId: number) {
+  try {
+    await groupsStore.assignEntry(id, groupId)
+    uiStore.clearFocusedEntryById(id)
+    uiStore.clearDetailsContent(id)
+    groupsStore.fetchLangPairs().catch(() => {})
+  } catch (e: unknown) {
+    toast.error(extractErrorMessage(e, 'Failed to move entry'))
   }
 }
 

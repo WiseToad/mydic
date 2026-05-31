@@ -225,6 +225,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     >
                       <span class="inline-flex w-3 h-3 rounded-full" :class="swatchBg(c)" />
                       {{ colorLabel(c) }}
+                      <span v-if="entry.color === c" class="ml-auto shrink-0 text-primary-400">✓</span>
                     </button>
                     <button
                       class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
@@ -235,6 +236,45 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     >
                       <span class="inline-flex w-3 h-3 rounded-full border border-surface-600" />
                       No color
+                      <span v-if="!entry.color" class="ml-auto shrink-0 text-primary-400">✓</span>
+                    </button>
+                  </div>
+                  <!--
+                    Move-to submenu trigger: clicking opens an adjacent popup with
+                    the list of groups. Mirrors the color submenu pattern.
+                  -->
+                  <button
+                    class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-gray-300 hover:bg-surface-800 transition-colors flex items-center gap-2"
+                    :class="showMoveToSubmenu ? 'bg-surface-800' : ''"
+                    @click="toggleMoveToSubmenu"
+                  >
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                      <path d="M12 4l-1.41 1.41L16.17 11H4v2h12.17l-5.58 5.59L12 20l8-8z"/>
+                    </svg>
+                    Move to
+                    <span class="ml-auto text-gray-500">›</span>
+                  </button>
+                  <!--
+                    Move-to submenu: floats to the right (or left as fallback)
+                    of the actions menu, same placement logic as the color submenu.
+                    Scrollable when there are many groups.
+                  -->
+                  <div
+                    v-if="showMoveToSubmenu"
+                    class="absolute top-0 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-56 overflow-y-auto"
+                    :class="submenuPlacement === 'left' ? 'right-full mr-1' : 'left-full ml-1'"
+                  >
+                    <button
+                      v-for="tab in groupsStore.tabs"
+                      :key="tab.id"
+                      class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
+                      :class="entry.group.id === tab.id
+                        ? 'text-primary-400 bg-primary-500/10'
+                        : 'text-gray-300 hover:bg-surface-800'"
+                      @click="handleMoveToGroup(tab.id)"
+                    >
+                      <span class="flex-1 truncate">{{ tab.name }}</span>
+                      <span v-if="entry.group.id === tab.id" class="shrink-0 text-primary-400">✓</span>
                     </button>
                   </div>
                   <button
@@ -406,6 +446,7 @@ import ContextExamples from './ContextExamples.vue'
 import LexicalPanel from './LexicalPanel.vue'
 import { useTranslatorStore } from '@/stores/translator'
 import { useWordbookUiStore } from '@/stores/wordbookUi'
+import { useWordbookGroupsStore } from '@/stores/wordbookGroups'
 import { useSettingsStore } from '@/stores/settings'
 import { translateApi } from '@/api/translate'
 import {
@@ -423,11 +464,13 @@ const props = defineProps<{ entry: WordbookEntry; isDragTarget?: boolean }>()
 const emit = defineEmits<{
   (e: 'delete', id: number): void
   (e: 'update', id: number, data: { source_text?: string; target_text?: string; notes?: string; provider_code?: string | null; color?: string | null }): void
+  (e: 'move', id: number, groupId: number): void
 }>()
 
 const router = useRouter()
 const translatorStore = useTranslatorStore()
 const uiStore = useWordbookUiStore()
+const groupsStore = useWordbookGroupsStore()
 const settingsStore = useSettingsStore()
 
 // ── Per-entry lexical provider persistence ────────────────────────────
@@ -581,13 +624,17 @@ const providerPopupRef = ref<HTMLElement | null>(null)
 const actionsContainerRef = ref<HTMLElement | null>(null)
 // Color submenu inside the actions popup. Local to this card.
 const showColorSubmenu = ref(false)
-// Which side the color submenu opens on. Recomputed each time the user opens
-// it so a window resize / side-panel toggle between openings is reflected.
+// Move-to submenu inside the actions popup. Local to this card.
+const showMoveToSubmenu = ref(false)
+// Which side a submenu opens on. Recomputed each time the user opens one
+// so a window resize / side-panel toggle between openings is reflected.
 const submenuPlacement = ref<'left' | 'right'>('right')
-// Approximate width of the rendered submenu plus its 4px gap. Used to decide
-// whether the right side has enough room before the submenu would clip the
-// viewport. Tuned to fit the longest label ("No color") at the current font.
+// Approximate width of the rendered color submenu plus its 4px gap.
+// Tuned to fit the longest label ("No color") at the current font.
 const SUBMENU_RIGHT_RESERVE_PX = 148
+// Approximate width of the move-to submenu plus its 4px gap.
+// Wider than the color submenu to accommodate group names (min-w-[160px]).
+const MOVE_TO_SUBMENU_RIGHT_RESERVE_PX = 172
 
 /** Right edge of the nearest overflow-clipping ancestor, falling back to the viewport. */
 function _clipRight(el: HTMLElement): number {
@@ -610,8 +657,22 @@ function toggleColorSubmenu() {
       rect && rect.right + SUBMENU_RIGHT_RESERVE_PX <= clipRight
         ? 'right'
         : 'left'
+    showMoveToSubmenu.value = false
   }
   showColorSubmenu.value = !showColorSubmenu.value
+}
+
+function toggleMoveToSubmenu() {
+  if (!showMoveToSubmenu.value) {
+    const rect = actionsContainerRef.value?.getBoundingClientRect()
+    const clipRight = actionsContainerRef.value ? _clipRight(actionsContainerRef.value) : window.innerWidth
+    submenuPlacement.value =
+      rect && rect.right + MOVE_TO_SUBMENU_RIGHT_RESERVE_PX <= clipRight
+        ? 'right'
+        : 'left'
+    showColorSubmenu.value = false
+  }
+  showMoveToSubmenu.value = !showMoveToSubmenu.value
 }
 
 // Vertical placement of the actions popup. Flipped to 'above' when the
@@ -685,6 +746,7 @@ watch(showActionsMenu, (open) => {
   } else {
     document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
     showColorSubmenu.value = false
+    showMoveToSubmenu.value = false
   }
 })
 
@@ -967,6 +1029,12 @@ function handleSetColor(color: EntryColor | null) {
   // Avoid pointless backend round-trip if the user picks the active color again
   if ((props.entry.color ?? null) === color) return
   emit('update', props.entry.id, { color })
+}
+
+function handleMoveToGroup(groupId: number) {
+  showActionsMenu.value = false
+  if (props.entry.group.id === groupId) return
+  emit('move', props.entry.id, groupId)
 }
 
 </script>
