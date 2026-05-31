@@ -261,6 +261,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                   -->
                   <div
                     v-if="showMoveToSubmenu"
+                    ref="moveToSubmenuEl"
                     class="absolute top-0 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-56 overflow-y-auto"
                     :class="submenuPlacement === 'left' ? 'right-full mr-1' : 'left-full ml-1'"
                   >
@@ -626,6 +627,7 @@ const actionsContainerRef = ref<HTMLElement | null>(null)
 const showColorSubmenu = ref(false)
 // Move-to submenu inside the actions popup. Local to this card.
 const showMoveToSubmenu = ref(false)
+const moveToSubmenuEl = ref<HTMLElement | null>(null)
 // Which side a submenu opens on. Recomputed each time the user opens one
 // so a window resize / side-panel toggle between openings is reflected.
 const submenuPlacement = ref<'left' | 'right'>('right')
@@ -662,7 +664,7 @@ function toggleColorSubmenu() {
   showColorSubmenu.value = !showColorSubmenu.value
 }
 
-function toggleMoveToSubmenu() {
+async function toggleMoveToSubmenu() {
   if (!showMoveToSubmenu.value) {
     const rect = actionsContainerRef.value?.getBoundingClientRect()
     const clipRight = actionsContainerRef.value ? _clipRight(actionsContainerRef.value) : window.innerWidth
@@ -671,8 +673,19 @@ function toggleMoveToSubmenu() {
         ? 'right'
         : 'left'
     showColorSubmenu.value = false
+    showMoveToSubmenu.value = true
+    await nextTick()
+    const submenu = moveToSubmenuEl.value
+    if (!submenu) return
+    const activeIndex = groupsStore.tabs.findIndex(t => t.id === props.entry.group.id)
+    if (activeIndex === -1) return
+    const items = Array.from(submenu.querySelectorAll<HTMLElement>('button'))
+    if (items.length === 0 || activeIndex >= items.length) return
+    const activeItem = items[activeIndex]
+    submenu.scrollTop = activeItem.offsetTop - submenu.clientHeight / 2 + activeItem.offsetHeight / 2
+  } else {
+    showMoveToSubmenu.value = false
   }
-  showMoveToSubmenu.value = !showMoveToSubmenu.value
 }
 
 // Vertical placement of the actions popup. Flipped to 'above' when the
