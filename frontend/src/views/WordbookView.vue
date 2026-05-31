@@ -329,7 +329,7 @@
               : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
             @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
             :title="groupsOverflow ? 'Show all groups' : 'Add group'"
-          >{{ groupsOverflow ? 'more ...' : 'New' }}</button>
+          >{{ groupsOverflow ? 'more ...' : groupsStore.tabs.length === 0 ? 'New group' : 'New' }}</button>
 
           <!-- Groups overflow popup -->
           <div
