@@ -49,7 +49,7 @@
             v-if="searchResults.length > 0"
             class="absolute top-full left-0 right-0 mt-1 z-40 bg-surface-900 border border-surface-700 rounded-xl shadow-xl overflow-hidden"
           >
-          <table ref="searchResultsTableEl" class="w-full text-xs border-collapse">
+          <table ref="searchResultsTableEl" class="w-full border-collapse">
               <tbody>
                 <tr
                   v-for="(result, resultIdx) in searchResults"
@@ -60,9 +60,9 @@
                   @mouseleave="hoveredResultId = null"
                   @click="navigateToResult(result)"
                 >
-                  <td class="pl-3 pr-2 py-2 font-mono text-gray-500 whitespace-nowrap align-baseline">{{ formatSearchLangPair(result) }}</td>
+                  <td class="pl-3 pr-2 py-2 text-xs font-mono text-gray-500 whitespace-nowrap align-baseline"><span class="inline-block -translate-y-[2px]">{{ formatSearchLangPair(result) }}</span></td>
                   <td class="py-2 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
-                  <td class="py-2 pr-3 text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
+                  <td class="py-2 pr-3 text-xs text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
                 </tr>
               </tbody>
             </table>
@@ -191,6 +191,7 @@
 
           <!-- Swap display mode toggle (icon) -->
           <button
+            ref="swapDisplayBtnEl"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
             :class="store.entries.length === 0
               ? 'text-gray-700 cursor-not-allowed'
@@ -1074,6 +1075,7 @@ watch(isVeryNarrow, (narrow) => {
 // Side panel portrait overlay
 const sidePanelEl = ref<HTMLElement | null>(null)
 const sidePanelToggleBtnEl = ref<HTMLElement | null>(null)
+const swapDisplayBtnEl = ref<HTMLElement | null>(null)
 
 function dismissSidePanel() {
   uiStore.sidePanelVisible = false
@@ -1407,6 +1409,7 @@ function cancelSearch() {
 function onSearchOutsideClick(e: MouseEvent) {
   const target = e.target as Node | null
   if (!target || searchContainerEl.value?.contains(target)) return
+  if (swapDisplayBtnEl.value?.contains(target)) return
   cancelSearch()
 }
 
@@ -1473,12 +1476,12 @@ function navigateToResult(result: WordbookSearchEntry) {
 }
 
 function resultColorBg(result: WordbookSearchEntry): string {
-  if (!result.in_filter || !result.color || !isEntryColor(result.color)) return ''
+  if (!result.color || !isEntryColor(result.color)) return ''
   return ENTRY_COLOR_CARD_BG[result.color as EntryColor]
 }
 
 function resultColorBgHover(result: WordbookSearchEntry): string {
-  if (!result.in_filter || !result.color || !isEntryColor(result.color)) return ''
+  if (!result.color || !isEntryColor(result.color)) return ''
   return ENTRY_COLOR_CARD_BG_FOCUSED[result.color as EntryColor]
 }
 
@@ -1489,20 +1492,8 @@ function formatSearchLangPair(result: WordbookSearchEntry): string {
   return `${result.target_lang}←${result.source_lang}`
 }
 
-// Re-search when display or filter state changes while search is open.
+// Re-search when swap display is toggled while search is open.
 watch(() => uiStore.swapDisplay, () => {
-  if (searchActive.value && searchQuery.value.trim().length >= 2) {
-    searchResults.value = []
-    runSearch()
-  }
-})
-watch(() => uiStore.activeColors, () => {
-  if (searchActive.value && searchQuery.value.trim().length >= 2) {
-    searchResults.value = []
-    runSearch()
-  }
-})
-watch(() => uiStore.activeLangs, () => {
   if (searchActive.value && searchQuery.value.trim().length >= 2) {
     searchResults.value = []
     runSearch()
@@ -1979,7 +1970,6 @@ onMounted(() => {
   if (typeof ResizeObserver !== 'undefined') {
     headerResizeObserver = new ResizeObserver(() => {
       checkHeaderLayout()
-      if (uiStore.sidePanelVisible && isPortrait.value) dismissSidePanel()
     })
     if (headerRow1El.value) headerResizeObserver.observe(headerRow1El.value)
     if (toolbarEl.value) headerResizeObserver.observe(toolbarEl.value)

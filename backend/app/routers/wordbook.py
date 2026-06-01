@@ -59,11 +59,9 @@ async def search_entries(
 ):
     """Trigram similarity search across the user's entire wordbook.
 
-    Phase 1: search with active filters (lang_pairs + colors).
-    Phase 2 (when phase-1 yields < _SEARCH_LIMIT results): unfiltered search,
-    excluding already-found IDs.
-
-    Results carry in_filter=True/False to distinguish the two phases.
+    Returns up to _SEARCH_LIMIT results sorted purely by relevance score.
+    Each result carries in_filter=True/False indicating whether it matches
+    the currently active lang_pair and color filters.
     """
     q = q.strip()
     if not q:
@@ -142,33 +140,36 @@ async def search_entries(
             in_filter=in_filter,
         )
 
-    # ── Phase 1: with active filters ─────────────────────────────────────────
-    p1_rows = (
+    # ── Pre-compute filter sets for in_filter tagging ────────────────────────
+    filter_lang_pairs: set[tuple[str, str]] = set()
+    for p in lang_pair:
+        parts = p.split(":", 1)
+        if len(parts) == 2:
+            filter_lang_pairs.add((parts[0], parts[1]))
+
+    filter_colors: set[str] = set(real_colors)
+    any_color_filter = bool(color_clauses) or has_none_color
+
+    def _is_in_filter(row) -> bool:
+        if filter_lang_pairs and (row.source_lang, row.target_lang) not in filter_lang_pairs:
+            return False
+        if any_color_filter:
+            if row.color is None:
+                if not has_none_color:
+                    return False
+            elif row.color not in filter_colors:
+                return False
+        return True
+
+    # ── Single-pass: unfiltered search sorted purely by relevance ─────────────
+    all_rows = (
         await db.execute(
-            text(_build_sql(f"{lang_filter} {color_filter}")),
-            {**base_params, "lim": _SEARCH_LIMIT},
+            text(_build_sql("")),
+            {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": _SEARCH_LIMIT},
         )
     ).fetchall()
 
-    results: list[WordbookSearchEntry] = [_make_entry(r, True) for r in p1_rows]
-    found_ids = {r.id for r in p1_rows}
-
-    # ── Phase 2: unfiltered, fill up to _SEARCH_LIMIT ────────────────────────
-    remaining = _SEARCH_LIMIT - len(results)
-    if remaining > 0:
-        # Integer IDs embedded directly — no injection risk
-        exclude = (
-            f"AND we.id NOT IN ({', '.join(str(i) for i in found_ids)})"
-            if found_ids else ""
-        )
-        p2_rows = (
-            await db.execute(
-                text(_build_sql(exclude)),
-                {**base_params, "lim": remaining},
-            )
-        ).fetchall()
-        results.extend(_make_entry(r, False) for r in p2_rows)
-
+    results = [_make_entry(r, _is_in_filter(r)) for r in all_rows]
     return WordbookSearchResponse(results=results)
 
 
