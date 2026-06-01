@@ -256,7 +256,7 @@
           <p v-else-if="translationProvidersLoaded && translationDropdownVisible && !effectiveTranslationCode" class="flex-1 font-medium text-gray-500 italic">Provider unavailable.</p>
           <!-- API error (red): only shown when no passive condition applies -->
           <div v-else-if="store.error" class="flex-1 text-sm text-red-400 bg-red-500/10 rounded-lg px-3 py-2">{{ store.error }}</div>
-          <p v-else-if="store.result && translationProvidersLoaded" ref="resultContainerRef" class="text-medium leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto">
+          <p v-else-if="store.result && translationProvidersLoaded" ref="resultContainerRef" class="text-medium leading-relaxed whitespace-pre-wrap flex-1 overflow-y-auto select-text">
             {{ store.result.translated_text }}
           </p>
           <p v-else class="flex-1 font-medium text-gray-600">&nbsp;</p>

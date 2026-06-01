@@ -7,7 +7,7 @@
     translation provider <select>.  The `compact` flag still controls
     other density tweaks for the wordbook details overlay.
   -->
-  <div ref="containerRef">
+  <div ref="containerRef" class="select-text">
     <!-- Header: label + provider selector -->
     <div
       v-if="!inline"

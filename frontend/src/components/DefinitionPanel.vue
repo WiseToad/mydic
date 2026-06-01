@@ -1,5 +1,5 @@
 <template>
-  <div ref="containerRef">
+  <div ref="containerRef" class="select-text">
     <!-- Header: label + provider selector — hidden in inline mode (TranslatorView renders it). -->
     <div v-if="!inline" class="flex items-center mb-3">
       <h3 class="text-xs font-semibold uppercase tracking-widest text-gray-500">Definition</h3>
