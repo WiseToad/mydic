@@ -9,6 +9,7 @@
             'flex items-start gap-3 rounded-xl px-4 py-3 shadow-2xl text-sm pointer-events-auto cursor-pointer select-none border',
             toast.type === 'error'   ? 'bg-red-950 border-red-800 text-red-200' :
             toast.type === 'success' ? 'bg-emerald-950 border-emerald-800 text-emerald-200' :
+            toast.type === 'warn'    ? 'bg-amber-950 border-amber-800 text-amber-200' :
                                        'bg-surface-800 border-surface-600 text-gray-200',
           ]"
           @click="toastStore.dismiss(toast.id)"
@@ -19,6 +20,9 @@
           </svg>
           <svg v-else-if="toast.type === 'success'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
             <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z"/>
+          </svg>
+          <svg v-else-if="toast.type === 'warn'" xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/>
           </svg>
 
           <span class="flex-1 leading-snug">{{ toast.message }}</span>

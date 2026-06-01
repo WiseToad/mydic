@@ -1563,14 +1563,31 @@ async function runSearch() {
   }
 }
 
+function _showFilterChangeToast(langsBefore: string[], colorsBefore: string[]) {
+  const parts: string[] = []
+  const addedLang = uiStore.activeLangs.find(l => !langsBefore.includes(l))
+  if (addedLang) {
+    const [src, tgt] = addedLang.split(':', 2)
+    parts.push(uiStore.swapDisplay ? `${tgt} ← ${src}` : `${src} → ${tgt}`)
+  }
+  const addedColor = uiStore.activeColors.find(c => !colorsBefore.includes(c))
+  if (addedColor) {
+    parts.push(addedColor === 'none' ? 'No color' : (isEntryColor(addedColor) ? ENTRY_COLOR_LABEL[addedColor as EntryColor] : addedColor))
+  }
+  if (parts.length > 0) toast.warn(`Filters expanded: ${parts.join(', ')}`)
+}
+
 function navigateToResult(result: WordbookSearchEntry) {
   cancelSearch()
+  const langsBefore = [...uiStore.activeLangs]
+  const colorsBefore = [...uiStore.activeColors]
   uiStore.requestShowEntry(
     result.id,
     `${result.source_lang}:${result.target_lang}`,
     result.group.id,
     result.color ?? null,
   )
+  _showFilterChangeToast(langsBefore, colorsBefore)
 }
 
 function resultColorBg(result: WordbookSearchEntry): string {
@@ -2027,12 +2044,15 @@ async function showEntryContextPopup(entry: WordbookEntryData) {
 
 function navigateFromContextPopup(result: WordbookSearchEntry) {
   closeEntryContextPopup()
+  const langsBefore = [...uiStore.activeLangs]
+  const colorsBefore = [...uiStore.activeColors]
   uiStore.requestShowEntry(
     result.id,
     `${result.source_lang}:${result.target_lang}`,
     result.group.id,
     result.color ?? null,
   )
+  _showFilterChangeToast(langsBefore, colorsBefore)
 }
 
 function contextResultColorBg(result: WordbookSearchEntry): string {

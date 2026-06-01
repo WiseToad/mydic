@@ -488,6 +488,8 @@ import { contextApi } from '@/api/context'
 import { clearSlow, stopTts } from '@/api/tts'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
+import { ENTRY_COLOR_LABEL, isEntryColor } from '@/utils/entryColors'
+import type { EntryColor } from '@/utils/entryColors'
 import { SPINNER_DELAY_MS } from '@/utils/ui'
 import type { ProviderItem } from '@/types'
 
@@ -1165,7 +1167,20 @@ function openInWordbook() {
   if (!store.result || !wordbookLookup.value) return
   const lookup = wordbookLookup.value
   const pair = `${resolvedSourceLang.value}:${store.targetLang}`
+  const langsBefore = [...wordbookUiStore.activeLangs]
+  const colorsBefore = [...wordbookUiStore.activeColors]
   wordbookUiStore.requestShowEntry(lookup.entry_id, pair, lookup.group_id, lookup.color)
+  const parts: string[] = []
+  const addedLang = wordbookUiStore.activeLangs.find(l => !langsBefore.includes(l))
+  if (addedLang) {
+    const [src, tgt] = addedLang.split(':', 2)
+    parts.push(`${src} → ${tgt}`)
+  }
+  const addedColor = wordbookUiStore.activeColors.find(c => !colorsBefore.includes(c))
+  if (addedColor) {
+    parts.push(addedColor === 'none' ? 'No color' : (isEntryColor(addedColor) ? ENTRY_COLOR_LABEL[addedColor as EntryColor] : addedColor))
+  }
+  if (parts.length > 0) toast.warn(`Filters expanded: ${parts.join(', ')}`)
   router.push({ name: 'wordbook' })
 }
 
@@ -1198,7 +1213,7 @@ async function addToWordbook(groupId?: number) {
       wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'lex', cur.lexProviderCode)
     // Reflect the new entry in the lookup cache so the button switches to the ✓ state.
     wordbookLookup.value = { entry_id: entry.id, group_id: entry.group.id, color: entry.color ?? null }
-    toast.success('Added to Wordbook')
+    toast.success(`Added to group: ${entry.group.name}`)
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to save to wordbook'))
   }
