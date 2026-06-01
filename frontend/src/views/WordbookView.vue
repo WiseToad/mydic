@@ -115,7 +115,11 @@
                   : uiStore.activeLangs.includes(lang)
                     ? 'text-primary-400 bg-primary-500/10'
                     : 'text-gray-300 hover:bg-surface-800'"
-                @click="toggleLang(lang); showLangPopup = false"
+                @click="onLangItemClick($event, lang)"
+                @pointerdown="onFilterItemPointerDown($event, () => toggleLang(lang))"
+                @pointerup="onFilterItemPointerUp()"
+                @pointerleave="onFilterItemCancel()"
+                @pointercancel="onFilterItemCancel()"
               >
                 <span class="flex-1 -translate-y-px">{{ formatLangPair(lang) }}</span>
                 <span v-if="uiStore.activeLangs.length > 0 && uiStore.activeLangs.includes(lang)" class="shrink-0 text-primary-400">✓</span>
@@ -153,7 +157,11 @@
                 :class="uiStore.activeColors.includes(opt)
                   ? 'text-primary-400 bg-primary-500/10'
                   : 'text-gray-300 hover:bg-surface-800'"
-                @click="toggleColor(opt); showColorFilter = false"
+                @click="onColorItemClick($event, opt)"
+                @pointerdown="onFilterItemPointerDown($event, () => toggleColor(opt))"
+                @pointerup="onFilterItemPointerUp()"
+                @pointerleave="onFilterItemCancel()"
+                @pointercancel="onFilterItemCancel()"
               >
                 <span
                   v-if="opt === 'none'"
@@ -653,6 +661,11 @@ function toggleLang(pair: string) {
   uiStore.activeLangs = current
 }
 
+function onLangItemClick(e: MouseEvent, lang: string) {
+  toggleLang(lang)
+  if (!e.ctrlKey) showLangPopup.value = false
+}
+
 // When the lang-pair filter changes, re-fetch groups (filtered) then entries.
 watch(
   () => uiStore.activeLangs,
@@ -698,12 +711,66 @@ function toggleColor(color: string) {
   uiStore.activeColors = current
 }
 
+function onColorItemClick(e: MouseEvent, opt: string) {
+  toggleColor(opt)
+  if (!e.ctrlKey) showColorFilter.value = false
+}
+
 function colorSwatchBg(color: string): string {
   return isEntryColor(color) ? ENTRY_COLOR_SWATCH_BG[color] : ''
 }
 
 function colorOptionLabel(color: string): string {
   return color === COLOR_FILTER_NONE ? 'No color' : ENTRY_COLOR_LABEL[color as EntryColor]
+}
+
+// ─── Filter menu item long-press ─────────────────────────────────────────────
+let _filterLpTimer: ReturnType<typeof setTimeout> | null = null
+let _filterLpClickGuard: ((e: MouseEvent) => void) | null = null
+
+function _clearFilterLpTimer() {
+  if (_filterLpTimer !== null) { clearTimeout(_filterLpTimer); _filterLpTimer = null }
+}
+
+function _cleanFilterLpClickGuard() {
+  if (_filterLpClickGuard !== null) {
+    document.removeEventListener('click', _filterLpClickGuard, true)
+    _filterLpClickGuard = null
+  }
+}
+
+/**
+ * Shared pointerdown handler for lang-pair and color filter menu buttons.
+ * Starts a long-press timer; when it fires, `action` runs (popup stays open)
+ * and a one-shot capture-phase click guard swallows the synthetic
+ * post-release click so the @click handler doesn't also fire.
+ */
+function onFilterItemPointerDown(e: PointerEvent, action: () => void) {
+  if (e.button !== 0) return
+  _clearFilterLpTimer()
+  _cleanFilterLpClickGuard()
+  _filterLpTimer = setTimeout(() => {
+    _filterLpTimer = null
+    action()
+    const guard = (ce: MouseEvent) => {
+      document.removeEventListener('click', guard, true)
+      _filterLpClickGuard = null
+      ce.stopPropagation()
+      ce.preventDefault()
+    }
+    _filterLpClickGuard = guard
+    document.addEventListener('click', guard, true)
+  }, LONG_PRESS_MS)
+}
+
+/** Called on pointerup; clears the timer and lets the normal @click fire. */
+function onFilterItemPointerUp() {
+  _clearFilterLpTimer()
+}
+
+/** Called on pointerleave / pointercancel; cancels any in-flight long-press. */
+function onFilterItemCancel() {
+  _clearFilterLpTimer()
 }
 
 const showColorFilter = ref(false)
@@ -2123,6 +2190,8 @@ onBeforeUnmount(() => {
   headerResizeObserver?.disconnect()
   clearCardLongPress()
   clearPopupLongPressTimer()
+  _clearFilterLpTimer()
+  _cleanFilterLpClickGuard()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
   document.removeEventListener('click', onColorFilterOutsideClick, true)
@@ -2183,6 +2252,8 @@ onDeactivated(() => {
   dismissSidePanel()
   uiStore.closeActive()
   uiStore.activeMenuId = null
+  _clearFilterLpTimer()
+  _cleanFilterLpClickGuard()
   cancelSearch()
   closeEntryContextPopup()
 })
