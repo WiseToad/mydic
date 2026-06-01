@@ -16,7 +16,8 @@ Some non-obvious UI features:
 - A small button appearing below selected text allows you to translate selection
 - You may tap the word in a wordbook card to show/hide translation hint
 - On PC, you may drag cards in the wordbook to reorder them
-- On Android, you may long-press non-focused card to move focused one in place of it
+- On Android, you may long-press **non-focused** card to move focused one in place of it
+- Long-pressing **focused** wordbook card behaves the same way as the "Find Similar" action
 - Long-pressing a group tip in the wordbook allows you to change it's name
 - The same applies for item in the "more ..." button popup menu, when groups are collapsed
 - You may drag group tips in the wordbook to reorder them

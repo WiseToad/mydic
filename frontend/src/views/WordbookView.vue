@@ -40,7 +40,7 @@
             placeholder="Search…"
             autocomplete="off"
             spellcheck="false"
-            class="w-full px-3 py-1 text-sm bg-surface-800 border border-surface-600 rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
+            class="w-full px-3 py-[3px] text-sm bg-surface-800 border border-surface-600 rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
             @input="onSearchInput"
             @keydown="onSearchKeydown"
           />
@@ -60,7 +60,7 @@
                   @mouseleave="hoveredResultId = null"
                   @click="navigateToResult(result)"
                 >
-                  <td class="pl-3 pr-2 py-2 text-xs font-mono text-gray-500 whitespace-nowrap align-baseline"><span class="inline-block -translate-y-[2px]">{{ formatSearchLangPair(result) }}</span></td>
+                  <td class="pl-3 pr-2 py-2 text-xs text-gray-500 whitespace-nowrap align-baseline"><span class="inline-block -translate-y-[2px]">{{ formatSearchLangPair(result) }}</span></td>
                   <td class="py-2 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
                   <td class="py-2 pr-3 text-xs text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
                 </tr>
@@ -466,6 +466,7 @@
               @delete="handleDelete"
               @update="handleUpdate"
               @move="handleMoveEntry"
+              @find-similar="handleFindSimilarEntry"
             />
           </div>
         </div>
@@ -513,6 +514,34 @@
       </aside>
     </div>
 
+    <!-- Entry context popup (long-press on focused card, position: fixed) -->
+    <div
+      v-if="entryContextPopup"
+      ref="entryContextPopupEl"
+      class="fixed z-50 bg-surface-900 border border-gray-600 rounded-xl shadow-xl overflow-y-auto"
+      :style="entryContextPopupStyle"
+      @click.stop
+    >
+      <table v-if="entryContextPopup.results.length > 0" class="w-full border-collapse">
+        <tbody>
+          <tr
+            v-for="result in entryContextPopup.results"
+            :key="result.id"
+            class="cursor-pointer transition-colors"
+            :class="[result.in_filter ? 'text-gray-300' : 'text-gray-500', hoveredContextResultId === result.id ? (contextResultColorBgHover(result) || 'bg-surface-800') : contextResultColorBg(result)]"
+            @mouseenter="hoveredContextResultId = result.id"
+            @mouseleave="hoveredContextResultId = null"
+            @click="navigateFromContextPopup(result)"
+          >
+            <td class="py-2 pl-3 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
+            <td class="py-2 pr-3 text-xs text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
+          </tr>
+        </tbody>
+      </table>
+      <div v-else-if="entryContextPopup.loading" class="px-3 py-2 text-xs text-gray-500">Loading…</div>
+      <div v-else class="px-3 py-2 text-xs text-gray-500">No results</div>
+    </div>
+
     <!-- Delete entry confirmation dialog -->
     <ConfirmDialog
       v-model="showDeleteDialog"
@@ -558,7 +587,7 @@ import {
   type EntryColor,
 } from '@/utils/entryColors'
 import { wordbookApi } from '@/api/wordbook'
-import type { WordbookSearchEntry } from '@/types'
+import type { WordbookEntry as WordbookEntryData, WordbookSearchEntry } from '@/types'
 
 const store = useWordbookStore()
 const toast = useToastStore()
@@ -884,6 +913,8 @@ onBeforeRouteLeave(() => {
   if (cardsAreaEl.value) {
     groupScrollPositions.set(uiStore.activeGroupId ?? null, cardsAreaEl.value.scrollTop)
   }
+  clearFocusedCardLongPress()
+  closeEntryContextPopup()
 })
 
 watch(
@@ -1527,6 +1558,13 @@ async function confirmDelete() {
   }
 }
 
+function handleFindSimilarEntry(id: number) {
+  const entry = store.entries.find((e) => e.id === id)
+  if (!entry) return
+  uiStore.setFocusedEntry(id, entry.group.id)
+  showEntryContextPopup(entry)
+}
+
 async function handleMoveEntry(id: number, groupId: number) {
   try {
     await groupsStore.assignEntry(id, groupId)
@@ -1577,6 +1615,21 @@ let cardLongPressTimer: ReturnType<typeof setTimeout> | null = null
 function clearCardLongPress() {
   if (cardLongPressTimer !== null) { clearTimeout(cardLongPressTimer); cardLongPressTimer = null }
   cardLongPressState.value = null
+}
+
+// Focused-card long-press state (all pointer types) → context popup
+interface FocusedCardLongPressState {
+  entryId: number
+  pointerId: number
+  startX: number
+  startY: number
+}
+const focusedCardLongPressState = ref<FocusedCardLongPressState | null>(null)
+let focusedCardLongPressTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearFocusedCardLongPress() {
+  if (focusedCardLongPressTimer !== null) { clearTimeout(focusedCardLongPressTimer); focusedCardLongPressTimer = null }
+  focusedCardLongPressState.value = null
 }
 
 // Tab → card group assignment drag, OR tab → tab reorder drag
@@ -1747,14 +1800,11 @@ function onTabPointerCancel() {
 // Card reorder drag (HTML5)
 function onCardGridPointerDown(e: PointerEvent) {
   _lastCardPointerType = e.pointerType
-  // Touch only: start a long-press timer to reorder the focused card into
-  // this card's position (mirrors the desktop drag-and-drop drop behaviour).
-  if (e.pointerType !== 'touch') return
   const target = e.target as Element | null
   if (!target) return
-  // Don't arm reorder when pressing on the open details overlay.
+  // Don't arm any long-press when pressing on the open details overlay.
   if (target.closest('[data-details-overlay]')) return
-  // Don't arm reorder when pressing on interactive card children
+  // Don't arm long-press when pressing on interactive card children
   // (buttons, links, inputs, or the hint-toggle span).
   if (target.closest('button, input, textarea, a, [data-hint-toggle]')) return
   const cardEl = target.closest('[data-entry-id]') as HTMLElement | null
@@ -1765,8 +1815,23 @@ function onCardGridPointerDown(e: PointerEvent) {
   if (!entry) return
   const groupId = entry.group.id
   const focusedId = uiStore.getFocusedEntry(groupId)
-  // Only arm the timer when there is a different focused card in the same group.
-  if (!focusedId || focusedId === entryId) return
+  if (focusedId === entryId) {
+    // Long-press on the currently-focused card (any pointer type) → context popup.
+    clearFocusedCardLongPress()
+    focusedCardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
+    focusedCardLongPressTimer = setTimeout(() => {
+      focusedCardLongPressTimer = null
+      const state = focusedCardLongPressState.value
+      if (!state || state.entryId !== entryId) return
+      clearFocusedCardLongPress()
+      _suppressContextPopupNextClick = true
+      showEntryContextPopup(entry)
+    }, LONG_PRESS_MS)
+    return
+  }
+  // Touch only: long-press on an unfocused card reorders the focused card here.
+  if (e.pointerType !== 'touch') return
+  if (!focusedId) return
   clearCardLongPress()
   cardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
   cardLongPressTimer = setTimeout(() => {
@@ -1784,6 +1849,12 @@ function onCardGridPointerDown(e: PointerEvent) {
 }
 
 function onCardGridPointerMove(e: PointerEvent) {
+  const focusedState = focusedCardLongPressState.value
+  if (focusedState && focusedState.pointerId === e.pointerId) {
+    const dx = e.clientX - focusedState.startX
+    const dy = e.clientY - focusedState.startY
+    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) clearFocusedCardLongPress()
+  }
   const state = cardLongPressState.value
   if (!state || state.pointerId !== e.pointerId) return
   const dx = e.clientX - state.startX
@@ -1798,6 +1869,8 @@ function onCardGridPointerUpOrCancel(e: PointerEvent) {
     uiStore.setFocusedEntry(_reorderFocusRestore.entryId, _reorderFocusRestore.groupId)
     _reorderFocusRestore = null
   }
+  const focusedState = focusedCardLongPressState.value
+  if (focusedState && focusedState.pointerId === e.pointerId) clearFocusedCardLongPress()
   const state = cardLongPressState.value
   if (state && state.pointerId === e.pointerId) clearCardLongPress()
 }
@@ -1863,6 +1936,118 @@ function onDragEnd() {
   draggedId.value = null
   dragOverId.value = null
 }
+
+// ─── Entry context popup (long-press on focused card) ─────────────────────────
+
+interface EntryContextPopupState {
+  entry: WordbookEntryData
+  results: WordbookSearchEntry[]
+  loading: boolean
+  done: boolean
+  anchorLeft: number
+  anchorWidth: number
+  anchorBottom: number
+  anchorTop: number
+}
+
+const entryContextPopup = ref<EntryContextPopupState | null>(null)
+const entryContextPopupEl = ref<HTMLElement | null>(null)
+const hoveredContextResultId = ref<number | null>(null)
+// Suppresses the click event that immediately follows the pointer-up after a
+// long-press, which would otherwise close the just-opened popup.
+let _suppressContextPopupNextClick = false
+
+function closeEntryContextPopup() {
+  _suppressContextPopupNextClick = false
+  entryContextPopup.value = null
+  hoveredContextResultId.value = null
+}
+
+function onEntryContextPopupOutsideClick(e: MouseEvent) {
+  if (_suppressContextPopupNextClick) {
+    _suppressContextPopupNextClick = false
+    return
+  }
+  const target = e.target as Node | null
+  if (!target || entryContextPopupEl.value?.contains(target)) return
+  closeEntryContextPopup()
+}
+
+watch(() => entryContextPopup.value, (popup) => {
+  if (popup) document.addEventListener('click', onEntryContextPopupOutsideClick, true)
+  else document.removeEventListener('click', onEntryContextPopupOutsideClick, true)
+})
+
+async function showEntryContextPopup(entry: WordbookEntryData) {
+  // Use the card wrapper's rect for positioning (excludes the overlay child).
+  const cardEl = document.querySelector(`[data-entry-id="${entry.id}"]:not([data-details-overlay])`) as HTMLElement | null
+  const rect = cardEl?.getBoundingClientRect()
+  const anchorLeft = rect?.left ?? 0
+  const anchorWidth = rect?.width ?? 240
+  const anchorBottom = rect?.bottom ?? 0
+  const anchorTop = rect?.top ?? 0
+
+  const searchTerm = uiStore.swapDisplay ? entry.target_text : entry.source_text
+  const langPair = `${entry.source_lang}:${entry.target_lang}`
+
+  entryContextPopup.value = { entry, results: [], loading: true, done: false, anchorLeft, anchorWidth, anchorBottom, anchorTop }
+
+  try {
+    const resp = await wordbookApi.search(searchTerm, uiStore.swapDisplay, [langPair], uiStore.activeColors, true)
+    if (entryContextPopup.value?.entry.id === entry.id) {
+      entryContextPopup.value = { ...entryContextPopup.value, results: resp.results.filter(r => r.id !== entry.id), loading: false, done: true }
+    }
+  } catch {
+    if (entryContextPopup.value?.entry.id === entry.id) {
+      entryContextPopup.value = { ...entryContextPopup.value, results: [], loading: false, done: true }
+    }
+  }
+}
+
+function navigateFromContextPopup(result: WordbookSearchEntry) {
+  closeEntryContextPopup()
+  uiStore.requestShowEntry(
+    result.id,
+    `${result.source_lang}:${result.target_lang}`,
+    result.group.id,
+    result.color ?? null,
+  )
+}
+
+function contextResultColorBg(result: WordbookSearchEntry): string {
+  if (!result.color || !isEntryColor(result.color)) return ''
+  return ENTRY_COLOR_CARD_BG[result.color as EntryColor]
+}
+
+function contextResultColorBgHover(result: WordbookSearchEntry): string {
+  if (!result.color || !isEntryColor(result.color)) return ''
+  return ENTRY_COLOR_CARD_BG_FOCUSED[result.color as EntryColor]
+}
+
+const entryContextPopupStyle = computed(() => {
+  if (!entryContextPopup.value) return {}
+  const { anchorLeft, anchorWidth, anchorBottom, anchorTop } = entryContextPopup.value
+  const POPUP_MAX_HEIGHT = 240
+  const spaceBelow = window.innerHeight - anchorBottom - 8
+  const spaceAbove = anchorTop - 8
+  if (spaceBelow >= 80 || spaceBelow >= spaceAbove) {
+    return {
+      left: `${anchorLeft}px`,
+      top: `${anchorBottom + 4}px`,
+      bottom: '',
+      width: `${anchorWidth}px`,
+      maxHeight: `${Math.min(POPUP_MAX_HEIGHT, Math.max(60, spaceBelow))}px`,
+    }
+  } else {
+    return {
+      left: `${anchorLeft}px`,
+      top: '',
+      bottom: `${window.innerHeight - anchorTop + 4}px`,
+      width: `${anchorWidth}px`,
+      maxHeight: `${Math.min(POPUP_MAX_HEIGHT, Math.max(60, spaceAbove))}px`,
+    }
+  }
+})
 
 // ─── Bottom-spacer flicker prevention ─────────────────────────────────────────
 // The details overlay (`position: absolute; top: 100%`) causes cardsAreaEl to
@@ -1983,6 +2168,7 @@ onBeforeUnmount(() => {
   portraitMq?.removeEventListener('change', onPortraitChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
+  clearFocusedCardLongPress()
   clearPopupLongPressTimer()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
@@ -1990,7 +2176,9 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onLangPopupOutsideClick, true)
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
+  document.removeEventListener('click', onEntryContextPopupOutsideClick, true)
   cancelSearch()
+  closeEntryContextPopup()
 })
 
 // Re-activated from <KeepAlive> when the user navigates back to this view
@@ -2043,6 +2231,8 @@ onDeactivated(() => {
   uiStore.closeActive()
   uiStore.activeMenuId = null
   cancelSearch()
+  clearFocusedCardLongPress()
+  closeEntryContextPopup()
 })
 
 // Defensive: if a pending highlight is set while the view is already active,

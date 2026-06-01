@@ -280,6 +280,16 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                   </div>
                   <button
                     class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-gray-300 hover:bg-surface-800 transition-colors flex items-center gap-2"
+                    @click="handleFindSimilar"
+                  >
+                    <svg viewBox="0 0 24 24" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="10" cy="10" r="6.5"/>
+                      <line x1="15" y1="15" x2="21" y2="21"/>
+                    </svg>
+                    Find Similar
+                  </button>
+                  <button
+                    class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-gray-300 hover:bg-surface-800 transition-colors flex items-center gap-2"
                     @click="handleOpenInTranslator"
                   >
                     <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
@@ -466,6 +476,7 @@ const emit = defineEmits<{
   (e: 'delete', id: number): void
   (e: 'update', id: number, data: { source_text?: string; target_text?: string; notes?: string; provider_code?: string | null; color?: string | null }): void
   (e: 'move', id: number, groupId: number): void
+  (e: 'find-similar', id: number): void
 }>()
 
 const router = useRouter()
@@ -693,9 +704,9 @@ async function toggleMoveToSubmenu() {
 // items aren't pushed off-screen.
 const actionsMenuPlacement = ref<'below' | 'above'>('below')
 // Approximate height in pixels of the fully-expanded actions popup
-// (Edit → Color → Open in Translator → [Remove from group] → Delete + py).
-// Sized to the worst case (in-group entry shows all 5 rows). When less
-// than this fits below the trigger, the popup flips above.
+// (Edit → Color → Move to → Find Similar → Open in Translator → Delete + py).
+// Sized to the worst case (6 rows). When less than this fits below the
+// trigger, the popup flips above.
 const ACTIONS_MENU_RESERVE_PX = 200
 
 function recomputeActionsMenuPlacement() {
@@ -1048,6 +1059,11 @@ function handleMoveToGroup(groupId: number) {
   showActionsMenu.value = false
   if (props.entry.group.id === groupId) return
   emit('move', props.entry.id, groupId)
+}
+
+function handleFindSimilar() {
+  showActionsMenu.value = false
+  emit('find-similar', props.entry.id)
 }
 
 </script>

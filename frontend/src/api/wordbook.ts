@@ -54,15 +54,17 @@ export const wordbookApi = {
 
   async search(
     q: string,
-    searchTranslated: boolean,
+    searchTarget: boolean,
     langPairs: string[],
     colors: string[],
+    strictLangPair?: boolean,
   ): Promise<WordbookSearchResponse> {
     const params = new URLSearchParams()
     params.set('q', q)
-    if (searchTranslated) params.set('search_translated', 'true')
+    if (searchTarget) params.set('search_target', 'true')
     for (const p of langPairs) params.append('lang_pair', p)
     for (const c of colors) params.append('color', c)
+    if (strictLangPair) params.set('strict_lang_pair', 'true')
     const { data } = await apiClient.get<WordbookSearchResponse>('/wordbook/search', { params })
     return data
   },

@@ -52,9 +52,10 @@ _SEARCH_THRESHOLD = 0.15
 @router.get("/search", response_model=WordbookSearchResponse)
 async def search_entries(
     q: str,
-    search_translated: bool = False,
+    search_target: bool = False,
     color: list[str] = Query(default=[]),
     lang_pair: list[str] = Query(default=[]),
+    strict_lang_pair: bool = False,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -63,32 +64,15 @@ async def search_entries(
     Returns up to _SEARCH_LIMIT results sorted purely by relevance score.
     Each result carries in_filter=True/False indicating whether it matches
     the currently active lang_pair and color filters.
+
+    When strict_lang_pair=True, results not matching the given lang_pair
+    filters are excluded entirely instead of being marked as in_filter=False.
     """
     q = q.strip()
     if not q:
         return WordbookSearchResponse(results=[])
 
-    search_col = "target_text" if search_translated else "source_text"
-
-    sql = f"""
-        SELECT
-            we.id, we.source_lang, we.target_lang,
-            we.source_text, we.target_text, we.color,
-            wg.id   AS wg_id,
-            wg.name AS wg_name
-        FROM wordbook_entries we
-        JOIN word_groups wg ON wg.id = we.group_id
-        WHERE we.user_id = :uid
-          AND similarity(
-                immutable_unaccent(lower(we.{search_col})),
-                immutable_unaccent(lower(:q))
-              ) > :thr
-        ORDER BY similarity(
-                immutable_unaccent(lower(we.{search_col})),
-                immutable_unaccent(lower(:q))
-              ) DESC
-        LIMIT :lim
-    """
+    search_col = "target_text" if search_target else "source_text"
 
     # Pre-compute filter sets for in_filter tagging
     filter_lang_pairs: set[tuple[str, str]] = set()
@@ -102,6 +86,39 @@ async def search_entries(
     filter_colors: set[str] = set(real_colors)
     any_color_filter = bool(real_colors) or has_none_color
 
+    # When strict_lang_pair=True, inject a WHERE clause to exclude non-matching pairs.
+    params: dict = {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": _SEARCH_LIMIT}
+    lang_pair_clause = ""
+    if strict_lang_pair and filter_lang_pairs:
+        pair_conditions = []
+        for i, (src, tgt) in enumerate(filter_lang_pairs):
+            src_key, tgt_key = f"lp_src_{i}", f"lp_tgt_{i}"
+            params[src_key] = src
+            params[tgt_key] = tgt
+            pair_conditions.append(f"(we.source_lang = :{src_key} AND we.target_lang = :{tgt_key})")
+        lang_pair_clause = f"AND ({' OR '.join(pair_conditions)})"
+
+    sql = f"""
+        SELECT
+            we.id, we.source_lang, we.target_lang,
+            we.source_text, we.target_text, we.color,
+            wg.id   AS wg_id,
+            wg.name AS wg_name
+        FROM wordbook_entries we
+        JOIN word_groups wg ON wg.id = we.group_id
+        WHERE we.user_id = :uid
+          {lang_pair_clause}
+          AND similarity(
+                immutable_unaccent(lower(we.{search_col})),
+                immutable_unaccent(lower(:q))
+              ) > :thr
+        ORDER BY similarity(
+                immutable_unaccent(lower(we.{search_col})),
+                immutable_unaccent(lower(:q))
+              ) DESC
+        LIMIT :lim
+    """
+
     def _is_in_filter(row) -> bool:
         if filter_lang_pairs and (row.source_lang, row.target_lang) not in filter_lang_pairs:
             return False
@@ -114,10 +131,7 @@ async def search_entries(
         return True
 
     rows = (
-        await db.execute(
-            text(sql),
-            {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": _SEARCH_LIMIT},
-        )
+        await db.execute(text(sql), params)
     ).fetchall()
 
     results = [
