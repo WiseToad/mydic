@@ -20,6 +20,7 @@ class WordGroupResponse(BaseModel):
     id: int
     name: str
     position: int
+    in_filter: bool = True
     model_config = {"from_attributes": True}
 
 
@@ -93,6 +94,12 @@ class WordbookListResponse(BaseModel):
     total: int
 
 
+class WordbookSearchGroup(BaseModel):
+    id: int
+    name: str
+    model_config = {"from_attributes": True}
+
+
 class WordbookSearchEntry(BaseModel):
     id: int
     source_lang: str
@@ -100,7 +107,7 @@ class WordbookSearchEntry(BaseModel):
     source_text: str
     target_text: str
     color: str | None = None
-    group: WordGroupResponse
+    group: WordbookSearchGroup
     in_filter: bool
     model_config = {"from_attributes": True}
 

@@ -270,7 +270,7 @@
 
         <!-- Each group tab -->
         <div
-          v-for="tab in groupsStore.tabs"
+        v-for="tab in groupsStore.filteredTabs"
           v-show="!overflowedTabIds.has(tab.id)"
           :key="tab.id"
           :data-tab-id="tab.id"
@@ -331,7 +331,7 @@
               : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
             @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
             :title="groupsOverflow ? 'Show all groups' : 'Add group'"
-          >{{ groupsOverflow ? 'more ...' : groupsStore.tabs.length === 0 ? 'New group' : 'New' }}</button>
+          >{{ groupsOverflow ? 'more ...' : groupsStore.filteredTabs.length === 0 ? 'New group' : 'New' }}</button>
 
           <!-- Groups overflow popup -->
           <div
@@ -341,7 +341,7 @@
             @click.stop
           >
           <div
-            v-for="tab in groupsStore.tabs"
+          v-for="tab in groupsStore.filteredTabs"
             :key="tab.id"
             :data-popup-group-item="tab.id"
             class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none"
@@ -630,7 +630,7 @@ watch(
     if (!viewIsActive.value) return
     await groupsStore.fetchGroups(newLangs.length > 0 ? [...newLangs] : undefined)
     const groupIdBefore = uiStore.activeGroupId
-    uiStore.initActiveGroup(groupsStore.tabs)
+    uiStore.initActiveGroup(groupsStore.filteredTabs)
     // If initActiveGroup changed the active group, the activeGroupId watcher
     // will fetch entries for the new group — skip here to avoid a duplicate fetch.
     if (uiStore.activeGroupId !== groupIdBefore) return
@@ -964,7 +964,7 @@ function cancelTabEdit() {
 
 async function addNewTab() {
   const existingNames = new Set(groupsStore.tabs.map((t) => t.name))
-  let n = groupsStore.tabs.length + 1
+  let n = groupsStore.filteredTabs.length + 1
   while (existingNames.has(`Group ${n}`)) n++
   try {
     const tab = await groupsStore.addTab(`Group ${n}`)
@@ -988,12 +988,12 @@ async function confirmDeleteTab() {
   const id = pendingDeleteTabId.value
   pendingDeleteTabId.value = null
   const wasActive = uiStore.activeGroupId === id
-  const deletedIndex = groupsStore.tabs.findIndex((t) => t.id === id)
+  const deletedIndex = groupsStore.filteredTabs.findIndex((t) => t.id === id)
   try {
     await groupsStore.deleteTab(id)
     uiStore.deleteGroupEntries(id)
     if (wasActive) {
-      const next = groupsStore.tabs[deletedIndex] ?? groupsStore.tabs[groupsStore.tabs.length - 1] ?? null
+      const next = groupsStore.filteredTabs[deletedIndex] ?? groupsStore.filteredTabs[groupsStore.filteredTabs.length - 1] ?? null
       uiStore.activeGroupId = next?.id ?? null  // the activeGroupId watcher handles the rest
     }
   } catch (e: unknown) {
@@ -1174,7 +1174,7 @@ function checkTabsFit() {
   const addBtn = addGroupBtnEl.value
   if (!rowEl || !addBtn) return
 
-  const tabs = groupsStore.tabs
+  const tabs = groupsStore.filteredTabs
   const containerWidth = getWidth(rowEl)
   let btnW = getWidth(addBtn)
   if (btnW === 0) btnW = 64
@@ -1248,7 +1248,7 @@ async function toggleGroupsPopup() {
   const popup = groupsPopupEl.value
   if (!popup) return
   const activeId = uiStore.activeGroupId
-  const tabs = groupsStore.tabs
+  const tabs = groupsStore.filteredTabs
   const activeIndex = tabs.findIndex(t => t.id === activeId)
   if (activeIndex === -1) return
   const items = Array.from(popup.querySelectorAll<HTMLElement>('[data-popup-group-item]'))
@@ -1317,7 +1317,7 @@ function onPopupItemPointerUp(_event: PointerEvent) {
   if (!state) return
   const elapsed = Date.now() - state.startTime
   if (elapsed >= LONG_PRESS_MS) {
-    const tab = groupsStore.tabs.find(t => t.id === state.tabId)
+    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
     if (tab) startPopupTabEdit(tab)
   } else {
     selectTabFromPopup(state.tabId)
@@ -1354,11 +1354,11 @@ function checkHeaderLayout() {
 let headerResizeObserver: ResizeObserver | null = null
 
 watch(
-  [() => groupsStore.tabs.map((t) => t.name).join('|'), tabEditName],
+  [() => groupsStore.filteredTabs.map((t) => t.name).join('|'), tabEditName],
   () => { nextTick(() => checkHeaderLayout()) },
 )
 watch(
-  () => groupsStore.tabs.length,
+  () => groupsStore.filteredTabs.length,
   () => { nextTick(() => checkTabsFit()) },
 )
 // Re-check when label text changes (width may change: "42" vs "42 entries")
@@ -1729,7 +1729,7 @@ function onTabPointerUp(_event: PointerEvent) {
   } else if (elapsed < LONG_PRESS_MS) {
     selectTab(state.tabId)
   } else {
-    const tab = groupsStore.tabs.find(t => t.id === state.tabId)
+    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
     if (tab) startTabEdit(tab)
   }
 }
@@ -2029,7 +2029,7 @@ onActivated(async () => {
     }
   }
   await Promise.all([langPairsTask, groupsTask])
-  uiStore.initActiveGroup(groupsStore.tabs)
+  uiStore.initActiveGroup(groupsStore.filteredTabs)
   handlePendingHighlight()
 })
 

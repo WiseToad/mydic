@@ -435,10 +435,12 @@
           :key="group.id"
           type="button"
           class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
-          :class="wordbookUiStore.activeGroupId === group.id
-            ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
-            : 'text-gray-200 hover:bg-surface-700'"
-          :data-selected="(wordbookUiStore.activeGroupId === group.id) || undefined"
+          :class="group.in_filter === false
+            ? 'text-gray-500 hover:bg-surface-700'
+            : wordbookUiStore.activeGroupId === group.id
+              ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
+              : 'text-gray-200 hover:bg-surface-700'"
+          :data-selected="(group.in_filter !== false && wordbookUiStore.activeGroupId === group.id) || undefined"
           @pointerdown.stop="onGroupMenuPointerDown($event, group.id)"
           @pointerup.stop="onGroupMenuPointerUp"
           @pointerleave="onGroupMenuCancelPress"
@@ -1211,8 +1213,12 @@ const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
 const { onPointerDown: onAddWordbookPointerDown, onPointerUp: onAddWordbookPointerUp, onCancel: onAddWordbookCancelPress } = useLongPress(
   async () => {
+    // Only fetch when the store is empty (e.g. user opens the translator without
+    // having visited the Wordbook yet). Use the Wordbook's active lang-pair filter
+    // so in_filter flags match what the Wordbook tabs would show.
     if (wordbookGroupsStore.tabs.length === 0) {
-      try { await wordbookGroupsStore.fetchGroups() } catch { /* non-critical */ }
+      const activeLangs = wordbookUiStore.activeLangs
+      try { await wordbookGroupsStore.fetchGroups(activeLangs.length > 0 ? [...activeLangs] : undefined) } catch { /* non-critical */ }
     }
     _openGroupMenu()
   },

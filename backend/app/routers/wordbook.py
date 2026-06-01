@@ -16,6 +16,7 @@ from app.schemas.wordbook import (
     WordbookLookupResult,
     WordbookMoveItem,
     WordbookSearchEntry,
+    WordbookSearchGroup,
     WordbookSearchResponse,
     WordGroupCreate,
     WordGroupResponse,
@@ -69,86 +70,37 @@ async def search_entries(
 
     search_col = "target_text" if search_translated else "source_text"
 
-    # Build parameterised lang-pair OR conditions
-    pair_clauses: list[str] = []
-    pair_params: dict = {}
-    for i, p in enumerate(lang_pair):
-        parts = p.split(":", 1)
-        if len(parts) == 2:
-            pair_clauses.append(
-                f"(we.source_lang = :sl_{i} AND we.target_lang = :tl_{i})"
-            )
-            pair_params[f"sl_{i}"] = parts[0]
-            pair_params[f"tl_{i}"] = parts[1]
+    sql = f"""
+        SELECT
+            we.id, we.source_lang, we.target_lang,
+            we.source_text, we.target_text, we.color,
+            wg.id   AS wg_id,
+            wg.name AS wg_name
+        FROM wordbook_entries we
+        JOIN word_groups wg ON wg.id = we.group_id
+        WHERE we.user_id = :uid
+          AND similarity(
+                immutable_unaccent(lower(we.{search_col})),
+                immutable_unaccent(lower(:q))
+              ) > :thr
+        ORDER BY similarity(
+                immutable_unaccent(lower(we.{search_col})),
+                immutable_unaccent(lower(:q))
+              ) DESC
+        LIMIT :lim
+    """
 
-    lang_filter = f"AND ({' OR '.join(pair_clauses)})" if pair_clauses else ""
-
-    # Build color filter; 'none' sentinel matches entries with NULL color
-    has_none_color = "none" in color
-    real_colors = [c for c in color if c != "none"]
-    color_clauses: list[str] = []
-    color_params: dict = {}
-    for i, c in enumerate(real_colors):
-        color_clauses.append(f"we.color = :col_{i}")
-        color_params[f"col_{i}"] = c
-    if has_none_color:
-        color_clauses.append("we.color IS NULL")
-    color_filter = f"AND ({' OR '.join(color_clauses)})" if color_clauses else ""
-
-    base_params: dict = {
-        "uid": current_user.id,
-        "q": q,
-        "thr": _SEARCH_THRESHOLD,
-        **pair_params,
-        **color_params,
-    }
-
-    def _build_sql(extra_where: str) -> str:
-        return f"""
-            SELECT
-                we.id, we.source_lang, we.target_lang,
-                we.source_text, we.target_text, we.color,
-                wg.id       AS wg_id,
-                wg.name     AS wg_name,
-                wg.position AS wg_pos
-            FROM wordbook_entries we
-            JOIN word_groups wg ON wg.id = we.group_id
-            WHERE we.user_id = :uid
-              AND similarity(
-                    immutable_unaccent(lower(we.{search_col})),
-                    immutable_unaccent(lower(:q))
-                  ) > :thr
-              {extra_where}
-            ORDER BY similarity(
-                    immutable_unaccent(lower(we.{search_col})),
-                    immutable_unaccent(lower(:q))
-                ) DESC
-            LIMIT :lim
-        """
-
-    def _make_entry(row, in_filter: bool) -> WordbookSearchEntry:
-        return WordbookSearchEntry(
-            id=row.id,
-            source_lang=row.source_lang,
-            target_lang=row.target_lang,
-            source_text=row.source_text,
-            target_text=row.target_text,
-            color=row.color,
-            group=WordGroupResponse(
-                id=row.wg_id, name=row.wg_name, position=row.wg_pos
-            ),
-            in_filter=in_filter,
-        )
-
-    # ── Pre-compute filter sets for in_filter tagging ────────────────────────
+    # Pre-compute filter sets for in_filter tagging
     filter_lang_pairs: set[tuple[str, str]] = set()
     for p in lang_pair:
         parts = p.split(":", 1)
         if len(parts) == 2:
             filter_lang_pairs.add((parts[0], parts[1]))
 
+    has_none_color = "none" in color
+    real_colors = [c for c in color if c != "none"]
     filter_colors: set[str] = set(real_colors)
-    any_color_filter = bool(color_clauses) or has_none_color
+    any_color_filter = bool(real_colors) or has_none_color
 
     def _is_in_filter(row) -> bool:
         if filter_lang_pairs and (row.source_lang, row.target_lang) not in filter_lang_pairs:
@@ -161,15 +113,26 @@ async def search_entries(
                 return False
         return True
 
-    # ── Single-pass: unfiltered search sorted purely by relevance ─────────────
-    all_rows = (
+    rows = (
         await db.execute(
-            text(_build_sql("")),
+            text(sql),
             {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": _SEARCH_LIMIT},
         )
     ).fetchall()
 
-    results = [_make_entry(r, _is_in_filter(r)) for r in all_rows]
+    results = [
+        WordbookSearchEntry(
+            id=row.id,
+            source_lang=row.source_lang,
+            target_lang=row.target_lang,
+            source_text=row.source_text,
+            target_text=row.target_text,
+            color=row.color,
+            group=WordbookSearchGroup(id=row.wg_id, name=row.wg_name),
+            in_filter=_is_in_filter(row),
+        )
+        for row in rows
+    ]
     return WordbookSearchResponse(results=results)
 
 
@@ -426,19 +389,28 @@ async def list_groups(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return groups, optionally filtered to those containing entries matching
-    ANY of the supplied 'src:tgt' lang_pair values (OR logic)."""
-    q = (
-        select(WordGroup)
-        .where(WordGroup.user_id == current_user.id)
-        .order_by(WordGroup.position, WordGroup.id)
-    )
+    """Return all groups for the current user, ordered by position.
+
+    When lang_pair values are supplied, each group also carries an
+    `in_filter` flag that is True when the group contains at least one
+    entry matching ANY of the given 'src:tgt' pairs (OR logic) and False
+    otherwise.  Without a lang_pair filter every group has in_filter=True.
+    """
+    all_groups = (
+        await db.execute(
+            select(WordGroup)
+            .where(WordGroup.user_id == current_user.id)
+            .order_by(WordGroup.position, WordGroup.id)
+        )
+    ).scalars().all()
+
+    in_filter_ids: set[int] | None = None
     if lang_pair:
-        pairs = []
-        for p in lang_pair:
-            parts = p.split(":", 1)
-            if len(parts) == 2:
-                pairs.append((parts[0], parts[1]))
+        pairs = [
+            (parts[0], parts[1])
+            for p in lang_pair
+            if len(parts := p.split(":", 1)) == 2
+        ]
         if pairs:
             conditions = [
                 and_(
@@ -447,13 +419,25 @@ async def list_groups(
                 )
                 for src, tgt in pairs
             ]
-            q = q.where(
-                WordGroup.id.in_(
-                    select(WordbookEntry.group_id).where(or_(*conditions))
+            matching_ids = (
+                await db.execute(
+                    select(distinct(WordbookEntry.group_id)).where(
+                        WordbookEntry.user_id == current_user.id,
+                        or_(*conditions),
+                    )
                 )
-            )
-    rows = (await db.execute(q)).scalars().all()
-    return rows
+            ).scalars().all()
+            in_filter_ids = set(matching_ids)
+
+    return [
+        WordGroupResponse(
+            id=g.id,
+            name=g.name,
+            position=g.position,
+            in_filter=True if in_filter_ids is None else (g.id in in_filter_ids),
+        )
+        for g in all_groups
+    ]
 
 
 @router.post("/groups", response_model=WordGroupResponse, status_code=201)

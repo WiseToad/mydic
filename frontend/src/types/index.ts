@@ -21,6 +21,7 @@ export interface WordGroup {
   id: number
   name: string
   position: number
+  in_filter: boolean
 }
 
 export interface WordGroupUpdate {
@@ -64,8 +65,8 @@ export interface WordbookSearchEntry {
   source_text: string
   target_text: string
   color: string | null
-  group: WordGroup
-  /** True when this result matched within the currently active filters. */
+  group: { id: number; name: string }
+  /** True when this result matches the currently active lang_pair and color filters. */
   in_filter: boolean
 }
 

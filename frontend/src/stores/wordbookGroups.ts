@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { wordbookApi } from '@/api/wordbook'
 import { useWordbookStore } from '@/stores/wordbook'
 import type { WordGroup } from '@/types'
@@ -87,10 +87,16 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     wordbookApi.reorderGroups({ source_id: sourceId, target_id: targetId }).catch(() => {})
   }
 
+  /** Groups that matched the last lang-pair filter (in_filter=true). When no
+   * filter was supplied all groups qualify. Use this in the Wordbook view to
+   * show only relevant groups; the Translator popup uses `tabs` directly so
+   * it can display (and gray out) groups outside the current filter. */
+  const filteredTabs = computed(() => tabs.value.filter((t) => t.in_filter !== false))
+
   function reset() {
     tabs.value = []
     langPairs.value = []
   }
 
-  return { tabs, langPairs, fetchGroups, fetchLangPairs, addTab, renameTab, deleteTab, assignEntry, reorderTabs, reset }
+  return { tabs, filteredTabs, langPairs, fetchGroups, fetchLangPairs, addTab, renameTab, deleteTab, assignEntry, reorderTabs, reset }
 })
