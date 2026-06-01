@@ -10,6 +10,7 @@ Some non-obvious UI features:
 - Long-pressing the swap button clears the input text along with language swapping
 - In auto-detect mode, tapping detected language abbreviation sets it as a current
 - Long-pressing the "Add to wordbook" button allows you to select a group where to add to
+- Groups, that are filtered-out by active filters in wordbook, are dimmed in this popup
 - Long-pressing a group in this popup sets it as current in wordbook, along with adding the word
 - Long-pressing an audio button pops up the voice selection menu
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
@@ -22,6 +23,7 @@ Some non-obvious UI features:
 - The same applies for item in the "more ..." button popup menu, when groups are collapsed
 - You may drag group tips in the wordbook to reorder them
 - Dragging a group tip onto some word moves this word into the group
+- Entries in search results and find-similar popups are dimmed, if they're affected by filters
 
 Some usage notes for languages, you do not familiar enough with:
 

@@ -514,12 +514,13 @@
       </aside>
     </div>
 
-    <!-- Entry context popup (long-press on focused card, position: fixed) -->
+    <!-- Entry context popup (long-press on details button, position: fixed) -->
     <div
       v-if="entryContextPopup"
       ref="entryContextPopupEl"
       class="fixed z-50 bg-surface-900 border border-gray-600 rounded-xl shadow-xl overflow-y-auto"
       :style="entryContextPopupStyle"
+      @pointerdown.stop
       @click.stop
     >
       <table v-if="entryContextPopup.results.length > 0" class="w-full border-collapse">
@@ -913,7 +914,6 @@ onBeforeRouteLeave(() => {
   if (cardsAreaEl.value) {
     groupScrollPositions.set(uiStore.activeGroupId ?? null, cardsAreaEl.value.scrollTop)
   }
-  clearFocusedCardLongPress()
   closeEntryContextPopup()
 })
 
@@ -1617,21 +1617,6 @@ function clearCardLongPress() {
   cardLongPressState.value = null
 }
 
-// Focused-card long-press state (all pointer types) → context popup
-interface FocusedCardLongPressState {
-  entryId: number
-  pointerId: number
-  startX: number
-  startY: number
-}
-const focusedCardLongPressState = ref<FocusedCardLongPressState | null>(null)
-let focusedCardLongPressTimer: ReturnType<typeof setTimeout> | null = null
-
-function clearFocusedCardLongPress() {
-  if (focusedCardLongPressTimer !== null) { clearTimeout(focusedCardLongPressTimer); focusedCardLongPressTimer = null }
-  focusedCardLongPressState.value = null
-}
-
 // Tab → card group assignment drag, OR tab → tab reorder drag
 // (custom pointer-based, single state machine for both)
 const draggedTabId = ref<number | null>(null)
@@ -1814,23 +1799,9 @@ function onCardGridPointerDown(e: PointerEvent) {
   const entry = filteredEntries.value.find((en) => en.id === entryId)
   if (!entry) return
   const groupId = entry.group.id
-  const focusedId = uiStore.getFocusedEntry(groupId)
-  if (focusedId === entryId) {
-    // Long-press on the currently-focused card (any pointer type) → context popup.
-    clearFocusedCardLongPress()
-    focusedCardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
-    focusedCardLongPressTimer = setTimeout(() => {
-      focusedCardLongPressTimer = null
-      const state = focusedCardLongPressState.value
-      if (!state || state.entryId !== entryId) return
-      clearFocusedCardLongPress()
-      _suppressContextPopupNextClick = true
-      showEntryContextPopup(entry)
-    }, LONG_PRESS_MS)
-    return
-  }
   // Touch only: long-press on an unfocused card reorders the focused card here.
   if (e.pointerType !== 'touch') return
+  const focusedId = uiStore.getFocusedEntry(groupId)
   if (!focusedId) return
   clearCardLongPress()
   cardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
@@ -1849,12 +1820,6 @@ function onCardGridPointerDown(e: PointerEvent) {
 }
 
 function onCardGridPointerMove(e: PointerEvent) {
-  const focusedState = focusedCardLongPressState.value
-  if (focusedState && focusedState.pointerId === e.pointerId) {
-    const dx = e.clientX - focusedState.startX
-    const dy = e.clientY - focusedState.startY
-    if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) clearFocusedCardLongPress()
-  }
   const state = cardLongPressState.value
   if (!state || state.pointerId !== e.pointerId) return
   const dx = e.clientX - state.startX
@@ -1869,8 +1834,6 @@ function onCardGridPointerUpOrCancel(e: PointerEvent) {
     uiStore.setFocusedEntry(_reorderFocusRestore.entryId, _reorderFocusRestore.groupId)
     _reorderFocusRestore = null
   }
-  const focusedState = focusedCardLongPressState.value
-  if (focusedState && focusedState.pointerId === e.pointerId) clearFocusedCardLongPress()
   const state = cardLongPressState.value
   if (state && state.pointerId === e.pointerId) clearCardLongPress()
 }
@@ -1937,7 +1900,7 @@ function onDragEnd() {
   dragOverId.value = null
 }
 
-// ─── Entry context popup (long-press on focused card) ─────────────────────────
+// ─── Entry context popup (long-press on details button) ─────────────────────────
 
 interface EntryContextPopupState {
   entry: WordbookEntryData
@@ -1953,29 +1916,20 @@ interface EntryContextPopupState {
 const entryContextPopup = ref<EntryContextPopupState | null>(null)
 const entryContextPopupEl = ref<HTMLElement | null>(null)
 const hoveredContextResultId = ref<number | null>(null)
-// Suppresses the click event that immediately follows the pointer-up after a
-// long-press, which would otherwise close the just-opened popup.
-let _suppressContextPopupNextClick = false
-
 function closeEntryContextPopup() {
-  _suppressContextPopupNextClick = false
   entryContextPopup.value = null
   hoveredContextResultId.value = null
 }
 
-function onEntryContextPopupOutsideClick(e: MouseEvent) {
-  if (_suppressContextPopupNextClick) {
-    _suppressContextPopupNextClick = false
-    return
-  }
+function onEntryContextPopupOutsidePointerDown(e: PointerEvent) {
   const target = e.target as Node | null
   if (!target || entryContextPopupEl.value?.contains(target)) return
   closeEntryContextPopup()
 }
 
 watch(() => entryContextPopup.value, (popup) => {
-  if (popup) document.addEventListener('click', onEntryContextPopupOutsideClick, true)
-  else document.removeEventListener('click', onEntryContextPopupOutsideClick, true)
+  if (popup) document.addEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+  else document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
 })
 
 async function showEntryContextPopup(entry: WordbookEntryData) {
@@ -2168,7 +2122,6 @@ onBeforeUnmount(() => {
   portraitMq?.removeEventListener('change', onPortraitChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
-  clearFocusedCardLongPress()
   clearPopupLongPressTimer()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
@@ -2176,7 +2129,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onLangPopupOutsideClick, true)
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
-  document.removeEventListener('click', onEntryContextPopupOutsideClick, true)
+  document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
   cancelSearch()
   closeEntryContextPopup()
 })
@@ -2231,7 +2184,6 @@ onDeactivated(() => {
   uiStore.closeActive()
   uiStore.activeMenuId = null
   cancelSearch()
-  clearFocusedCardLongPress()
   closeEntryContextPopup()
 })
 
