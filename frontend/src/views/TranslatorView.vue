@@ -128,7 +128,7 @@
               ref="addToWordbookBtnRef"
               title="Add to Wordbook (long-press to pick group)"
               class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors"
-              @pointerdown.stop="onAddWordbookPointerDown"
+              @pointerdown.stop.prevent="onAddWordbookPointerDown"
               @pointerup.stop="onAddWordbookPointerUp"
               @pointerleave="onAddWordbookCancelPress"
               @pointercancel="onAddWordbookCancelPress"
@@ -441,11 +441,12 @@
               ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
               : 'text-gray-200 hover:bg-surface-700'"
           :data-selected="(group.in_filter !== false && wordbookUiStore.activeGroupId === group.id) || undefined"
-          @pointerdown.stop="onGroupMenuPointerDown($event, group.id)"
+          @pointerdown.stop.prevent="onGroupMenuPointerDown($event, group.id)"
           @pointerup.stop="onGroupMenuPointerUp"
           @pointerleave="onGroupMenuCancelPress"
           @pointercancel="onGroupMenuCancelPress"
           @click.stop
+          @contextmenu.prevent
         >
           <span class="flex-1">{{ group.name }}</span>
           <svg
@@ -1180,7 +1181,7 @@ function openInWordbook() {
   if (addedColor) {
     parts.push(addedColor === 'none' ? 'No color' : (isEntryColor(addedColor) ? ENTRY_COLOR_LABEL[addedColor as EntryColor] : addedColor))
   }
-  if (parts.length > 0) toast.warn(`Filters expanded: ${parts.join(', ')}`)
+  if (parts.length > 0) toast.warn(`Filters expanded with: ${parts.join(', ')}`)
   router.push({ name: 'wordbook' })
 }
 

@@ -337,10 +337,11 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     ? 'text-primary-400 bg-primary-500/10'
                     : 'text-gray-500 hover:text-primary-400 hover:bg-primary-500/10'
                 ]"
-                @pointerdown="onDetailsBtnPointerDown"
+              @pointerdown.prevent="onDetailsBtnPointerDown"
                 @pointerup="onDetailsBtnPointerUp"
                 @pointerleave="onDetailsBtnCancel"
                 @pointercancel="onDetailsBtnCancel"
+                @contextmenu.prevent
               >
                 <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/>
@@ -1071,10 +1072,9 @@ function handleFindSimilar() {
 }
 
 // ── Details button: short press = toggle details, long press = Find Similar ──
-const _detailsBtnClickGuardRef = ref<HTMLElement | null>(null)
 const { onPointerDown: onDetailsBtnPointerDown, onPointerUp: onDetailsBtnPointerUp, onCancel: onDetailsBtnCancel } = useLongPress(
   handleFindSimilar,
-  { onShortPress: toggleExpandedInfo, popupRef: _detailsBtnClickGuardRef },
+  { onShortPress: toggleExpandedInfo, suppressClickAfterLongPress: true },
 )
 
 </script>

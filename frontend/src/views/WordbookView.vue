@@ -115,11 +115,12 @@
                   : uiStore.activeLangs.includes(lang)
                     ? 'text-primary-400 bg-primary-500/10'
                     : 'text-gray-300 hover:bg-surface-800'"
-                @click="onLangItemClick($event, lang)"
-                @pointerdown="onFilterItemPointerDown($event, () => toggleLang(lang))"
+              @click="onLangItemClick($event, lang)"
+                @pointerdown.prevent="onFilterItemPointerDown($event, () => toggleLang(lang))"
                 @pointerup="onFilterItemPointerUp()"
                 @pointerleave="onFilterItemCancel()"
                 @pointercancel="onFilterItemCancel()"
+                @contextmenu.prevent
               >
                 <span class="flex-1 -translate-y-px">{{ formatLangPair(lang) }}</span>
                 <span v-if="uiStore.activeLangs.length > 0 && uiStore.activeLangs.includes(lang)" class="shrink-0 text-primary-400">✓</span>
@@ -158,10 +159,11 @@
                   ? 'text-primary-400 bg-primary-500/10'
                   : 'text-gray-300 hover:bg-surface-800'"
                 @click="onColorItemClick($event, opt)"
-                @pointerdown="onFilterItemPointerDown($event, () => toggleColor(opt))"
+                @pointerdown.prevent="onFilterItemPointerDown($event, () => toggleColor(opt))"
                 @pointerup="onFilterItemPointerUp()"
                 @pointerleave="onFilterItemCancel()"
                 @pointercancel="onFilterItemCancel()"
+                @contextmenu.prevent
               >
                 <span
                   v-if="opt === 'none'"
@@ -351,8 +353,8 @@
           <div
           v-for="tab in groupsStore.filteredTabs"
             :key="tab.id"
-            :data-popup-group-item="tab.id"
-            class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none"
+          :data-popup-group-item="tab.id"
+            class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none touch-none"
             :class="[
               uiStore.activeGroupId === tab.id
                 ? 'text-primary-400 bg-primary-500/10'
@@ -361,10 +363,11 @@
             ]"
             @mouseenter="hoveredPopupTabId = tab.id"
             @mouseleave="hoveredPopupTabId = null"
-            @pointerdown="onPopupItemPointerDown($event, tab.id)"
+            @pointerdown.prevent="onPopupItemPointerDown($event, tab.id)"
             @pointermove="onPopupItemPointerMove"
             @pointerup="onPopupItemPointerUp"
             @pointercancel="onPopupItemPointerCancel"
+            @contextmenu.prevent
           >
             <template v-if="editingPopupTabId !== tab.id">
               <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
@@ -586,6 +589,7 @@ import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
 import { SPINNER_DELAY_MS, LONG_PRESS_MS } from '@/utils/ui'
+import { useLongPress } from '@/composables/useLongPress'
 import {
   ENTRY_COLORS,
   ENTRY_COLOR_LABEL,
@@ -725,52 +729,25 @@ function colorOptionLabel(color: string): string {
 }
 
 // ─── Filter menu item long-press ─────────────────────────────────────────────
-let _filterLpTimer: ReturnType<typeof setTimeout> | null = null
-let _filterLpClickGuard: ((e: MouseEvent) => void) | null = null
+// A single useLongPress instance is shared across all lang-pair and color
+// filter items.  Because the action varies per item, it is captured at
+// pointerdown time via _filterLpAction and forwarded to the composable's
+// onLongPress callback.  onShortPress is intentionally omitted: the
+// short-press action flows through the normal @click handler, which also
+// carries the MouseEvent needed for the Ctrl-click multi-select check.
+let _filterLpAction: (() => void) | null = null
+const {
+  onPointerDown: _filterLpPointerDown,
+  onPointerUp: onFilterItemPointerUp,
+  onCancel: onFilterItemCancel,
+} = useLongPress(
+  () => { _filterLpAction?.() },
+  { suppressClickAfterLongPress: true },
+)
 
-function _clearFilterLpTimer() {
-  if (_filterLpTimer !== null) { clearTimeout(_filterLpTimer); _filterLpTimer = null }
-}
-
-function _cleanFilterLpClickGuard() {
-  if (_filterLpClickGuard !== null) {
-    document.removeEventListener('click', _filterLpClickGuard, true)
-    _filterLpClickGuard = null
-  }
-}
-
-/**
- * Shared pointerdown handler for lang-pair and color filter menu buttons.
- * Starts a long-press timer; when it fires, `action` runs (popup stays open)
- * and a one-shot capture-phase click guard swallows the synthetic
- * post-release click so the @click handler doesn't also fire.
- */
 function onFilterItemPointerDown(e: PointerEvent, action: () => void) {
-  if (e.button !== 0) return
-  _clearFilterLpTimer()
-  _cleanFilterLpClickGuard()
-  _filterLpTimer = setTimeout(() => {
-    _filterLpTimer = null
-    action()
-    const guard = (ce: MouseEvent) => {
-      document.removeEventListener('click', guard, true)
-      _filterLpClickGuard = null
-      ce.stopPropagation()
-      ce.preventDefault()
-    }
-    _filterLpClickGuard = guard
-    document.addEventListener('click', guard, true)
-  }, LONG_PRESS_MS)
-}
-
-/** Called on pointerup; clears the timer and lets the normal @click fire. */
-function onFilterItemPointerUp() {
-  _clearFilterLpTimer()
-}
-
-/** Called on pointerleave / pointercancel; cancels any in-flight long-press. */
-function onFilterItemCancel() {
-  _clearFilterLpTimer()
+  _filterLpAction = action
+  _filterLpPointerDown(e)
 }
 
 const showColorFilter = ref(false)
@@ -1385,6 +1362,7 @@ function clearPopupLongPressTimer() {
 
 function onPopupItemPointerDown(event: PointerEvent, tabId: number) {
   if (editingPopupTabId.value === tabId || editingTabId.value === tabId) return
+  event.preventDefault()
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
   if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
   popupItemInteraction.value = { tabId, startX: event.clientX, startY: event.clientY, startTime: Date.now() }
@@ -1580,7 +1558,7 @@ function _showFilterChangeToast(langsBefore: string[], colorsBefore: string[]) {
   if (addedColor) {
     parts.push(addedColor === 'none' ? 'No color' : (isEntryColor(addedColor) ? ENTRY_COLOR_LABEL[addedColor as EntryColor] : addedColor))
   }
-  if (parts.length > 0) toast.warn(`Filters expanded: ${parts.join(', ')}`)
+  if (parts.length > 0) toast.warn(`Filters expanded with: ${parts.join(', ')}`)
 }
 
 function navigateToResult(result: WordbookSearchEntry) {
@@ -2222,8 +2200,6 @@ onBeforeUnmount(() => {
   headerResizeObserver?.disconnect()
   clearCardLongPress()
   clearPopupLongPressTimer()
-  _clearFilterLpTimer()
-  _cleanFilterLpClickGuard()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
   document.removeEventListener('click', onColorFilterOutsideClick, true)
@@ -2284,8 +2260,10 @@ onDeactivated(() => {
   dismissSidePanel()
   uiStore.closeActive()
   uiStore.activeMenuId = null
-  _clearFilterLpTimer()
-  _cleanFilterLpClickGuard()
+  clearCardLongPress()
+  clearLongPressTimer()
+  tabInteraction.value = null
+  _reorderFocusRestore = null
   cancelSearch()
   closeEntryContextPopup()
 })

@@ -35,6 +35,15 @@ export function useLongPress(
      * swallowed, preventing the spurious synthetic click from propagating.
      */
     popupRef?: Ref<HTMLElement | null>
+    /**
+     * When true, a one-shot capture-phase `click` guard is registered after the
+     * long-press fires, unconditionally swallowing the browser's synthetic
+     * post-release click.  Use this when there is no popup element to anchor the
+     * guard to but the spurious click still needs suppression (e.g. a long-press
+     * that triggers an action elsewhere rather than opening a popup on this element).
+     * Ignored when `popupRef` is also provided — `popupRef` already enables the guard.
+     */
+    suppressClickAfterLongPress?: boolean
   },
 ): {
   /** Attach to `@pointerdown`. Starts the long-press timer (primary button only). */
@@ -45,7 +54,7 @@ export function useLongPress(
   onCancel: () => void
 } {
   const threshold = options?.threshold ?? LONG_PRESS_MS
-  const { onShortPress, popupRef } = options ?? {}
+  const { onShortPress, popupRef, suppressClickAfterLongPress } = options ?? {}
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let clickGuard: ((e: MouseEvent) => void) | null = null
@@ -79,7 +88,7 @@ export function useLongPress(
     _clearTimer()
     timer = setTimeout(() => {
       timer = null
-      if (popupRef) _registerClickGuard()
+      if (popupRef || suppressClickAfterLongPress) _registerClickGuard()
       onLongPress()
     }, threshold)
   }
