@@ -1680,6 +1680,8 @@ function _showFilterChangeToast(langsBefore: string[], colorsBefore: string[]) {
 
 function navigateToResult(result: WordbookSearchEntry) {
   cancelSearch()
+  _histNavStart()
+  recordNavHistoryEntry(result)
   const langsBefore = [...uiStore.activeLangs]
   const colorsBefore = [...uiStore.activeColors]
   uiStore.requestShowEntry(
@@ -1689,6 +1691,7 @@ function navigateToResult(result: WordbookSearchEntry) {
     result.color ?? null,
   )
   _showFilterChangeToast(langsBefore, colorsBefore)
+  _histNavEndSoon(500)
 }
 
 function resultColorBg(result: WordbookSearchEntry): string {
@@ -1726,6 +1729,131 @@ watch([searchUseLangFilter, searchUseColorFilter, searchIn], () => {
 })
 // Recompute search layout whenever search mode is toggled.
 watch(searchActive, () => { nextTick(() => checkLangFit()) })
+
+// ─── Navigation history ─────────────────────────────────────────────────────
+// Records transitions made via search-result and similarity-popup clicks so
+// the user can navigate back (Ctrl+Z) and forward (Ctrl+Y / Ctrl+Shift+Z).
+// History is kept in-memory only; it is cleared when the active group changes
+// or the focused entry changes from a direct user action (card click, side
+// panel, etc.). Search/popup clicks and Ctrl+Z/Y navigation suppress clearing
+// via the _histNavInProgress flag.
+
+interface NavHistoryEntry {
+  id: number
+  pair: string          // 'source_lang:target_lang'
+  groupId: number | null
+  color: string | null
+}
+
+const navHistory = ref<NavHistoryEntry[]>([])
+const navHistoryCursor = ref(-1)
+let _histNavInProgress = false
+let _histNavTimer: ReturnType<typeof setTimeout> | null = null
+
+function clearNavHistory() {
+  navHistory.value = []
+  navHistoryCursor.value = -1
+}
+
+function recordNavHistoryEntry(result: WordbookSearchEntry) {
+  const dest: NavHistoryEntry = {
+    id: result.id,
+    pair: `${result.source_lang}:${result.target_lang}`,
+    groupId: result.group.id,
+    color: result.color ?? null,
+  }
+
+  // Truncate the tail when recording from mid-history
+  const cutAt = navHistoryCursor.value + 1
+  if (cutAt < navHistory.value.length) {
+    navHistory.value = navHistory.value.slice(0, cutAt)
+  }
+
+  // Record the current focused entry as the source (where the user is navigating
+  // FROM) so that Ctrl+Z can return to it.
+  const focusedId = uiStore.getFocusedEntry(uiStore.activeGroupId)
+  if (focusedId !== undefined) {
+    const srcEntry = store.entries.find(e => e.id === focusedId)
+    if (srcEntry) {
+      const src: NavHistoryEntry = {
+        id: srcEntry.id,
+        pair: `${srcEntry.source_lang}:${srcEntry.target_lang}`,
+        groupId: srcEntry.group.id,
+        color: srcEntry.color ?? null,
+      }
+      const last = navHistory.value[navHistory.value.length - 1]
+      if (!last || last.id !== src.id) navHistory.value.push(src)
+    }
+  }
+
+  // Record the destination so Ctrl+Y can go forward to it.
+  const last = navHistory.value[navHistory.value.length - 1]
+  if (!last || last.id !== dest.id) navHistory.value.push(dest)
+
+  navHistoryCursor.value = navHistory.value.length - 1
+}
+
+function _histNavStart() {
+  if (_histNavTimer !== null) { clearTimeout(_histNavTimer); _histNavTimer = null }
+  _histNavInProgress = true
+}
+
+function _histNavEndSoon(ms = 0) {
+  if (_histNavTimer !== null) clearTimeout(_histNavTimer)
+  _histNavTimer = setTimeout(() => { _histNavTimer = null; _histNavInProgress = false }, ms)
+}
+
+// Clear history when the active group changes unless a history/search op is in flight.
+watch(
+  () => uiStore.activeGroupId,
+  (newId, oldId) => {
+    if (newId !== oldId && !_histNavInProgress) clearNavHistory()
+  },
+)
+
+// Clear history when the focused entry in the current group changes via a
+// direct user action (card click, side-panel, find-similar, etc.).
+watch(
+  () => uiStore.getFocusedEntry(uiStore.activeGroupId),
+  () => {
+    if (!_histNavInProgress) clearNavHistory()
+  },
+)
+
+function _navHistNavigate(entry: NavHistoryEntry) {
+  _histNavStart()
+  uiStore.requestShowEntry(entry.id, entry.pair, entry.groupId, entry.color)
+  _histNavEndSoon(500)
+}
+
+function navigateHistoryBack() {
+  if (navHistoryCursor.value <= 0) return
+  navHistoryCursor.value--
+  _navHistNavigate(navHistory.value[navHistoryCursor.value])
+}
+
+function navigateHistoryForward() {
+  if (navHistoryCursor.value >= navHistory.value.length - 1) return
+  navHistoryCursor.value++
+  _navHistNavigate(navHistory.value[navHistoryCursor.value])
+}
+
+function onNavHistoryKeyDown(e: KeyboardEvent) {
+  if (!viewIsActive.value) return
+  const target = e.target as HTMLElement
+  if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) return
+  if (!e.ctrlKey || e.metaKey) return
+  if (e.key === 'z' && !e.shiftKey) {
+    e.preventDefault()
+    navigateHistoryBack()
+  } else if (e.key === 'y' && !e.shiftKey) {
+    e.preventDefault()
+    navigateHistoryForward()
+  } else if (e.shiftKey && (e.key === 'Z' || e.key === 'z')) {
+    e.preventDefault()
+    navigateHistoryForward()
+  }
+}
 
 // ─── Delete dialog ────────────────────────────────────────────────────────────
 
@@ -2174,6 +2302,8 @@ async function showEntryContextPopup(entry: WordbookEntryData) {
 
 function navigateFromContextPopup(result: WordbookSearchEntry) {
   closeEntryContextPopup()
+  _histNavStart()
+  recordNavHistoryEntry(result)
   const langsBefore = [...uiStore.activeLangs]
   const colorsBefore = [...uiStore.activeColors]
   uiStore.requestShowEntry(
@@ -2183,6 +2313,7 @@ function navigateFromContextPopup(result: WordbookSearchEntry) {
     result.color ?? null,
   )
   _showFilterChangeToast(langsBefore, colorsBefore)
+  _histNavEndSoon(500)
 }
 
 function contextResultColorBg(result: WordbookSearchEntry): string {
@@ -2333,6 +2464,7 @@ onMounted(() => {
   }
   nextTick(() => checkHeaderLayout())
   cardsAreaEl.value?.addEventListener('scroll', checkSpacerShrink, { passive: true })
+  document.addEventListener('keydown', onNavHistoryKeyDown)
 })
 
 onBeforeUnmount(() => {
@@ -2347,6 +2479,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
   document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+  document.removeEventListener('keydown', onNavHistoryKeyDown)
   cancelSearch()
   closeEntryContextPopup()
 })
