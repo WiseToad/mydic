@@ -1,3 +1,5 @@
+from enum import Enum
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import Response
 from sqlalchemy import and_, distinct, func, or_, select, text
@@ -8,6 +10,19 @@ from app.auth.dependencies import get_current_user
 from app.database import get_db
 from app.models.user import User
 from app.models.wordbook import WordbookEntry, WordGroup
+
+
+class SearchIn(str, Enum):
+    source_text = "source_text"
+    target_text = "target_text"
+    notes = "notes"
+
+
+class RelaxedFilter(str, Enum):
+    lang_pairs = "lang_pairs"
+    colors = "colors"
+
+
 from app.schemas.wordbook import (
     WordbookEntryCreate,
     WordbookEntryResponse,
@@ -52,44 +67,54 @@ _SEARCH_THRESHOLD = 0.15
 @router.get("/search", response_model=WordbookSearchResponse)
 async def search_entries(
     q: str,
-    search_target: bool = False,
-    color: list[str] = Query(default=[]),
-    lang_pair: list[str] = Query(default=[]),
-    strict_lang_pair: bool = False,
+    search_in: SearchIn = SearchIn.source_text,
+    colors: list[str] = Query(default=[]),
+    lang_pairs: list[str] = Query(default=[]),
+    relaxed_filters: list[RelaxedFilter] = Query(default=[]),
+    search_limit: int | None = Query(default=None, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """Trigram similarity search across the user's entire wordbook.
 
-    Returns up to _SEARCH_LIMIT results sorted purely by relevance score.
-    Each result carries in_filter=True/False indicating whether it matches
-    the currently active lang_pair and color filters.
+    Returns up to search_limit (or _SEARCH_LIMIT if omitted) results sorted
+    purely by relevance score.  Each result carries in_filter=True/False.
 
-    When strict_lang_pair=True, results not matching the given lang_pair
-    filters are excluded entirely instead of being marked as in_filter=False.
+    Filter dimensions: lang_pairs and colors.
+    - No values supplied for a dimension → dimension ignored, in_filter=True.
+    - Values supplied + dimension NOT in relaxed_filters (strict) → WHERE clause
+      excludes non-matching rows from SQL.
+    - Values supplied + dimension in relaxed_filters (relaxed) → no WHERE clause;
+      non-matching rows are included but tagged in_filter=False.
+    When both dimensions are strict their WHERE clauses are combined with AND.
     """
     q = q.strip()
     if not q:
         return WordbookSearchResponse(results=[])
 
-    search_col = "target_text" if search_target else "source_text"
+    search_col = search_in.value
 
-    # Pre-compute filter sets for in_filter tagging
+    # Pre-compute filter sets for WHERE clauses and in_filter tagging.
     filter_lang_pairs: set[tuple[str, str]] = set()
-    for p in lang_pair:
+    for p in lang_pairs:
         parts = p.split(":", 1)
         if len(parts) == 2:
             filter_lang_pairs.add((parts[0], parts[1]))
 
-    has_none_color = "none" in color
-    real_colors = [c for c in color if c != "none"]
+    has_none_color = "none" in colors
+    real_colors = [c for c in colors if c != "none"]
     filter_colors: set[str] = set(real_colors)
     any_color_filter = bool(real_colors) or has_none_color
 
-    # When strict_lang_pair=True, inject a WHERE clause to exclude non-matching pairs.
-    params: dict = {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": _SEARCH_LIMIT}
+    lim = search_limit if search_limit is not None else _SEARCH_LIMIT
+    params: dict = {"uid": current_user.id, "q": q, "thr": _SEARCH_THRESHOLD, "lim": lim}
+
+    # Build optional WHERE clauses for strict filter dimensions.
+    lang_pairs_strict = filter_lang_pairs and RelaxedFilter.lang_pairs not in relaxed_filters
+    colors_strict = any_color_filter and RelaxedFilter.colors not in relaxed_filters
+
     lang_pair_clause = ""
-    if strict_lang_pair and filter_lang_pairs:
+    if lang_pairs_strict:
         pair_conditions = []
         for i, (src, tgt) in enumerate(filter_lang_pairs):
             src_key, tgt_key = f"lp_src_{i}", f"lp_tgt_{i}"
@@ -97,6 +122,17 @@ async def search_entries(
             params[tgt_key] = tgt
             pair_conditions.append(f"(we.source_lang = :{src_key} AND we.target_lang = :{tgt_key})")
         lang_pair_clause = f"AND ({' OR '.join(pair_conditions)})"
+
+    color_clause = ""
+    if colors_strict:
+        color_conditions = []
+        if has_none_color:
+            color_conditions.append("we.color IS NULL")
+        for i, c in enumerate(real_colors):
+            ck = f"col_{i}"
+            params[ck] = c
+            color_conditions.append(f"we.color = :{ck}")
+        color_clause = f"AND ({' OR '.join(color_conditions)})"
 
     sql = f"""
         SELECT
@@ -108,6 +144,7 @@ async def search_entries(
         JOIN word_groups wg ON wg.id = we.group_id
         WHERE we.user_id = :uid
           {lang_pair_clause}
+          {color_clause}
           AND similarity(
                 immutable_unaccent(lower(we.{search_col})),
                 immutable_unaccent(lower(:q))
@@ -115,7 +152,8 @@ async def search_entries(
         ORDER BY similarity(
                 immutable_unaccent(lower(we.{search_col})),
                 immutable_unaccent(lower(:q))
-              ) DESC
+              ) DESC,
+              immutable_unaccent(lower(we.{search_col})) ASC
         LIMIT :lim
     """
 

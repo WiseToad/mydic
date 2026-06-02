@@ -1552,7 +1552,13 @@ async function runSearch() {
   if (q.length < 2) return
   searchLoading.value = true
   try {
-    const resp = await wordbookApi.search(q, uiStore.swapDisplay, uiStore.activeLangs, uiStore.activeColors)
+    const resp = await wordbookApi.search(
+      q,
+      uiStore.swapDisplay ? 'target_text' : 'source_text',
+      uiStore.activeLangs,
+      uiStore.activeColors,
+      ['lang_pairs', 'colors'],
+    )
     if (seq !== _searchSeq) return
     searchResults.value = resp.results
   } catch {
@@ -2031,7 +2037,13 @@ async function showEntryContextPopup(entry: WordbookEntryData) {
   entryContextPopup.value = { entry, results: [], loading: true, done: false, anchorLeft, anchorWidth, anchorBottom, anchorTop }
 
   try {
-    const resp = await wordbookApi.search(searchTerm, uiStore.swapDisplay, [langPair], uiStore.activeColors, true)
+    const resp = await wordbookApi.search(
+      searchTerm,
+      uiStore.swapDisplay ? 'target_text' : 'source_text',
+      [langPair],
+      uiStore.activeColors,
+      ['colors'],
+    )
     if (entryContextPopup.value?.entry.id === entry.id) {
       entryContextPopup.value = { ...entryContextPopup.value, results: resp.results.filter(r => r.id !== entry.id), loading: false, done: true }
     }
