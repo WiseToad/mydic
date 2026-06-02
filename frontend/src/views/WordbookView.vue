@@ -1630,6 +1630,7 @@ function handleFindSimilarEntry(id: number) {
   const entry = store.entries.find((e) => e.id === id)
   if (!entry) return
   uiStore.setFocusedEntry(id, entry.group.id)
+  if (uiStore.activeCardMode === 'details') uiStore.closeActive()
   showEntryContextPopup(entry)
 }
 
