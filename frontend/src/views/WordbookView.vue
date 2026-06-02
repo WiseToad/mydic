@@ -129,8 +129,8 @@
                   @mouseleave="hoveredResultId = null"
                   @click="navigateToResult(result)"
                 >
-                  <td class="pl-3 pr-2 py-2 text-xs text-gray-500 whitespace-nowrap align-baseline"><span class="inline-block -translate-y-[2px]">{{ formatSearchLangPair(result) }}</span></td>
-                  <td class="py-2 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
+                  <td class="pl-3 pr-2 py-2 text-xs text-gray-500 whitespace-nowrap align-baseline"><span>{{ formatSearchLangPair(result) }}</span></td>
+                  <td class="py-2 pr-2 align-baseline w-full text-sm" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
                   <td class="py-2 pr-3 text-xs text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
                 </tr>
               </tbody>
@@ -614,7 +614,7 @@
             @mouseleave="hoveredContextResultId = null"
             @click="navigateFromContextPopup(result)"
           >
-            <td class="py-2 pl-3 pr-2 align-baseline w-full" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
+            <td class="py-2 pl-3 pr-2 align-baseline w-full text-sm" style="max-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ uiStore.swapDisplay ? result.target_text : result.source_text }}</td>
             <td class="py-2 pr-3 text-xs text-gray-500/60 whitespace-nowrap align-baseline">{{ result.group.name }}</td>
           </tr>
         </tbody>
