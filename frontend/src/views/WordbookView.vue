@@ -33,17 +33,86 @@
             : `flex: 0 0 ${SEARCH_FIXED_WIDTH}px`"
           @click.stop
         >
-          <input
-            ref="searchInputEl"
-            v-model="searchQuery"
-            type="text"
-            placeholder="Search…"
-            autocomplete="off"
-            spellcheck="false"
-            class="w-full px-3 py-[3px] text-sm bg-surface-800 border border-surface-600 rounded-lg text-gray-200 placeholder-gray-600 focus:outline-none focus:border-primary-500/50"
-            @input="onSearchInput"
-            @keydown="onSearchKeydown"
-          />
+          <!-- Search input row with embedded togglers -->
+          <div class="flex items-center bg-surface-800 border border-surface-600 rounded-lg focus-within:border-primary-500/50">
+            <input
+              ref="searchInputEl"
+              v-model="searchQuery"
+              type="text"
+              placeholder="Search…"
+              autocomplete="off"
+              spellcheck="false"
+              class="flex-1 min-w-0 px-3 py-[3px] text-sm bg-transparent text-gray-200 placeholder-gray-600 focus:outline-none"
+              @input="onSearchInput"
+              @keydown="onSearchKeydown"
+            />
+            <!-- Clear search query button -->
+            <button
+              class="p-1.5 mr-0.5 transition-colors text-gray-500 hover:text-gray-300 shrink-0"
+              title="Clear search"
+              @click.stop="clearSearchQuery"
+            >
+              <svg viewBox="0 0 16 16" class="w-2.5 h-2.5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="3" y1="3" x2="13" y2="13"/>
+                <line x1="13" y1="3" x2="3" y2="13"/>
+              </svg>
+            </button>
+            <!-- Vertical separator -->
+            <div class="w-px self-stretch my-1 bg-surface-600 shrink-0" />
+            <!-- Search togglers -->
+            <div class="flex items-center shrink-0 px-1 gap-0.5">
+              <!-- Toggler 1: Apply language filter strictly -->
+              <button
+                class="p-1 transition-colors rounded"
+                :class="searchUseLangFilter ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
+                :title="searchUseLangFilter ? 'Use language filter: on' : 'Use language filter: off'"
+                @click.stop="toggleSearchLangFilter"
+              >
+                <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.3">
+                  <circle cx="8" cy="8" r="6.5"/>
+                  <ellipse cx="8" cy="8" rx="2.8" ry="6.5"/>
+                  <line x1="1.5" y1="8" x2="14.5" y2="8"/>
+                  <line x1="2.2" y1="5" x2="13.8" y2="5"/>
+                  <line x1="2.2" y1="11" x2="13.8" y2="11"/>
+                </svg>
+              </button>
+              <!-- Toggler 2: Apply color filter strictly -->
+              <button
+                class="p-1 transition-colors rounded"
+                :class="searchUseColorFilter ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
+                :title="searchUseColorFilter ? 'Use color filter: on' : 'Use color filter: off'"
+                @click.stop="toggleSearchColorFilter"
+              >
+                <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.3">
+                  <circle cx="6"  cy="6"  r="3.2"/>
+                  <circle cx="10" cy="6"  r="3.2"/>
+                  <circle cx="8"  cy="10" r="3.2"/>
+                </svg>
+              </button>
+              <!-- Toggler 3: Search-in (source_text → target_text → notes) -->
+              <button
+                class="p-1 transition-colors rounded"
+                :class="searchIn === 'source_text' ? 'text-gray-500 hover:text-gray-300' : 'text-primary-400'"
+                :title="searchInTitle"
+                @click.stop="cycleSearchIn"
+              >
+                <!-- States source_text / target_text: swap-arrows icon -->
+                <svg v-if="searchIn !== 'notes'" viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M2 5h9"/>
+                  <path d="M8.5 2.5L11 5l-2.5 2.5"/>
+                  <path d="M14 11H5"/>
+                  <path d="M7.5 8.5L5 11l2.5 2.5"/>
+                </svg>
+                <!-- State notes: notepad icon -->
+                <svg v-else viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="2.5" y="1.5" width="11" height="13" rx="1.5"/>
+                  <line x1="5" y1="6" x2="11" y2="6"/>
+                  <line x1="5" y1="9" x2="11" y2="9"/>
+                  <line x1="5" y1="12" x2="8.5" y2="12"/>
+                </svg>
+              </button>
+            </div>
+          </div>
           <!-- Results dropdown -->
           <div
             v-if="searchResults.length > 0"
@@ -1461,8 +1530,54 @@ const searchResultsTableEl = ref<HTMLElement | null>(null)
 const searchToolbarHidden = ref(false)
 const focusedResultIndex = ref(-1)
 
+// ─── Search togglers (in-memory; not reset on cancelSearch) ──────────────────
+// Toggler 1: strict lang-pair filter when active (non-relaxed search)
+const searchUseLangFilter = ref(true)
+// Toggler 2: strict color filter when active (non-relaxed search)
+const searchUseColorFilter = ref(false)
+// Toggler 3: search_in param — three-state, synced bidirectionally with swapDisplay
+const searchIn = ref<'source_text' | 'target_text' | 'notes'>(
+  uiStore.swapDisplay ? 'target_text' : 'source_text',
+)
+
+const searchInTitle = computed(() => {
+  if (searchIn.value === 'source_text') return 'Search in source text'
+  if (searchIn.value === 'target_text') return 'Search in target text'
+  return 'Search in notes'
+})
+
+function toggleSearchLangFilter() {
+  searchUseLangFilter.value = !searchUseLangFilter.value
+}
+
+function toggleSearchColorFilter() {
+  searchUseColorFilter.value = !searchUseColorFilter.value
+}
+
+function cycleSearchIn() {
+  if (searchIn.value === 'source_text') {
+    searchIn.value = 'target_text'
+    uiStore.swapDisplay = true
+  } else if (searchIn.value === 'target_text') {
+    searchIn.value = 'notes'
+    uiStore.swapDisplay = false
+  } else {
+    searchIn.value = 'source_text'
+    // swapDisplay is already false; no change needed
+  }
+}
+
 let _searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
 let _searchSeq = 0
+
+function clearSearchQuery() {
+  if (_searchDebounceTimer !== null) { clearTimeout(_searchDebounceTimer); _searchDebounceTimer = null }
+  searchQuery.value = ''
+  searchResults.value = []
+  searchDone.value = false
+  focusedResultIndex.value = -1
+  searchInputEl.value?.focus()
+}
 
 async function activateSearch() {
   searchActive.value = true
@@ -1485,7 +1600,6 @@ function cancelSearch() {
 function onSearchOutsideClick(e: MouseEvent) {
   const target = e.target as Node | null
   if (!target || searchContainerEl.value?.contains(target)) return
-  if (swapDisplayBtnEl.value?.contains(target)) return
   cancelSearch()
 }
 
@@ -1530,12 +1644,15 @@ async function runSearch() {
   if (q.length < 2) return
   searchLoading.value = true
   try {
+    const relaxedFilters: Array<'lang_pairs' | 'colors'> = []
+    if (!searchUseLangFilter.value) relaxedFilters.push('lang_pairs')
+    if (!searchUseColorFilter.value) relaxedFilters.push('colors')
     const resp = await wordbookApi.search(
       q,
-      uiStore.swapDisplay ? 'target_text' : 'source_text',
+      searchIn.value,
       uiStore.activeLangs,
       uiStore.activeColors,
-      ['lang_pairs', 'colors'],
+      relaxedFilters,
     )
     if (seq !== _searchSeq) return
     searchResults.value = resp.results
@@ -1591,8 +1708,17 @@ function formatSearchLangPair(result: WordbookSearchEntry): string {
   return `${result.target_lang}←${result.source_lang}`
 }
 
-// Re-search when swap display is toggled while search is open.
-watch(() => uiStore.swapDisplay, () => {
+// Sync searchIn toggler when swapDisplay changes externally (e.g. toolbar button).
+// The combined toggler watcher below handles any resulting re-search.
+watch(() => uiStore.swapDisplay, (newVal) => {
+  if (newVal && searchIn.value !== 'target_text') {
+    searchIn.value = 'target_text'
+  } else if (!newVal && searchIn.value === 'target_text') {
+    searchIn.value = 'source_text'
+  }
+})
+// Re-search when any search toggler changes while search is active.
+watch([searchUseLangFilter, searchUseColorFilter, searchIn], () => {
   if (searchActive.value && searchQuery.value.trim().length >= 2) {
     searchResults.value = []
     runSearch()

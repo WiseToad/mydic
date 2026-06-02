@@ -9,8 +9,8 @@ Bugs:
 
 Features:
 - Add lang/color/swap togglers into search edit box, extend search api
-- Rework groups management - adding, renaming, deleting, reordering, hiding
 - In-memory history of transitions between wordbook entries and groups by clicking search or similarity results
+- Rework groups management - adding, renaming, deleting, reordering, hiding
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 
