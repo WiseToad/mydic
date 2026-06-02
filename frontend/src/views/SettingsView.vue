@@ -236,7 +236,7 @@ async function playVoiceSample(
 // Track whether there is a previous in-app route to return to. Captured once
 // at mount so the button label stays stable while on the settings page.
 const canGoBack = ref(
-  typeof window !== 'undefined' && window.history.state?.back != null,
+  router.options.history.state.back != null,
 )
 
 function goBack() {
