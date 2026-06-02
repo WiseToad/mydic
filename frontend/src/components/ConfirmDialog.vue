@@ -49,6 +49,8 @@
 </template>
 
 <script setup lang="ts">
+import { onMounted, onUnmounted } from 'vue'
+
 defineProps<{
   modelValue: boolean
   title: string
@@ -73,6 +75,13 @@ function handleCancel() {
   emit('cancel')
   emit('update:modelValue', false)
 }
+
+function handleKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape') handleCancel()
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 </script>
 
 <style scoped>

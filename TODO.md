@@ -2,13 +2,13 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-* Remove system menu popup on Android by long-pressing here and there
++ Remove system menu popup on Android by long-pressing here and there
 - Properly treat back system button in Android. Now it returns to previous screen in history, that's incorrect from app perspective
 - Bottom system bar in Android still appears in white for app in dark mode, despite recent attempts to fix it
 - After individual restarting kokoro tts container, its voices become unavailable
 
 Features:
-* Dismiss confirmation dialogs by escape key
+- Add lang/color/swap togglers into search edit box, extend search api
 - Rework groups management - adding, renaming, deleting, reordering, hiding
 - In-memory history of transitions between wordbook entries and groups by clicking search or similarity results
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
