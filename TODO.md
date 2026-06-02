@@ -2,7 +2,6 @@ Deployment and maintenance:
 - Check service endpoints (health, apidoc, etc) - whether they exposed to Internet, and disable if it's the case
 
 Bugs:
-- Properly treat back system button in Android. Now it returns to previous screen in history, that's incorrect from app perspective
 - Bottom system bar in Android still appears in white for app in dark mode, despite recent attempts to fix it
 - After individual restarting kokoro tts container, its voices become unavailable
 

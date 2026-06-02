@@ -9,22 +9,23 @@ Some non-obvious UI features:
 - Tapping MyDic title toggles browser fullscreen mode
 - Long-pressing the swap button clears the input text along with language swapping
 - In auto-detect mode, tapping detected language abbreviation sets it as a current
-- Long-pressing the "Add to wordbook" button allows you to select a group where to add to
-- Groups, that are filtered-out by active filters in wordbook, are dimmed in this popup
-- Long-pressing a group in this popup sets it as current in wordbook, along with adding the word
+- Long-pressing the "Add to Wordbook" button allows you to select a group where to add to
+- Groups, that are filtered-out by active filters in Wordbook, are dimmed in this popup
+- Long-pressing a group in this popup sets it as current in Wordbook, along with adding the word
 - Long-pressing an audio button pops up the voice selection menu
 - After the playback, the audio button switches to slow-pronunciation (yellow) mode
 - A small button appearing below selected text allows you to translate selection
 - You may tap the word in a wordbook card to show/hide translation hint
-- On PC, you may drag cards in the wordbook to reorder them
+- On PC, you may drag cards in the Wordbook to reorder them
 - On Android, you may long-press non-focused card to move focused one in place of it
 - Long-pressing details button in wordbook card behaves the same way as the "Find Similar" action
-- Long-pressing a group tip in the wordbook allows you to change it's name
+- Long-pressing a group tip in the Wordbook allows you to change it's name
 - The same applies for item in the "more ..." button popup menu, when groups are collapsed
-- You may drag group tips in the wordbook to reorder them
-- Dragging a group tip onto some word moves this word into the group
-- Long-pressing, or pressing with Ctrl key an item in multi-select filters prevents their dismissal
+- You may drag group tips in the Wordbook to reorder them
+- Dragging a group tip onto some word moves this word into that group
+- Long-pressing, or Ctrl-pressing an item in multi-select filters prevents their immediate dismissal
 - Entries in search results and find-similar popups are dimmed, if they're affected by filters
+- Pressing Ctrl-Z and Ctrl-Y/Ctrl-Shift-Z in Wordbook navigates the search transitions history
 
 Some usage notes for languages, you do not familiar enough with:
 

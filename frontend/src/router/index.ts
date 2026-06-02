@@ -1,6 +1,11 @@
 import { createRouter, createMemoryHistory } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 
+// The route name the user was on before opening Settings. Used by SettingsView
+// to return to the correct view on dismiss, since createMemoryHistory does not
+// reliably expose history.state.back.
+export let previousSettingsRoute: string | null = null
+
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
@@ -29,7 +34,10 @@ const router = createRouter({
   ],
 })
 
-router.beforeEach((to) => {
+router.beforeEach((to, from) => {
+  if (to.name === 'settings' && from.name != null && from.name !== 'settings') {
+    previousSettingsRoute = from.name as string
+  }
   const authStore = useAuthStore()
   if (!to.meta.public && !authStore.isLoggedIn) {
     return { name: 'login' }

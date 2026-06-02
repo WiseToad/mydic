@@ -48,7 +48,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { version } from 'virtual:app-version'
 import { fetchServerVersion } from '@/api/version'
 
@@ -75,6 +75,16 @@ watch(
 function close() {
   emit('update:modelValue', false)
 }
+
+function onKeyDown(e: KeyboardEvent) {
+  if (props.modelValue && e.key === 'Escape') {
+    e.stopPropagation()
+    close()
+  }
+}
+
+onMounted(() => document.addEventListener('keydown', onKeyDown))
+onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
 
 function reload() {
   window.location.reload()

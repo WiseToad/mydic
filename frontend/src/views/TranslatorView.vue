@@ -465,7 +465,8 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, onDeactivated, watch } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
+import { registerBackHandler } from '@/composables/useBackButton'
 import { useLongPress } from '@/composables/useLongPress'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
@@ -1376,6 +1377,17 @@ onMounted(() => {
   window.addEventListener('resize', _onWindowResize)
   nextTick(updateNarrowPanelHeight)  // initial mount: DOM is already stable
 })
+
+// ─── Back button ────────────────────────────────────────────────────────────
+let _unregisterBack: (() => void) | null = null
+onActivated(() => {
+  _unregisterBack = registerBackHandler(() => {
+    if (showClearHistoryDialog.value) { showClearHistoryDialog.value = false; return true }
+    if (store.canGoBack) { onGoBack(); return true }
+    return false
+  })
+})
+onDeactivated(() => { _unregisterBack?.(); _unregisterBack = null })
 
 // KeepAlive deactivation: teleported popups stay in <body>, close them manually.
 onDeactivated(() => {

@@ -86,6 +86,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
+import { dispatchBackButton } from '@/composables/useBackButton'
 import { RouterLink, RouterView } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
@@ -131,6 +132,16 @@ async function toggleFullscreen() {
   } catch {
     // request rejected (permissions policy, etc.)
   }
+}
+
+// ── System back button ───────────────────────────────────────────────────
+// Push a sentinel browser history entry so the back button always fires
+// popstate instead of navigating the browser away from the app.  On each
+// event we re-push the sentinel and handle the action in-app.
+function onBackButton() {
+  window.history.pushState(null, '')
+  if (aboutOpen.value) { aboutOpen.value = false; return }
+  dispatchBackButton()
 }
 
 /** userId captured at page-load time, before any authentication changes.
@@ -189,11 +200,14 @@ onMounted(() => {
   window.visualViewport?.addEventListener('resize', updateAppHeight)
   window.addEventListener('resize', updateAppHeight)
   updateAppHeight()
+  window.history.pushState(null, '')
+  window.addEventListener('popstate', onBackButton)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.visualViewport?.removeEventListener('resize', updateAppHeight)
   window.removeEventListener('resize', updateAppHeight)
+  window.removeEventListener('popstate', onBackButton)
 })
 </script>

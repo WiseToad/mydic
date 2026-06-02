@@ -97,8 +97,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, defineComponent, h, ref, watch } from 'vue'
+import { onMounted, onUnmounted, defineComponent, h, ref, watch } from 'vue'
+import { registerBackHandler } from '@/composables/useBackButton'
 import { useRouter } from 'vue-router'
+import { previousSettingsRoute } from '@/router'
 import { useSettingsStore, type Capability } from '@/stores/settings'
 import { useLanguageSettingsStore, type LangPref } from '@/stores/languageSettings'
 import { useToastStore } from '@/stores/toast'
@@ -233,25 +235,26 @@ async function playVoiceSample(
   }
 }
 
-// Track whether there is a previous in-app route to return to. Captured once
-// at mount so the button label stays stable while on the settings page.
-const canGoBack = ref(
-  router.options.history.state.back != null,
-)
+// Determine the route to return to when dismissing settings.
+// previousSettingsRoute is captured by the router's beforeEach guard, which is
+// more reliable than router.options.history.state.back on createMemoryHistory.
+const _backRoute = previousSettingsRoute ?? 'translator'
+const canGoBack = ref(_backRoute !== 'translator')
 
 function goBack() {
-  if (canGoBack.value) {
-    router.back()
-  } else {
-    router.push({ name: 'translator' })
-  }
+  router.push({ name: _backRoute })
 }
+
+let _unregisterBack: (() => void) | null = null
 
 onMounted(() => {
   store.load()
   langStore.load()
   ensureTtsSamplesLoaded()
+  _unregisterBack = registerBackHandler(() => { goBack(); return true })
 })
+
+onUnmounted(() => { _unregisterBack?.(); _unregisterBack = null })
 
 function handleToggle(cap: Capability, index: number) {
   store.toggleEnabled(cap, index)

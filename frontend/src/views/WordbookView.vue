@@ -649,6 +649,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
+import { registerBackHandler } from '@/composables/useBackButton'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookUiStore, type DensityLevel } from '@/stores/wordbookUi'
@@ -1518,6 +1519,7 @@ watch(groupsOverflow, () => { nextTick(() => checkTabsFit()) })
 // ─── Search ──────────────────────────────────────────────────────────────────
 
 const SEARCH_FIXED_WIDTH = 250  // px — fixed width of the search input box
+const SEARCH_RESULT_LIMIT = 10  // max results returned by the search API
 
 const searchActive = ref(false)
 const searchQuery = ref('')
@@ -1653,6 +1655,7 @@ async function runSearch() {
       uiStore.activeLangs,
       uiStore.activeColors,
       relaxedFilters,
+      SEARCH_RESULT_LIMIT,
     )
     if (seq !== _searchSeq) return
     searchResults.value = resp.results
@@ -2289,6 +2292,7 @@ async function showEntryContextPopup(entry: WordbookEntryData) {
       [langPair],
       uiStore.activeColors,
       ['colors'],
+      SEARCH_RESULT_LIMIT + 1,
     )
     if (entryContextPopup.value?.entry.id === entry.id) {
       entryContextPopup.value = { ...entryContextPopup.value, results: resp.results.filter(r => r.id !== entry.id), loading: false, done: true }
@@ -2439,6 +2443,18 @@ watch(
   [() => uiStore.activeCardId, () => uiStore.activeCardMode],
   () => _connectOverlayObs(),
 )
+
+// ─── Back button ────────────────────────────────────────────────────────────
+let _unregisterBack: (() => void) | null = null
+onActivated(() => {
+  _unregisterBack = registerBackHandler(() => {
+    if (showDeleteDialog.value) { showDeleteDialog.value = false; return true }
+    if (showDeleteTabDialog.value) { showDeleteTabDialog.value = false; return true }
+    if (navHistoryCursor.value > 0) { navigateHistoryBack(); return true }
+    return false
+  })
+})
+onDeactivated(() => { _unregisterBack?.(); _unregisterBack = null })
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 // True while this view is the active route. Used to prevent the
