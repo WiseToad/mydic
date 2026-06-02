@@ -12,6 +12,8 @@ export const useWordbookStore = defineStore('wordbook', () => {
   const isLoading = ref(false)
   const isLoaded = ref(false)
   const fetchError = ref(false)
+  /** Incremented each time an entry is deleted. Used by TranslatorView to invalidate its cached lookup. */
+  const deletionCount = ref(0)
 
   async function fetchEntries(groupId: number, langPairs?: string[]) {
     isLoading.value = true
@@ -49,6 +51,7 @@ export const useWordbookStore = defineStore('wordbook', () => {
     await wordbookApi.remove(id)
     entries.value = entries.value.filter((e) => e.id !== id)
     if (totalEntries.value > 0) totalEntries.value--
+    deletionCount.value++
   }
 
   /**
@@ -82,5 +85,5 @@ export const useWordbookStore = defineStore('wordbook', () => {
     fetchError.value = false
   }
 
-  return { entries, totalEntries, isLoading, isLoaded, fetchError, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset }
+  return { entries, totalEntries, isLoading, isLoaded, fetchError, fetchEntries, addEntry, updateEntry, deleteEntry, reorderEntries, reset, deletionCount }
 })

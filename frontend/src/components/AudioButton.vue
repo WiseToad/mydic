@@ -320,13 +320,23 @@ function positionPopup(buttonRect: DOMRect) {
 }
 
 function closePopup() { popupVisible.value = false }
+
+function _repositionPopupToButton() {
+  if (!rootRef.value) return
+  positionPopup(rootRef.value.getBoundingClientRect())
+}
+
 watch(popupVisible, (open) => {
   if (open) {
     document.addEventListener('pointerdown', onOutsidePointerDown, true)
     document.addEventListener('dragstart', onDocumentDragStart, true)
+    window.addEventListener('scroll', closePopup, { passive: true, capture: true })
+    window.addEventListener('resize', _repositionPopupToButton)
   } else {
     document.removeEventListener('pointerdown', onOutsidePointerDown, true)
     document.removeEventListener('dragstart', onDocumentDragStart, true)
+    window.removeEventListener('scroll', closePopup, { capture: true } as EventListenerOptions)
+    window.removeEventListener('resize', _repositionPopupToButton)
   }
 })
 
@@ -361,6 +371,8 @@ onBeforeUnmount(() => {
   _cleanLongPressPointerUpGuard()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
+  window.removeEventListener('scroll', closePopup, { capture: true } as EventListenerOptions)
+  window.removeEventListener('resize', _repositionPopupToButton)
   if (isPlaying.value || _inFlight) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()
   // pressTimer and click guard are handled by useLongPress

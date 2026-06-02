@@ -750,6 +750,7 @@ function onActionsOutsidePointerDown(e: PointerEvent) {
 watch(showProviderPopup, async (open) => {
   if (open) {
     document.addEventListener('click', closeProviderPopup)
+    window.addEventListener('scroll', closeProviderPopup, { passive: true, capture: true })
     await nextTick()
     if (editProviderCode.value !== null) {
       const btn = providerPopupRef.value?.querySelector(
@@ -765,15 +766,20 @@ watch(showProviderPopup, async (open) => {
     }
   } else {
     document.removeEventListener('click', closeProviderPopup)
+    window.removeEventListener('scroll', closeProviderPopup, { capture: true } as EventListenerOptions)
   }
 })
+
+function _closeActionsMenuOnScroll() { showActionsMenu.value = false }
 
 watch(showActionsMenu, (open) => {
   if (open) {
     recomputeActionsMenuPlacement()
     document.addEventListener('pointerdown', onActionsOutsidePointerDown, true)
+    window.addEventListener('scroll', _closeActionsMenuOnScroll, { passive: true, capture: true })
   } else {
     document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
+    window.removeEventListener('scroll', _closeActionsMenuOnScroll, { capture: true } as EventListenerOptions)
     showColorSubmenu.value = false
     showMoveToSubmenu.value = false
   }
@@ -808,7 +814,10 @@ function onCardPointerDownCapture(e: PointerEvent) {
 
 onBeforeUnmount(() => {
   document.removeEventListener('click', closeProviderPopup)
+  window.removeEventListener('scroll', closeProviderPopup, { capture: true } as EventListenerOptions)
   document.removeEventListener('pointerdown', onActionsOutsidePointerDown, true)
+  window.removeEventListener('scroll', _closeActionsMenuOnScroll, { capture: true } as EventListenerOptions)
+  document.removeEventListener('keydown', _onEditKeyDown)
   document.removeEventListener('pointerup', onDetailsOutsidePointerUp, true)
   document.removeEventListener('dragstart', onDetailsOutsideDragStart, true)
   _restoreCardDraggable?.()
@@ -992,6 +1001,15 @@ function cancelEdit() {
   translationDirty.value = false
   uiStore.closeActive()
 }
+
+function _onEditKeyDown(e: KeyboardEvent) {
+  if (e.key === 'Escape') cancelEdit()
+}
+
+watch(editing, (isEditing) => {
+  if (isEditing) document.addEventListener('keydown', _onEditKeyDown)
+  else document.removeEventListener('keydown', _onEditKeyDown)
+})
 
 async function retranslateEdit() {
   if (!editSource.value.trim() || retranslating.value) return

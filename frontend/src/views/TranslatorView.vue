@@ -600,35 +600,44 @@ function _cancelWordbookLookupSpinnerTimer() {
 // `immediate: true` handles the case where the store already has a result on
 // first mount (restored from persisted history) — without it the lookup never
 // fires and the + button shows for a word that is already in the wordbook.
+async function _runWordbookLookup(result: typeof store.result) {
+  wordbookLookup.value = null
+  _cancelWordbookLookupSpinnerTimer()
+  if (!result) {
+    wordbookLookupState.value = 'idle'
+    return
+  }
+  wordbookLookupState.value = 'pending'
+  _wordbookLookupSpinnerTimer = setTimeout(() => {
+    _wordbookLookupSpinnerTimer = null
+    if (wordbookLookupState.value === 'pending') wordbookLookupState.value = 'spinning'
+  }, SPINNER_DELAY_MS)
+  try {
+    wordbookLookup.value = await wordbookApi.lookup(
+      resolvedSourceLang.value,
+      store.targetLang,
+      store.inputText.trim(),
+    )
+    wordbookLookupState.value = 'idle'
+  } catch (e: unknown) {
+    toast.error(extractErrorMessage(e, 'Failed to check wordbook'))
+    wordbookLookupState.value = 'error'
+  } finally {
+    _cancelWordbookLookupSpinnerTimer()
+  }
+}
+
 watch(
   () => store.result,
-  async (result) => {
-    wordbookLookup.value = null
-    _cancelWordbookLookupSpinnerTimer()
-    if (!result) {
-      wordbookLookupState.value = 'idle'
-      return
-    }
-    wordbookLookupState.value = 'pending'
-    _wordbookLookupSpinnerTimer = setTimeout(() => {
-      _wordbookLookupSpinnerTimer = null
-      if (wordbookLookupState.value === 'pending') wordbookLookupState.value = 'spinning'
-    }, SPINNER_DELAY_MS)
-    try {
-      wordbookLookup.value = await wordbookApi.lookup(
-        resolvedSourceLang.value,
-        store.targetLang,
-        store.inputText.trim(),
-      )
-      wordbookLookupState.value = 'idle'
-    } catch (e: unknown) {
-      toast.error(extractErrorMessage(e, 'Failed to check wordbook'))
-      wordbookLookupState.value = 'error'
-    } finally {
-      _cancelWordbookLookupSpinnerTimer()
-    }
-  },
+  (result) => void _runWordbookLookup(result),
   { immediate: true },
+)
+
+// Re-run the lookup whenever an entry is deleted from the wordbook so the
+// button resets from ✓ back to + if the current word was just removed.
+watch(
+  () => wordbookStore.deletionCount,
+  () => { if (store.result) void _runWordbookLookup(store.result) },
 )
 
 const isAlreadyInWordbook = computed(() => wordbookLookup.value !== null)
@@ -1287,9 +1296,23 @@ function closeGroupMenu() {
   groupMenuVisible.value = false
   onGroupMenuCancelPress()
 }
+
+function _repositionGroupMenuToButton() {
+  const btn = addToWordbookBtnRef.value
+  if (!btn) return
+  _repositionGroupMenu(btn.getBoundingClientRect())
+}
+
 watch(groupMenuVisible, (open) => {
-  if (open) document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-  else document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  if (open) {
+    document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+    window.addEventListener('scroll', closeGroupMenu, { passive: true, capture: true })
+    window.addEventListener('resize', _repositionGroupMenuToButton)
+  } else {
+    document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+    window.removeEventListener('scroll', closeGroupMenu, { capture: true } as EventListenerOptions)
+    window.removeEventListener('resize', _repositionGroupMenuToButton)
+  }
 })
 
 function _onGroupMenuOutsidePointerDown(e: PointerEvent) {
@@ -1398,6 +1421,8 @@ onDeactivated(() => {
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
+  window.removeEventListener('scroll', closeGroupMenu, { capture: true } as EventListenerOptions)
+  window.removeEventListener('resize', _repositionGroupMenuToButton)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
   window.removeEventListener('resize', _onWindowResize)
   _cancelWordbookLookupSpinnerTimer()

@@ -359,14 +359,17 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   }
 
   /**
-   * Snapshot the currently-open card for `groupId`. Clears the saved state
-   * when nothing is open, so closing a card then navigating away does not
-   * reopen it on return. An in-progress edit is treated as the card to
-   * restore in details mode (edit is cancelled on return).
+   * Snapshot the currently-open details panel for `groupId`. Only saves when
+   * the card is in details mode — an in-progress edit is not saved so that
+   * switching groups and returning cancels the edit completely rather than
+   * reopening the details overlay.
    */
   function saveOpenDetailsForGroup(groupId: number | null): void {
-    if (activeCardId.value !== null) openDetailsByGroup.set(groupId, activeCardId.value)
-    else openDetailsByGroup.delete(groupId)
+    if (activeCardId.value !== null && activeCardMode.value === 'details') {
+      openDetailsByGroup.set(groupId, activeCardId.value)
+    } else {
+      openDetailsByGroup.delete(groupId)
+    }
   }
 
   /** Return the saved open-card id for `groupId`, or undefined if none. */

@@ -2266,9 +2266,34 @@ function onEntryContextPopupOutsidePointerDown(e: PointerEvent) {
   closeEntryContextPopup()
 }
 
-watch(() => entryContextPopup.value, (popup) => {
-  if (popup) document.addEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
-  else document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+/** Re-read the anchor card's viewport rect and update the popup position on scroll/resize. */
+function _updateEntryContextPopupPosition() {
+  if (!entryContextPopup.value) return
+  const entry = entryContextPopup.value.entry
+  const cardEl = document.querySelector(`[data-entry-id="${entry.id}"]:not([data-details-overlay])`) as HTMLElement | null
+  if (!cardEl) return
+  const rect = cardEl.getBoundingClientRect()
+  entryContextPopup.value = {
+    ...entryContextPopup.value,
+    anchorLeft: rect.left,
+    anchorWidth: rect.width,
+    anchorBottom: rect.bottom,
+    anchorTop: rect.top,
+  }
+}
+
+// Watch the open/closed boolean rather than the object reference so position
+// updates (which replace the object) don't re-register the same listeners.
+watch(() => !!entryContextPopup.value, (open) => {
+  if (open) {
+    document.addEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+    window.addEventListener('scroll', closeEntryContextPopup, { passive: true, capture: true })
+    window.addEventListener('resize', _updateEntryContextPopupPosition)
+  } else {
+    document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+    window.removeEventListener('scroll', closeEntryContextPopup, { capture: true } as EventListenerOptions)
+    window.removeEventListener('resize', _updateEntryContextPopupPosition)
+  }
 })
 
 async function showEntryContextPopup(entry: WordbookEntryData) {
@@ -2495,6 +2520,8 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
   document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
+  window.removeEventListener('scroll', closeEntryContextPopup, { capture: true } as EventListenerOptions)
+  window.removeEventListener('resize', _updateEntryContextPopupPosition)
   document.removeEventListener('keydown', onNavHistoryKeyDown)
   cancelSearch()
   closeEntryContextPopup()
