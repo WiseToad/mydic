@@ -1941,6 +1941,8 @@ function onCardDragLeave() {
 
 /** Shared reorder logic: move `draggedEntryId` to `targetEntryId`'s position. */
 function performCardReorder(draggedEntryId: number, targetEntryId: number) {
+  const prevAllIds = store.entries.map((e) => e.id)
+
   const filteredIds = filteredEntries.value.map((e) => e.id)
   const movingForward = filteredIds.indexOf(draggedEntryId) < filteredIds.indexOf(targetEntryId)
   const newFiltered = filteredIds.filter((id) => id !== draggedEntryId)
@@ -1951,6 +1953,17 @@ function performCardReorder(draggedEntryId: number, targetEntryId: number) {
   let fi = 0
   const newOrder = allIds.map((id) => (filteredSet.has(id) ? newFiltered[fi++] : id))
   store.reorderEntries(newOrder, draggedEntryId, targetEntryId)
+
+  // Compute the undo target: entry that was immediately after draggedEntryId in the
+  // previous order, or the one before it if it was last.
+  const prevIdx = prevAllIds.indexOf(draggedEntryId)
+  const undoTargetId = prevIdx + 1 < prevAllIds.length
+    ? prevAllIds[prevIdx + 1]
+    : prevAllIds[prevIdx - 1]
+
+  toast.undo('Entries reordered', () => {
+    store.reorderEntries(prevAllIds, draggedEntryId, undoTargetId)
+  })
 }
 
 function onCardDrop(targetEntryId: number) {
