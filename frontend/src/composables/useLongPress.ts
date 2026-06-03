@@ -85,6 +85,10 @@ export function useLongPress(
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return
+    // Explicit pointer capture ensures pointerleave doesn't fire if the touch
+    // drifts slightly outside the element during the hold (browsers may skip
+    // implicit capture when preventDefault() has been called on pointerdown).
+    ;(e.currentTarget as HTMLElement | null)?.setPointerCapture(e.pointerId)
     _clearTimer()
     timer = setTimeout(() => {
       timer = null

@@ -97,8 +97,10 @@ import { useWordbookGroupsStore } from '@/stores/wordbookGroups'
 import { useWordbookUiStore } from '@/stores/wordbookUi'
 import ToastContainer from '@/components/ToastContainer.vue'
 import AboutDialog from '@/components/AboutDialog.vue'
+import { useToastStore } from '@/stores/toast'
 
 const authStore = useAuthStore()
+const toastStore = useToastStore()
 const settingsStore = useSettingsStore()
 const languageSettingsStore = useLanguageSettingsStore()
 const translatorStore = useTranslatorStore()
@@ -138,10 +140,52 @@ async function toggleFullscreen() {
 // Push a sentinel browser history entry so the back button always fires
 // popstate instead of navigating the browser away from the app.  On each
 // event we re-push the sentinel and handle the action in-app.
+//
+// The sentinel state is a marked object so we can detect whether it is
+// still at the top of the browser history stack (important on Android,
+// where the system can silently remove history entries when the app is
+// backgrounded or the predictive-back gesture is used).  When the
+// sentinel is missing we re-push it before the user can press back again.
+const _BACK_SENTINEL = { _appBackSentinel: 1 as const }
+
+function _pushSentinel() {
+  try { window.history.pushState(_BACK_SENTINEL, '') } catch { /* quota / sandboxing */ }
+}
+
+/**
+ * Ensure the sentinel is present at the top of the browser history stack.
+ * Called when the page becomes visible again (e.g. after the Android app
+ * switcher or the predictive-back gesture cancelled mid-way) so that a
+ * single missing sentinel doesn't permanently break the back handler.
+ */
+function _ensureSentinel() {
+  if (document.hidden) return
+  if ((window.history.state as typeof _BACK_SENTINEL | null)?._appBackSentinel !== 1) {
+    _pushSentinel()
+  }
+}
+
+function _onPageShow(e: PageTransitionEvent) {
+  // bfcache restore: the browser may have reset the history state
+  if (e.persisted) _ensureSentinel()
+}
+
+// Double-back-to-exit state (standalone/PWA mode only)
+const _EXIT_COOLDOWN = 2000
+let _lastBackPressTime = 0
+
 function onBackButton() {
-  window.history.pushState(null, '')
+  _pushSentinel()
   if (aboutOpen.value) { aboutOpen.value = false; return }
-  dispatchBackButton()
+  if (dispatchBackButton()) return
+  if (!isStandalone) return
+  const now = Date.now()
+  if (now - _lastBackPressTime < _EXIT_COOLDOWN) {
+    window.close()
+  } else {
+    _lastBackPressTime = now
+    toastStore.show('Press back again to exit', 'info', _EXIT_COOLDOWN)
+  }
 }
 
 /** userId captured at page-load time, before any authentication changes.
@@ -200,8 +244,10 @@ onMounted(() => {
   window.visualViewport?.addEventListener('resize', updateAppHeight)
   window.addEventListener('resize', updateAppHeight)
   updateAppHeight()
-  window.history.pushState(null, '')
+  _pushSentinel()
   window.addEventListener('popstate', onBackButton)
+  document.addEventListener('visibilitychange', _ensureSentinel)
+  window.addEventListener('pageshow', _onPageShow)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside)
@@ -209,5 +255,7 @@ onUnmounted(() => {
   window.visualViewport?.removeEventListener('resize', updateAppHeight)
   window.removeEventListener('resize', updateAppHeight)
   window.removeEventListener('popstate', onBackButton)
+  document.removeEventListener('visibilitychange', _ensureSentinel)
+  window.removeEventListener('pageshow', _onPageShow)
 })
 </script>

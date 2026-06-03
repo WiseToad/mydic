@@ -127,7 +127,7 @@
               v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled && wordbookLookupState === 'idle'"
               ref="addToWordbookBtnRef"
               title="Add to Wordbook (long-press to pick group)"
-              class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors"
+              class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors touch-none"
               @pointerdown.stop.prevent="onAddWordbookPointerDown"
               @pointerup.stop="onAddWordbookPointerUp"
               @pointerleave="onAddWordbookCancelPress"
