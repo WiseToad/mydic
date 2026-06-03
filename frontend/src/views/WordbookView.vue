@@ -27,7 +27,7 @@
           </button>
           <button
             ref="navBackBtnEl"
-            v-show="navHistory.length > 0 && navHistBtnsVisible"
+            v-show="!searchActive && navHistory.length > 0 && navHistBtnsVisible"
             class="p-1 transition-colors"
             :class="navHistoryCursor <= 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-gray-300'"
             :disabled="navHistoryCursor <= 0"
@@ -39,7 +39,7 @@
             </svg>
           </button>
           <button
-            v-show="navHistory.length > 0 && navHistBtnsVisible && navHistFwdVisible"
+            v-show="!searchActive && navHistory.length > 0 && navHistBtnsVisible && navHistFwdVisible"
             class="p-1 transition-colors"
             :class="navHistoryCursor >= navHistory.length - 1 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-gray-300'"
             :disabled="navHistoryCursor >= navHistory.length - 1"
@@ -1887,6 +1887,10 @@ function recordNavHistoryEntry(result: WordbookSearchEntry) {
     color: result.color ?? null,
   }
 
+  // No focused entry → nothing to navigate from; skip recording entirely.
+  const focusedId = uiStore.getFocusedEntry(uiStore.activeGroupId)
+  if (focusedId === undefined) return
+
   // Truncate the tail when recording from mid-history
   const cutAt = navHistoryCursor.value + 1
   if (cutAt < navHistory.value.length) {
@@ -1895,19 +1899,16 @@ function recordNavHistoryEntry(result: WordbookSearchEntry) {
 
   // Record the current focused entry as the source (where the user is navigating
   // FROM) so that Ctrl+Z can return to it.
-  const focusedId = uiStore.getFocusedEntry(uiStore.activeGroupId)
-  if (focusedId !== undefined) {
-    const srcEntry = store.entries.find(e => e.id === focusedId)
-    if (srcEntry) {
-      const src: NavHistoryEntry = {
-        id: srcEntry.id,
-        pair: `${srcEntry.source_lang}:${srcEntry.target_lang}`,
-        groupId: srcEntry.group.id,
-        color: srcEntry.color ?? null,
-      }
-      const last = navHistory.value[navHistory.value.length - 1]
-      if (!last || last.id !== src.id) navHistory.value.push(src)
+  const srcEntry = store.entries.find(e => e.id === focusedId)
+  if (srcEntry) {
+    const src: NavHistoryEntry = {
+      id: srcEntry.id,
+      pair: `${srcEntry.source_lang}:${srcEntry.target_lang}`,
+      groupId: srcEntry.group.id,
+      color: srcEntry.color ?? null,
     }
+    const last = navHistory.value[navHistory.value.length - 1]
+    if (!last || last.id !== src.id) navHistory.value.push(src)
   }
 
   // Record the destination so Ctrl+Y can go forward to it.
