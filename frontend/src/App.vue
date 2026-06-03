@@ -176,8 +176,8 @@ let _lastBackPressTime = 0
 
 function onBackButton() {
   _pushSentinel()
-  if (aboutOpen.value) { aboutOpen.value = false; return }
-  if (dispatchBackButton()) return
+  if (aboutOpen.value) { aboutOpen.value = false; _lastBackPressTime = 0; return }
+  if (dispatchBackButton()) { _lastBackPressTime = 0; return }
   if (!isStandalone) return
   const now = Date.now()
   if (now - _lastBackPressTime < _EXIT_COOLDOWN) {

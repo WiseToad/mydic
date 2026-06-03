@@ -236,22 +236,29 @@ async function playVoiceSample(
 // previousSettingsRoute is captured by the router's beforeEach guard, which is
 // more reliable than router.options.history.state.back on createMemoryHistory.
 const _backRoute = previousSettingsRoute ?? 'translator'
-const canGoBack = ref(_backRoute !== 'translator')
 
 function goBack() {
   router.push({ name: _backRoute })
 }
 
 let _unregisterBack: (() => void) | null = null
+// Guard: prevents goBack() from being called multiple times if the user
+// presses back rapidly while the async navigation is still in progress.
+let _navigatingBack = false
 
 onMounted(() => {
   store.load()
   langStore.load()
   ensureTtsSamplesLoaded()
-  _unregisterBack = registerBackHandler(() => { goBack(); return true })
+  _unregisterBack = registerBackHandler(() => {
+    if (_navigatingBack) return true  // consume but don't navigate again
+    _navigatingBack = true
+    goBack()
+    return true
+  })
 })
 
-onUnmounted(() => { _unregisterBack?.(); _unregisterBack = null })
+onUnmounted(() => { _unregisterBack?.(); _unregisterBack = null; _navigatingBack = false })
 
 function handleToggle(cap: Capability, index: number) {
   store.toggleEnabled(cap, index)

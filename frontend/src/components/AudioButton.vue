@@ -89,6 +89,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onDeactivated, ref, watch } from 'vue'
 import { useLongPress } from '@/composables/useLongPress'
+import { registerBackHandler } from '@/composables/useBackButton'
 import {
   claimSlow,
   clearSlow,
@@ -320,6 +321,17 @@ function positionPopup(buttonRect: DOMRect) {
 
 function closePopup() { popupVisible.value = false }
 
+// Register a back handler while the popup is open so the Android back button
+// dismisses it instead of falling through to the view's own handler or exit.
+let _unregisterPopupBack: (() => void) | null = null
+watch(popupVisible, (open) => {
+  _unregisterPopupBack?.()
+  _unregisterPopupBack = null
+  if (open) {
+    _unregisterPopupBack = registerBackHandler(() => { closePopup(); return true })
+  }
+})
+
 function _repositionPopupToButton() {
   if (!rootRef.value) return
   positionPopup(rootRef.value.getBoundingClientRect())
@@ -379,6 +391,8 @@ onDeactivated(() => {
 onBeforeUnmount(() => {
   _cancelSpinnerTimer()
   _cleanLongPressPointerUpGuard()
+  _unregisterPopupBack?.()
+  _unregisterPopupBack = null
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
   window.removeEventListener('scroll', _onWindowScrollWhilePopupOpen, { capture: true } as EventListenerOptions)

@@ -1415,11 +1415,12 @@ onMounted(() => {
   nextTick(updateNarrowPanelHeight)  // initial mount: DOM is already stable
 })
 
-// ─── Back button ────────────────────────────────────────────────────────────
+// ─── Back button ──────────────────────────────────────────────────────────────────
 let _unregisterBack: (() => void) | null = null
 onActivated(() => {
   _unregisterBack = registerBackHandler(() => {
     if (showClearHistoryDialog.value) { showClearHistoryDialog.value = false; return true }
+    if (groupMenuVisible.value) { closeGroupMenu(); return true }
     if (store.canGoBack) { onGoBack(); return true }
     return false
   })

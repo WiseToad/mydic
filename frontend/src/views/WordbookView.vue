@@ -2522,8 +2522,16 @@ watch(
 let _unregisterBack: (() => void) | null = null
 onActivated(() => {
   _unregisterBack = registerBackHandler(() => {
+    // Dismiss overlays/popups in order from most ephemeral to least.
     if (showDeleteDialog.value) { showDeleteDialog.value = false; return true }
     if (showDeleteTabDialog.value) { showDeleteTabDialog.value = false; return true }
+    if (entryContextPopup.value) { closeEntryContextPopup(); return true }
+    if (showGroupsPopup.value) { showGroupsPopup.value = false; return true }
+    if (showLangPopup.value) { showLangPopup.value = false; return true }
+    if (showColorFilter.value) { showColorFilter.value = false; return true }
+    if (searchActive.value) { cancelSearch(); return true }
+    if (isPortrait.value && uiStore.sidePanelVisible) { dismissSidePanel(); return true }
+    if (uiStore.activeCardId !== null) { uiStore.closeActive(); return true }
     if (navHistoryCursor.value > 0) { navigateHistoryBack(); return true }
     return false
   })
