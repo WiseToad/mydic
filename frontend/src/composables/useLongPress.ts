@@ -37,10 +37,13 @@ export function useLongPress(
     popupRef?: Ref<HTMLElement | null>
     /**
      * When true, a one-shot capture-phase `click` guard is registered after the
-     * long-press fires, unconditionally swallowing the browser's synthetic
-     * post-release click.  Use this when there is no popup element to anchor the
-     * guard to but the spurious click still needs suppression (e.g. a long-press
-     * that triggers an action elsewhere rather than opening a popup on this element).
+     * long-press fires, suppressing the browser's synthetic post-release click on
+     * the trigger element.  Use this when there is no popup element to anchor the
+     * guard to but the spurious click on the trigger still needs suppression (e.g.
+     * a long-press that triggers an action elsewhere rather than opening a popup on
+     * this element).  Unlike `popupRef`, this only swallows clicks that land on or
+     * within the trigger element itself — clicks on any other element (e.g. a popup
+     * opened by the long-press action) pass through unaffected.
      * Ignored when `popupRef` is also provided — `popupRef` already enables the guard.
      */
     suppressClickAfterLongPress?: boolean
@@ -58,6 +61,7 @@ export function useLongPress(
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let clickGuard: ((e: MouseEvent) => void) | null = null
+  let _triggerEl: HTMLElement | null = null
 
   function _clearTimer() {
     if (timer !== null) { clearTimeout(timer); timer = null }
@@ -72,10 +76,16 @@ export function useLongPress(
 
   function _registerClickGuard() {
     _cleanClickGuard()
+    const triggerEl = _triggerEl
     const handler = (e: MouseEvent) => {
       document.removeEventListener('click', handler, true)
       clickGuard = null
       if (popupRef?.value?.contains(e.target as Node)) return
+      // When suppressClickAfterLongPress is used without a popupRef, only suppress
+      // clicks that land on or within the trigger element (the spurious synthetic
+      // click from the long-press gesture).  Clicks on other elements — such as a
+      // popup opened by the long-press action — pass through unaffected.
+      if (!popupRef && triggerEl && !triggerEl.contains(e.target as Node)) return
       e.stopPropagation()
       e.preventDefault()
     }
@@ -88,7 +98,8 @@ export function useLongPress(
     // Explicit pointer capture ensures pointerleave doesn't fire if the touch
     // drifts slightly outside the element during the hold (browsers may skip
     // implicit capture when preventDefault() has been called on pointerdown).
-    ;(e.currentTarget as HTMLElement | null)?.setPointerCapture(e.pointerId)
+    _triggerEl = e.currentTarget as HTMLElement | null
+    _triggerEl?.setPointerCapture(e.pointerId)
     _clearTimer()
     timer = setTimeout(() => {
       timer = null
