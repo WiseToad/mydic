@@ -49,9 +49,10 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from 'vue'
+import { onMounted, onUnmounted, watch } from 'vue'
+import { push, popIfTop } from '@/composables/useAppHistory'
 
-defineProps<{
+const props = defineProps<{
   modelValue: boolean
   title: string
   message: string
@@ -76,12 +77,26 @@ function handleCancel() {
   emit('update:modelValue', false)
 }
 
+let _myCb: (() => void) | null = null
+
+watch(() => props.modelValue, (open, wasOpen) => {
+  if (open) {
+    _myCb = () => emit('update:modelValue', false)
+    push(_myCb)
+  } else if (wasOpen) {
+    if (_myCb) { popIfTop(_myCb); _myCb = null }
+  }
+}, { immediate: true })
+
 function handleKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape') handleCancel()
 }
 
 onMounted(() => window.addEventListener('keydown', handleKeydown))
-onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
+onUnmounted(() => {
+  window.removeEventListener('keydown', handleKeydown)
+  if (_myCb) { popIfTop(_myCb); _myCb = null }
+})
 </script>
 
 <style scoped>

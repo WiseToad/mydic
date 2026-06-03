@@ -49,6 +49,7 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { push, popIfTop } from '@/composables/useAppHistory'
 import { version } from 'virtual:app-version'
 import { fetchServerVersion } from '@/api/version'
 
@@ -72,6 +73,21 @@ watch(
   },
 )
 
+let _myCb: (() => void) | null = null
+
+watch(
+  () => props.modelValue,
+  (open, wasOpen) => {
+    if (open) {
+      _myCb = () => emit('update:modelValue', false)
+      push(_myCb)
+    } else if (wasOpen) {
+      if (_myCb) { popIfTop(_myCb); _myCb = null }
+    }
+  },
+  { immediate: true },
+)
+
 function close() {
   emit('update:modelValue', false)
 }
@@ -84,7 +100,10 @@ function onKeyDown(e: KeyboardEvent) {
 }
 
 onMounted(() => document.addEventListener('keydown', onKeyDown))
-onUnmounted(() => document.removeEventListener('keydown', onKeyDown))
+onUnmounted(() => {
+  document.removeEventListener('keydown', onKeyDown)
+  if (_myCb) { popIfTop(_myCb); _myCb = null }
+})
 
 function reload() {
   window.location.reload()

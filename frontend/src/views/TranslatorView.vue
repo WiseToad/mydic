@@ -49,7 +49,7 @@
       <!-- Swap languages button - absolutely centered -->
       <button
         :disabled="isSwapDisabled"
-        :title="isSwapDisabled ? 'Cannot swap: detected language is disabled' : 'Swap languages (long press to clear & swap)'"
+        :title="isSwapDisabled ? 'Cannot swap: detected language is disabled' : 'Swap languages · Hold to clear & swap'"
         class="absolute left-1/2 -translate-x-1/2 w-8 h-8 rounded-full flex items-center justify-center text-gray-400 hover:text-primary-400 hover:bg-surface-800 disabled:opacity-25 disabled:cursor-not-allowed transition-colors"
         @pointerdown.prevent="onSwapPointerDown"
         @pointerup="onSwapPointerUp"
@@ -126,7 +126,7 @@
             <button
               v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled && wordbookLookupState === 'idle'"
               ref="addToWordbookBtnRef"
-              title="Add to Wordbook (long-press to pick group)"
+              title="Add to Wordbook · Hold to pick group"
               class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors touch-none"
               @pointerdown.stop.prevent="onAddWordbookPointerDown"
               @pointerup.stop="onAddWordbookPointerUp"
@@ -162,7 +162,7 @@
             @keydown.ctrl.enter.prevent="onCtrlEnter"
           />
           <div class="flex items-center justify-between h-8">
-            <AudioButton v-if="store.inputText" :text="store.inputText" :lang="resolvedSourceLang" title="Listen to input" />
+            <AudioButton v-if="store.inputText" :text="store.inputText" :lang="resolvedSourceLang" title="Pronounce input · Hold to select voice" />
 <p v-if="store.inputText" class="text-xs text-gray-600 ml-auto">{{ store.inputText.length }} / 100</p>
           </div>
         </div>
@@ -276,7 +276,7 @@
           />
 
           <div v-if="store.result && hasEnabledAvailableTranslationProvider && (!settingsStore.loaded || settingsStore.ttsChoicesForLang(store.targetLang).length > 0)" class="flex items-center h-8">
-            <AudioButton :text="store.result.translated_text" :lang="store.targetLang" title="Listen to translation" />
+            <AudioButton :text="store.result.translated_text" :lang="store.targetLang" title="Pronounce translation · Hold to select voice" />
           </div>
         </div>
       </div>
@@ -465,8 +465,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, nextTick, onMounted, onUnmounted, onActivated, onDeactivated, watch } from 'vue'
-import { registerBackHandler } from '@/composables/useBackButton'
+import { ref, computed, nextTick, onMounted, onUnmounted, onDeactivated, watch } from 'vue'
 import { useLongPress } from '@/composables/useLongPress'
 import { useRouter } from 'vue-router'
 import { useTranslatorStore } from '@/stores/translator'
@@ -1414,17 +1413,6 @@ onMounted(() => {
   window.addEventListener('resize', _onWindowResize)
   nextTick(updateNarrowPanelHeight)  // initial mount: DOM is already stable
 })
-
-// ─── Back button ────────────────────────────────────────────────────────────
-let _unregisterBack: (() => void) | null = null
-onActivated(() => {
-  _unregisterBack = registerBackHandler(() => {
-    if (showClearHistoryDialog.value) { showClearHistoryDialog.value = false; return true }
-    if (store.canGoBack) { onGoBack(); return true }
-    return false
-  })
-})
-onDeactivated(() => { _unregisterBack?.(); _unregisterBack = null })
 
 // KeepAlive deactivation: teleported popups stay in <body>, close them manually.
 onDeactivated(() => {

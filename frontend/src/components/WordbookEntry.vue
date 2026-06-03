@@ -147,7 +147,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
           </div>
 
           <div class="flex items-center gap-1 shrink-0">
-            <AudioButton :text="primaryText" :lang="primaryLang" size="sm" title="Pronounce source" @longpress="setFocused" />
+            <AudioButton :text="primaryText" :lang="primaryLang" size="sm" title="Pronounce source · Hold to select voice" @longpress="setFocused" />
 
             <template v-if="!isCompact">
               <div class="relative" ref="actionsContainerRef">
@@ -324,13 +324,13 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
               :text="hintText"
               :lang="hintLang"
               size="sm"
-              title="Pronounce translation"
+              title="Pronounce translation · Hold to select voice"
               @longpress="setFocused"
             />
             <template v-if="!isCompact">
               <button
                 data-details-toggle
-                :title="expandedInfo ? 'Hide details' : 'Details'"
+                :title="expandedInfo ? 'Hide details' : 'Details · Hold to find similar'"
                 :class="[
                   'inline-flex items-center justify-center w-7 h-7 rounded-full transition-colors',
                   expandedInfo

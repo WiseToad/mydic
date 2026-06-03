@@ -7,18 +7,50 @@
       <div ref="headerRow1El" class="flex items-center gap-2 overflow-visible">
         <h1 ref="titleEl" class="text-xl font-bold text-gray-100 shrink-0">Wordbook</h1>
 
-        <!-- Search trigger button (hidden when search mode is active) -->
-        <button
-          v-if="!searchActive"
-          class="p-1.5 transition-colors text-gray-500 hover:text-gray-300 shrink-0"
-          title="Search wordbook"
-          @click.stop="activateSearch"
-        >
-          <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="6.5" cy="6.5" r="4.5"/>
-            <line x1="10" y1="10" x2="14" y2="14"/>
-          </svg>
-        </button>
+        <!-- Search · Back · Forward — medium-density borderless cluster -->
+        <div class="flex items-center gap-1 shrink-0">
+          <!-- Short press: open search. Long press: navigate history back. -->
+          <button
+            v-if="!searchActive"
+            class="p-1 transition-colors text-gray-500 hover:text-gray-300"
+            :title="navHistoryCursor > 0 ? 'Search wordbook · Hold to go back' : 'Search wordbook'"
+            @pointerdown="onSearchBtnPointerDown"
+            @pointerup="onSearchBtnPointerUp"
+            @pointerleave="onSearchBtnCancel"
+            @pointercancel="onSearchBtnCancel"
+            @click.stop
+          >
+            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="6.5" cy="6.5" r="4.5"/>
+              <line x1="10" y1="10" x2="14" y2="14"/>
+            </svg>
+          </button>
+          <button
+            ref="navBackBtnEl"
+            v-show="navHistory.length > 0 && navHistBtnsVisible"
+            class="p-1 transition-colors"
+            :class="navHistoryCursor <= 0 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="navHistoryCursor <= 0"
+            title="Go back"
+            @click="navigateHistoryBack"
+          >
+            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M10 3L5 8l5 5"/>
+            </svg>
+          </button>
+          <button
+            v-show="navHistory.length > 0 && navHistBtnsVisible && navHistFwdVisible"
+            class="p-1 transition-colors"
+            :class="navHistoryCursor >= navHistory.length - 1 ? 'text-gray-700 cursor-not-allowed' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="navHistoryCursor >= navHistory.length - 1"
+            title="Move forward"
+            @click="navigateHistoryForward"
+          >
+            <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 3l5 5-5 5"/>
+            </svg>
+          </button>
+        </div>
 
         <!-- Flex spacer (hidden when search active; search input is flex-1 instead) -->
         <div v-if="!searchActive" class="flex-1 min-w-0" />
@@ -650,7 +682,6 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { registerBackHandler } from '@/composables/useBackButton'
 import { onBeforeRouteLeave } from 'vue-router'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookUiStore, type DensityLevel } from '@/stores/wordbookUi'
@@ -1156,6 +1187,11 @@ const GROUP_NAME_MAX_LEN = 25
 const headerRow1El = ref<HTMLElement | null>(null)
 const titleEl = ref<HTMLElement | null>(null)
 const toolbarEl = ref<HTMLElement | null>(null)
+// Nav history cluster: back-button ref + space-based visibility flags
+const navBackBtnEl = ref<HTMLElement | null>(null)
+const navHistBtnsVisible = ref(true)  // false → both back & forward hidden
+const navHistFwdVisible = ref(true)   // false → only forward hidden
+let _lastNavBtnW = 0
 // Lang popup
 const showLangPopup = ref(false)
 const langPopupContainerRef = ref<HTMLElement | null>(null)
@@ -1287,6 +1323,67 @@ function checkLangFit() {
       getContentWidth(title) + ROW_GAP + SEARCH_FIXED_WIDTH + ROW_GAP + effectiveToolbarW > containerWidth
   } else {
     searchToolbarHidden.value = false
+  }
+  checkNavBtnsFit()
+}
+
+/**
+ * Hide the back/forward nav buttons progressively when the row gets too narrow.
+ * Forward disappears first; if even tighter, both disappear.
+ * Uses cached button width so it works even when buttons are display:none.
+ */
+function checkNavBtnsFit() {
+  // Only relevant in non-search mode — search mode has its own layout rules.
+  if (searchActive.value) return
+
+  const row1 = headerRow1El.value
+  const title = titleEl.value
+  const toolbar = toolbarEl.value
+  if (!row1 || !title || !toolbar) return
+
+  // Nothing to do when history is empty — buttons are already hidden via v-show.
+  if (navHistory.value.length === 0) {
+    navHistBtnsVisible.value = true
+    navHistFwdVisible.value = true
+    return
+  }
+
+  const containerWidth = getWidth(row1)
+  if (containerWidth === 0) return
+
+  // Cache nav button width whenever the button is visible (getWidth > 0).
+  if (navBackBtnEl.value) {
+    const w = getWidth(navBackBtnEl.value)
+    if (w > 0) _lastNavBtnW = w
+  }
+  // Cannot measure yet — leave buttons visible (default) and wait.
+  if (_lastNavBtnW === 0) return
+
+  const titleW = getContentWidth(title)
+  const toolbarW = getWidth(toolbar) > 0 ? getWidth(toolbar) : _lastToolbarWidth
+  const ROW_GAP = 8   // gap-2 between flex children
+  const INNER_GAP = 4 // gap-1 inside the cluster
+
+  // All three buttons (search, back, forward) share the same p-1 + w-3.5 size.
+  const btnW = _lastNavBtnW
+
+  // Minimum cluster width for each visibility level.
+  const clusterWithBoth = btnW + INNER_GAP + btnW + INNER_GAP + btnW // search+back+fwd
+  const clusterWithBack = btnW + INNER_GAP + btnW                     // search+back
+
+  // Available width for the cluster when the spacer (flex-1) has collapsed to 0.
+  // Row has 4 flex items → 3 inter-item gaps of ROW_GAP each.
+  const available = containerWidth - titleW - 3 * ROW_GAP - toolbarW
+
+  if (available >= clusterWithBoth) {
+    navHistBtnsVisible.value = true
+    navHistFwdVisible.value = true
+  } else if (available >= clusterWithBack) {
+    navHistBtnsVisible.value = true
+    navHistFwdVisible.value = false
+  } else {
+    navHistBtnsVisible.value = false
+    navHistFwdVisible.value = false
   }
 }
 
@@ -1742,6 +1839,21 @@ watch([searchUseLangFilter, searchUseColorFilter, searchIn], () => {
 // Recompute search layout whenever search mode is toggled.
 watch(searchActive, () => { nextTick(() => checkLangFit()) })
 
+// ─── Search button long-press ─────────────────────────────────────────────────
+// Short press (tap): activate search as normal.
+// Long press (hold): navigate history back if available.
+const {
+  onPointerDown: onSearchBtnPointerDown,
+  onPointerUp: onSearchBtnPointerUp,
+  onCancel: onSearchBtnCancel,
+} = useLongPress(
+  () => navigateHistoryBack(),
+  {
+    onShortPress: () => activateSearch(),
+    suppressClickAfterLongPress: true,
+  },
+)
+
 // ─── Navigation history ─────────────────────────────────────────────────────
 // Records transitions made via search-result and similarity-popup clicks so
 // the user can navigate back (Ctrl+Z) and forward (Ctrl+Y / Ctrl+Shift+Z).
@@ -1831,6 +1943,9 @@ watch(
     if (!_histNavInProgress) clearNavHistory()
   },
 )
+
+// Re-check nav button visibility when history appears or is cleared.
+watch(() => navHistory.value.length, () => { nextTick(() => checkNavBtnsFit()) })
 
 function _navHistNavigate(entry: NavHistoryEntry) {
   _histNavStart()
@@ -2517,18 +2632,6 @@ watch(
   [() => uiStore.activeCardId, () => uiStore.activeCardMode],
   () => _connectOverlayObs(),
 )
-
-// ─── Back button ────────────────────────────────────────────────────────────
-let _unregisterBack: (() => void) | null = null
-onActivated(() => {
-  _unregisterBack = registerBackHandler(() => {
-    if (showDeleteDialog.value) { showDeleteDialog.value = false; return true }
-    if (showDeleteTabDialog.value) { showDeleteTabDialog.value = false; return true }
-    if (navHistoryCursor.value > 0) { navigateHistoryBack(); return true }
-    return false
-  })
-})
-onDeactivated(() => { _unregisterBack?.(); _unregisterBack = null })
 
 // ─── Lifecycle ────────────────────────────────────────────────────────────────
 // True while this view is the active route. Used to prevent the

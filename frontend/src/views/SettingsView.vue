@@ -95,7 +95,7 @@
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, defineComponent, h, ref, watch } from 'vue'
-import { registerBackHandler } from '@/composables/useBackButton'
+import { push, popIfTop } from '@/composables/useAppHistory'
 import { useRouter } from 'vue-router'
 import { previousSettingsRoute } from '@/router'
 import { useSettingsStore, type Capability } from '@/stores/settings'
@@ -236,22 +236,30 @@ async function playVoiceSample(
 // previousSettingsRoute is captured by the router's beforeEach guard, which is
 // more reliable than router.options.history.state.back on createMemoryHistory.
 const _backRoute = previousSettingsRoute ?? 'translator'
-const canGoBack = ref(_backRoute !== 'translator')
+
+let _myBackCb: (() => void) | null = null
+let _navigatingBack = false
 
 function goBack() {
+  if (_navigatingBack) return
+  _navigatingBack = true
+  if (_myBackCb) popIfTop(_myBackCb)
   router.push({ name: _backRoute })
 }
-
-let _unregisterBack: (() => void) | null = null
 
 onMounted(() => {
   store.load()
   langStore.load()
   ensureTtsSamplesLoaded()
-  _unregisterBack = registerBackHandler(() => { goBack(); return true })
+  _myBackCb = () => {
+    if (_navigatingBack) return
+    _navigatingBack = true
+    router.push({ name: _backRoute })
+  }
+  push(_myBackCb)
 })
 
-onUnmounted(() => { _unregisterBack?.(); _unregisterBack = null })
+onUnmounted(() => { if (_myBackCb) { popIfTop(_myBackCb); _myBackCb = null }; _navigatingBack = false })
 
 function handleToggle(cap: Capability, index: number) {
   store.toggleEnabled(cap, index)

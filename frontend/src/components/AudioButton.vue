@@ -109,7 +109,7 @@ const props = withDefaults(defineProps<{
   lang: string
   title?: string
   size?: 'sm' | 'md'
-}>(), { title: 'Listen', size: 'md' })
+}>(), { title: 'Pronounce · Hold to select voice', size: 'md' })
 
 const emit = defineEmits<{
   (e: 'longpress'): void

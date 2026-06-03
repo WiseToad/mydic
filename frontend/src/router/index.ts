@@ -6,10 +6,18 @@ import { useAuthStore } from '@/stores/auth'
 // reliably expose history.state.back.
 export let previousSettingsRoute: string | null = null
 
+const LAST_VIEW_KEY = 'mydicLastView'
+
 const router = createRouter({
   history: createMemoryHistory(),
   routes: [
-    { path: '/', redirect: '/translator' },
+    {
+      path: '/',
+      redirect: () => {
+        const lastView = localStorage.getItem(LAST_VIEW_KEY)
+        return lastView === 'wordbook' ? '/wordbook' : '/translator'
+      },
+    },
     {
       path: '/login',
       name: 'login',
@@ -32,6 +40,12 @@ const router = createRouter({
       component: () => import('@/views/SettingsView.vue'),
     },
   ],
+})
+
+router.afterEach((to) => {
+  if (to.name === 'translator' || to.name === 'wordbook') {
+    localStorage.setItem(LAST_VIEW_KEY, to.name as string)
+  }
 })
 
 router.beforeEach((to, from) => {

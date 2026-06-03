@@ -9,20 +9,16 @@
         @click="toggleFullscreen"
       >MyDic</span>
       <nav class="flex gap-4 flex-1">
-        <RouterLink
-          to="/translator"
+        <button
           class="text-sm font-medium text-gray-400 hover:text-gray-100 transition-colors"
-          active-class="!text-primary-400 border-b-2 border-primary-400 pb-0.5"
-        >
-          Translator
-        </RouterLink>
-        <RouterLink
-          to="/wordbook"
+          :class="{ '!text-primary-400 border-b-2 border-primary-400 pb-0.5': route.name === 'translator' }"
+          @click="router.push('/translator')"
+        >Translator</button>
+        <button
           class="text-sm font-medium text-gray-400 hover:text-gray-100 transition-colors"
-          active-class="!text-primary-400 border-b-2 border-primary-400 pb-0.5"
-        >
-          Wordbook
-        </RouterLink>
+          :class="{ '!text-primary-400 border-b-2 border-primary-400 pb-0.5': route.name === 'wordbook' }"
+          @click="router.push('/wordbook')"
+        >Wordbook</button>
       </nav>
       <!-- Username with sign-out dropdown -->
       <div class="relative" ref="menuRef">
@@ -43,13 +39,12 @@
           v-if="menuOpen"
           class="absolute right-0 mt-1 w-36 bg-surface-800 border border-surface-700 rounded-xl shadow-2xl py-1 z-50"
         >
-          <RouterLink
-            to="/settings"
+          <button
             class="block w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface-700 transition-colors"
-            @click="menuOpen = false"
+            @click="menuOpen = false; router.push('/settings')"
           >
             Settings
-          </RouterLink>
+          </button>
           <button
             class="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-surface-700 transition-colors"
             @click="menuOpen = false; aboutOpen = true"
@@ -86,8 +81,8 @@
 
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { dispatchBackButton } from '@/composables/useBackButton'
-import { RouterLink, RouterView } from 'vue-router'
+import { onPopState } from '@/composables/useAppHistory'
+import { RouterView, useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { useSettingsStore } from '@/stores/settings'
 import { useLanguageSettingsStore } from '@/stores/languageSettings'
@@ -97,16 +92,16 @@ import { useWordbookGroupsStore } from '@/stores/wordbookGroups'
 import { useWordbookUiStore } from '@/stores/wordbookUi'
 import ToastContainer from '@/components/ToastContainer.vue'
 import AboutDialog from '@/components/AboutDialog.vue'
-import { useToastStore } from '@/stores/toast'
 
 const authStore = useAuthStore()
-const toastStore = useToastStore()
 const settingsStore = useSettingsStore()
 const languageSettingsStore = useLanguageSettingsStore()
 const translatorStore = useTranslatorStore()
 const wordbookStore = useWordbookStore()
 const wordbookGroupsStore = useWordbookGroupsStore()
 const wordbookUiStore = useWordbookUiStore()
+const router = useRouter()
+const route = useRoute()
 const menuOpen = ref(false)
 const aboutOpen = ref(false)
 const menuRef = ref<HTMLElement | null>(null)
@@ -137,56 +132,11 @@ async function toggleFullscreen() {
 }
 
 // ── System back button ───────────────────────────────────────────────────
-// Push a sentinel browser history entry so the back button always fires
-// popstate instead of navigating the browser away from the app.  On each
-// event we re-push the sentinel and handle the action in-app.
-//
-// The sentinel state is a marked object so we can detect whether it is
-// still at the top of the browser history stack (important on Android,
-// where the system can silently remove history entries when the app is
-// backgrounded or the predictive-back gesture is used).  When the
-// sentinel is missing we re-push it before the user can press back again.
-const _BACK_SENTINEL = { _appBackSentinel: 1 as const }
-
-function _pushSentinel() {
-  try { window.history.pushState(_BACK_SENTINEL, '') } catch { /* quota / sandboxing */ }
-}
-
-/**
- * Ensure the sentinel is present at the top of the browser history stack.
- * Called when the page becomes visible again (e.g. after the Android app
- * switcher or the predictive-back gesture cancelled mid-way) so that a
- * single missing sentinel doesn't permanently break the back handler.
- */
-function _ensureSentinel() {
-  if (document.hidden) return
-  if ((window.history.state as typeof _BACK_SENTINEL | null)?._appBackSentinel !== 1) {
-    _pushSentinel()
-  }
-}
-
-function _onPageShow(e: PageTransitionEvent) {
-  // bfcache restore: the browser may have reset the history state
-  if (e.persisted) _ensureSentinel()
-}
-
-// Double-back-to-exit state (standalone/PWA mode only)
-const _EXIT_COOLDOWN = 2000
-let _lastBackPressTime = 0
-
-function onBackButton() {
-  _pushSentinel()
-  if (aboutOpen.value) { aboutOpen.value = false; return }
-  if (dispatchBackButton()) return
-  if (!isStandalone) return
-  const now = Date.now()
-  if (now - _lastBackPressTime < _EXIT_COOLDOWN) {
-    window.close()
-  } else {
-    _lastBackPressTime = now
-    toastStore.show('Press back again to exit', 'info', _EXIT_COOLDOWN)
-  }
-}
+// Each view pushes real browser history entries for its back-interceptable
+// states (exit guard, dialogs, wordbook nav).  A popstate event dispatches
+// to the topmost callback; unknown pops (stale entries from a previous view)
+// are silently ignored.
+const _onBackButton = () => onPopState()
 
 /** userId captured at page-load time, before any authentication changes.
  *  Used to detect whether stores were already seeded for the resuming user. */
@@ -244,18 +194,13 @@ onMounted(() => {
   window.visualViewport?.addEventListener('resize', updateAppHeight)
   window.addEventListener('resize', updateAppHeight)
   updateAppHeight()
-  _pushSentinel()
-  window.addEventListener('popstate', onBackButton)
-  document.addEventListener('visibilitychange', _ensureSentinel)
-  window.addEventListener('pageshow', _onPageShow)
+  window.addEventListener('popstate', _onBackButton)
 })
 onUnmounted(() => {
   document.removeEventListener('click', onClickOutside)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.visualViewport?.removeEventListener('resize', updateAppHeight)
   window.removeEventListener('resize', updateAppHeight)
-  window.removeEventListener('popstate', onBackButton)
-  document.removeEventListener('visibilitychange', _ensureSentinel)
-  window.removeEventListener('pageshow', _onPageShow)
+  window.removeEventListener('popstate', _onBackButton)
 })
 </script>

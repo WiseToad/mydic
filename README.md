@@ -26,6 +26,7 @@ Some non-obvious UI features:
 - Long-pressing, or Ctrl-pressing an item in multi-select filters prevents their immediate dismissal
 - Entries in search results and find-similar popups are dimmed, if they're affected by filters
 - Pressing Ctrl-Z and Ctrl-Y/Ctrl-Shift-Z in Wordbook navigates the search transitions history
+- Long-pressing the search button moves back the search transitions history
 
 Some usage notes for languages, you do not familiar enough with:
 
