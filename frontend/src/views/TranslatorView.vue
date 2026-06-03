@@ -1239,14 +1239,18 @@ const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
 const { onPointerDown: onAddWordbookPointerDown, onPointerUp: onAddWordbookPointerUp, onCancel: onAddWordbookCancelPress } = useLongPress(
   async () => {
-    // Only fetch when the store is empty (e.g. user opens the translator without
-    // having visited the Wordbook yet). Use the Wordbook's active lang-pair filter
-    // so in_filter flags match what the Wordbook tabs would show.
+    // Open the menu immediately while the button element is guaranteed to be
+    // mounted (addToWordbookBtnRef.value is valid here, before any awaits).
+    _openGroupMenu()
+    // Fetch groups in the background if not yet loaded; the popup content
+    // updates reactively as the data arrives.
     if (wordbookGroupsStore.tabs.length === 0) {
       const activeLangs = wordbookUiStore.activeLangs
       try { await wordbookGroupsStore.fetchGroups(activeLangs.length > 0 ? [...activeLangs] : undefined) } catch { /* non-critical */ }
+      // Scroll to the active group once the list has populated — but only if
+      // the user hasn't already dismissed the menu.
+      if (groupMenuVisible.value) nextTick(() => _scrollToActiveGroup())
     }
-    _openGroupMenu()
   },
   { onShortPress: () => void addToWordbook(), popupRef: groupMenuPopupRef },
 )
@@ -1303,14 +1307,24 @@ function _repositionGroupMenuToButton() {
   _repositionGroupMenu(btn.getBoundingClientRect())
 }
 
+/** Window-level scroll handler while the group menu is open.
+ *  Ignores scroll events originating from inside the popup itself —
+ *  specifically the auto-scroll done by _scrollToActiveGroup() in nextTick,
+ *  which would otherwise close the popup immediately after it opens when
+ *  the active group is not among the first few visible items. */
+function _onWindowScrollWhileGroupMenuOpen(e: Event) {
+  if (groupMenuPopupRef.value?.contains(e.target as Node)) return
+  closeGroupMenu()
+}
+
 watch(groupMenuVisible, (open) => {
   if (open) {
     document.addEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-    window.addEventListener('scroll', closeGroupMenu, { passive: true, capture: true })
+    window.addEventListener('scroll', _onWindowScrollWhileGroupMenuOpen, { passive: true, capture: true })
     window.addEventListener('resize', _repositionGroupMenuToButton)
   } else {
     document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-    window.removeEventListener('scroll', closeGroupMenu, { capture: true } as EventListenerOptions)
+    window.removeEventListener('scroll', _onWindowScrollWhileGroupMenuOpen, { capture: true } as EventListenerOptions)
     window.removeEventListener('resize', _repositionGroupMenuToButton)
   }
 })
@@ -1421,7 +1435,7 @@ onDeactivated(() => {
 
 onUnmounted(() => {
   document.removeEventListener('pointerdown', _onGroupMenuOutsidePointerDown, true)
-  window.removeEventListener('scroll', closeGroupMenu, { capture: true } as EventListenerOptions)
+  window.removeEventListener('scroll', _onWindowScrollWhileGroupMenuOpen, { capture: true } as EventListenerOptions)
   window.removeEventListener('resize', _repositionGroupMenuToButton)
   _narrowMq?.removeEventListener('change', _onNarrowMqChange)
   window.removeEventListener('resize', _onWindowResize)

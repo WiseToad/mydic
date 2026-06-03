@@ -523,10 +523,11 @@
           ref="gridEl"
           class="grid gap-3"
           :style="gridStyle"
-          @pointerdown.capture="onCardGridPointerDown"
+  @pointerdown.capture="onCardGridPointerDown"
           @pointermove="onCardGridPointerMove"
           @pointerup="onCardGridPointerUpOrCancel"
           @pointercancel="onCardGridPointerUpOrCancel"
+          @contextmenu="onCardGridContextMenu"
         >
           <div
             v-for="entry in filteredEntries"
@@ -658,8 +659,9 @@ import WordbookEntry from '@/components/WordbookEntry.vue'
 import ConfirmDialog from '@/components/ConfirmDialog.vue'
 import { useToastStore } from '@/stores/toast'
 import { extractErrorMessage } from '@/utils/error'
-import { SPINNER_DELAY_MS, LONG_PRESS_MS } from '@/utils/ui'
+import { SPINNER_DELAY_MS } from '@/utils/ui'
 import { useLongPress } from '@/composables/useLongPress'
+import { useLongPressWithDrag } from '@/composables/useLongPressWithDrag'
 import {
   ENTRY_COLORS,
   ENTRY_COLOR_LABEL,
@@ -1193,7 +1195,8 @@ watch(showGroupsPopup, (open) => {
   } else {
     document.removeEventListener('click', onGroupsPopupOutsideClick, true)
     hoveredPopupTabId.value = null
-    clearPopupLongPressTimer()
+    _cancelPopupLp()
+    longPressReadyPopupTabId.value = null
     popupItemInteraction.value = null
     if (editingPopupTabId.value !== null) cancelTabEdit()
   }
@@ -1415,64 +1418,67 @@ async function addNewTabFromPopup() {
 // ─── Groups popup item interactions ──────────────────────────────────────────
 const hoveredPopupTabId = ref<number | null>(null)
 
-interface PopupItemInteraction {
-  tabId: number
-  startX: number
-  startY: number
-  startTime: number
-}
+// popupItemInteraction holds only the tabId — startX/Y/startTime are tracked
+// internally by the composable.
+interface PopupItemInteraction { tabId: number }
 const popupItemInteraction = ref<PopupItemInteraction | null>(null)
 const longPressReadyPopupTabId = ref<number | null>(null)
-let popupLongPressTimerId: ReturnType<typeof setTimeout> | null = null
 
-function clearPopupLongPressTimer() {
-  if (popupLongPressTimerId !== null) { clearTimeout(popupLongPressTimerId); popupLongPressTimerId = null }
-  longPressReadyPopupTabId.value = null
-}
+const {
+  onPointerDown: _popupLpDown,
+  onPointerMove: _popupLpMove,
+  onPointerUp:   _popupLpUp,
+  onPointerCancel: _popupLpCancel,
+  cancel: _cancelPopupLp,
+} = useLongPressWithDrag({
+  onTimerFired: () => {
+    const state = popupItemInteraction.value
+    if (state) longPressReadyPopupTabId.value = state.tabId
+  },
+  onShortPress: () => {
+    const state = popupItemInteraction.value
+    popupItemInteraction.value = null
+    longPressReadyPopupTabId.value = null
+    if (state) selectTabFromPopup(state.tabId)
+  },
+  onLongPressConfirmed: () => {
+    const state = popupItemInteraction.value
+    popupItemInteraction.value = null
+    longPressReadyPopupTabId.value = null
+    if (!state) return
+    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
+    if (tab) startPopupTabEdit(tab)
+  },
+  onDragStart: () => {
+    // Movement during a hold cancels the rename; just dismiss the interaction.
+    popupItemInteraction.value = null
+    longPressReadyPopupTabId.value = null
+  },
+})
 
 function onPopupItemPointerDown(event: PointerEvent, tabId: number) {
   if (editingPopupTabId.value === tabId || editingTabId.value === tabId) return
   event.preventDefault()
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
   if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
-  popupItemInteraction.value = { tabId, startX: event.clientX, startY: event.clientY, startTime: Date.now() }
-  clearPopupLongPressTimer()
-  // Same two-step pattern as the tab row: timer sets the visual cursor-text cue;
-  // the actual commit (rename or select) happens on pointer-up via elapsed check.
-  popupLongPressTimerId = setTimeout(() => {
-    popupLongPressTimerId = null
-    if (popupItemInteraction.value?.tabId === tabId) longPressReadyPopupTabId.value = tabId
-  }, LONG_PRESS_MS)
+  popupItemInteraction.value = { tabId }
+  _popupLpDown(event)
 }
 
 function onPopupItemPointerMove(event: PointerEvent) {
-  const state = popupItemInteraction.value
-  if (!state) return
-  const dx = event.clientX - state.startX
-  const dy = event.clientY - state.startY
-  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) {
-    clearPopupLongPressTimer()
-    popupItemInteraction.value = null
-  }
+  if (!popupItemInteraction.value) return
+  _popupLpMove(event)
 }
 
-function onPopupItemPointerUp(_event: PointerEvent) {
-  clearPopupLongPressTimer()
-  const state = popupItemInteraction.value
-  popupItemInteraction.value = null
-  if (!state) return
-  const elapsed = Date.now() - state.startTime
-  if (elapsed >= LONG_PRESS_MS) {
-    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
-    if (tab) startPopupTabEdit(tab)
-  } else {
-    selectTabFromPopup(state.tabId)
-  }
+function onPopupItemPointerUp(event: PointerEvent) {
+  if (!popupItemInteraction.value) return
+  _popupLpUp(event)
 }
 
-function onPopupItemPointerCancel() {
-  clearPopupLongPressTimer()
+function onPopupItemPointerCancel(event: PointerEvent) {
+  _popupLpCancel(event)
   popupItemInteraction.value = null
+  longPressReadyPopupTabId.value = null
 }
 
 function deleteTabFromPopup(id: number) {
@@ -1550,10 +1556,12 @@ const searchInTitle = computed(() => {
 
 function toggleSearchLangFilter() {
   searchUseLangFilter.value = !searchUseLangFilter.value
+  searchInputEl.value?.focus()
 }
 
 function toggleSearchColorFilter() {
   searchUseColorFilter.value = !searchUseColorFilter.value
+  searchInputEl.value?.focus()
 }
 
 function cycleSearchIn() {
@@ -1567,6 +1575,7 @@ function cycleSearchIn() {
     searchIn.value = 'source_text'
     // swapDisplay is already false; no change needed
   }
+  searchInputEl.value?.focus()
 }
 
 let _searchDebounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -1929,19 +1938,46 @@ let _lastCardPointerType = 'mouse'
 // focus to the moved entry (overriding the card's capture-phase setFocused).
 let _reorderFocusRestore: { entryId: number; groupId: number | null } | null = null
 
+// CardLongPressState no longer tracks startX/Y — those are handled internally
+// by the composable.  pointerId is retained to filter events in the grid handlers.
 interface CardLongPressState {
   entryId: number
   pointerId: number
-  startX: number
-  startY: number
 }
 const cardLongPressState = ref<CardLongPressState | null>(null)
-let cardLongPressTimer: ReturnType<typeof setTimeout> | null = null
 
 function clearCardLongPress() {
-  if (cardLongPressTimer !== null) { clearTimeout(cardLongPressTimer); cardLongPressTimer = null }
   cardLongPressState.value = null
+  // Timer is managed by the composable.
 }
+
+// Action-on-press: the reorder fires as soon as the timer expires.
+// onDragStart fires when the finger moves beyond the threshold, cancelling
+// the pending reorder so an accidental touch drift doesn't trigger it.
+const {
+  onPointerDown: _cardGridLpDown,
+  onPointerMove: _cardGridLpMove,
+  onPointerUp:   _cardGridLpUp,
+  onPointerCancel: _cardGridLpCancel,
+} = useLongPressWithDrag({
+  onTimerFired: () => {
+    const state = cardLongPressState.value
+    if (!state) return
+    const entry = filteredEntries.value.find((en) => en.id === state.entryId)
+    if (!entry) { clearCardLongPress(); return }
+    const currentFocused = uiStore.getFocusedEntry(entry.group.id)
+    if (!currentFocused || currentFocused === state.entryId) { clearCardLongPress(); return }
+    // Guard: focused entry must still be visible in the current filter.
+    if (!filteredEntries.value.some((en) => en.id === currentFocused)) { clearCardLongPress(); return }
+    performCardReorder(currentFocused, state.entryId)
+    _reorderFocusRestore = { entryId: currentFocused, groupId: entry.group.id as number | null }
+    clearCardLongPress()
+  },
+  onDragStart: () => {
+    // Finger drifted — abort the pending reorder.
+    clearCardLongPress()
+  },
+})
 
 // Tab → card group assignment drag, OR tab → tab reorder drag
 // (custom pointer-based, single state machine for both)
@@ -1950,29 +1986,20 @@ const dragOverId = ref<number | null>(null)
 const dragOverTabId = ref<number | null>(null)
 const dragOverDeleteZone = ref(false)
 
-const DRAG_THRESHOLD = 5
-
-const longPressReadyTabId = ref<number | null>(null)
-let longPressTimerId: ReturnType<typeof setTimeout> | null = null
-
-function clearLongPressTimer() {
-  if (longPressTimerId !== null) { clearTimeout(longPressTimerId); longPressTimerId = null }
-  longPressReadyTabId.value = null
-}
-
 // Drag ghost
 let tabDragGhost: HTMLElement | null = null
+
+const longPressReadyTabId = ref<number | null>(null)
 
 function removeTabDragGhost() {
   tabDragGhost?.remove()
   tabDragGhost = null
 }
 
+// TabInteraction no longer tracks startX/Y/startTime — those are handled
+// internally by the composable.
 interface TabInteraction {
   tabId: number
-  startX: number
-  startY: number
-  startTime: number
   onDeleteButton: boolean
   isDragging: boolean
   sourceEl: HTMLElement
@@ -1980,6 +2007,51 @@ interface TabInteraction {
   grabOffsetY: number
 }
 const tabInteraction = ref<TabInteraction | null>(null)
+
+const {
+  onPointerDown: _tabLpDown,
+  onPointerMove: _tabLpMove,
+  onPointerUp:   _tabLpUp,
+  onPointerCancel: _tabLpCancel,
+} = useLongPressWithDrag({
+  // Action-on-release: timer sets the cursor-text visual cue; rename commits on release.
+  onTimerFired: () => {
+    const state = tabInteraction.value
+    if (state && !state.isDragging) longPressReadyTabId.value = state.tabId
+  },
+  onShortPress: () => {
+    const state = tabInteraction.value
+    tabInteraction.value = null
+    longPressReadyTabId.value = null
+    if (!state) return
+    if (state.onDeleteButton) { deleteTab(state.tabId); return }
+    selectTab(state.tabId)
+  },
+  onLongPressConfirmed: () => {
+    const state = tabInteraction.value
+    tabInteraction.value = null
+    longPressReadyTabId.value = null
+    if (!state) return
+    if (state.onDeleteButton) { deleteTab(state.tabId); return }
+    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
+    if (tab) startTabEdit(tab)
+  },
+  // onDragStart: sets isDragging, creates the ghost, and starts draggedTabId.
+  // Ghost position uses the PointerEvent so the ghost snaps to the finger.
+  onDragStart: (e) => {
+    longPressReadyTabId.value = null
+    const state = tabInteraction.value
+    if (!state) return
+    state.isDragging = true
+    draggedTabId.value = state.tabId
+    // Clone before Vue re-renders (opacity-40 not yet applied to source).
+    const ghost = state.sourceEl.cloneNode(true) as HTMLElement
+    const rect = state.sourceEl.getBoundingClientRect()
+    ghost.style.cssText += `position:fixed;width:${rect.width}px;left:${e.clientX - state.grabOffsetX}px;top:${e.clientY - state.grabOffsetY}px;pointer-events:none;z-index:9999;opacity:0.85;margin:0;`
+    document.body.appendChild(ghost)
+    tabDragGhost = ghost
+  },
+})
 
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
@@ -1991,82 +2063,56 @@ function onTabPointerDown(event: PointerEvent, tabId: number) {
   const rect = sourceEl.getBoundingClientRect()
   const onDeleteButton = !!(event.target as HTMLElement).closest('[data-delete-tab]')
   tabInteraction.value = {
-    tabId, startX: event.clientX, startY: event.clientY, startTime: Date.now(),
-    onDeleteButton, isDragging: false,
+    tabId, onDeleteButton, isDragging: false,
     sourceEl, grabOffsetX: event.clientX - rect.left, grabOffsetY: event.clientY - rect.top,
   }
-  if (!onDeleteButton) {
-    // Tab long-press uses a two-step mechanism deliberately:
-    //  1. The timer fires at LONG_PRESS_MS and sets longPressReadyTabId, which
-    //     only changes the cursor to cursor-text — a mid-hold visual cue that
-    //     "releasing now will rename this tab".
-    //  2. The actual rename action is committed in onTabPointerUp via an elapsed
-    //     check, so it triggers on release rather than mid-gesture.
-    // This action-on-release pattern gives the user a clear visual signal
-    // before committing, and lets them abort by dragging instead of releasing.
-    clearLongPressTimer()
-    longPressTimerId = setTimeout(() => {
-      longPressTimerId = null
-      if (tabInteraction.value && !tabInteraction.value.isDragging) longPressReadyTabId.value = tabId
-    }, LONG_PRESS_MS)
-  }
+  // Delete-button presses need no long-press timer; short-press fires on pointerup.
+  if (!onDeleteButton) _tabLpDown(event)
 }
 
 function onTabPointerMove(event: PointerEvent) {
   const state = tabInteraction.value
   if (!state) return
-  const dx = event.clientX - state.startX
-  const dy = event.clientY - state.startY
-  if (!state.isDragging && (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD)) {
-    state.isDragging = true
-    draggedTabId.value = state.tabId
-    clearLongPressTimer()
-    // Create ghost clone before Vue re-renders (opacity-40 not yet applied)
-    const ghost = state.sourceEl.cloneNode(true) as HTMLElement
-    const rect = state.sourceEl.getBoundingClientRect()
-    ghost.style.cssText += `position:fixed;width:${rect.width}px;left:${event.clientX - state.grabOffsetX}px;top:${event.clientY - state.grabOffsetY}px;pointer-events:none;z-index:9999;opacity:0.85;margin:0;`
-    document.body.appendChild(ghost)
-    tabDragGhost = ghost
+  // Composable checks drag threshold; onDragStart fires (sets isDragging, creates ghost)
+  // if exceeded. Delete-button presses skip this — no long-press was armed.
+  if (!state.onDeleteButton) _tabLpMove(event)
+  if (!state.isDragging) return
+  if (tabDragGhost) {
+    tabDragGhost.style.left = `${event.clientX - state.grabOffsetX}px`
+    tabDragGhost.style.top = `${event.clientY - state.grabOffsetY}px`
   }
-  if (state.isDragging) {
-    if (tabDragGhost) {
-      tabDragGhost.style.left = `${event.clientX - state.grabOffsetX}px`
-      tabDragGhost.style.top = `${event.clientY - state.grabOffsetY}px`
-    }
-    const under = document.elementsFromPoint(event.clientX, event.clientY)
-    // Prefer another tab as drop target (→ reorder); fall back to the
-    // delete zone (→ delete group) or a card (→ assign-to-group).
-    // Hovering over self is a no-op.
-    const tabEl = under.find(el => {
-      const raw = el.getAttribute('data-tab-id')
-      return raw !== null && Number(raw) !== state.tabId
-    })
-    if (tabEl) {
-      dragOverTabId.value = Number(tabEl.getAttribute('data-tab-id'))
+  const under = document.elementsFromPoint(event.clientX, event.clientY)
+  // Prefer another tab as drop target (→ reorder); fall back to the
+  // delete zone (→ delete group) or a card (→ assign-to-group).
+  // Hovering over self is a no-op.
+  const tabEl = under.find(el => {
+    const raw = el.getAttribute('data-tab-id')
+    return raw !== null && Number(raw) !== state.tabId
+  })
+  if (tabEl) {
+    dragOverTabId.value = Number(tabEl.getAttribute('data-tab-id'))
+    dragOverId.value = null
+    dragOverDeleteZone.value = false
+  } else {
+    dragOverTabId.value = null
+    const deleteZoneEl = under.find(el => el.hasAttribute('data-delete-tab-zone'))
+    if (deleteZoneEl) {
+      dragOverDeleteZone.value = true
       dragOverId.value = null
-      dragOverDeleteZone.value = false
     } else {
-      dragOverTabId.value = null
-      const deleteZoneEl = under.find(el => el.hasAttribute('data-delete-tab-zone'))
-      if (deleteZoneEl) {
-        dragOverDeleteZone.value = true
-        dragOverId.value = null
-      } else {
-        dragOverDeleteZone.value = false
-        const cardEl = under.find(el => el.hasAttribute('data-entry-id'))
-        dragOverId.value = cardEl ? Number(cardEl.getAttribute('data-entry-id')) : null
-      }
+      dragOverDeleteZone.value = false
+      const cardEl = under.find(el => el.hasAttribute('data-entry-id'))
+      dragOverId.value = cardEl ? Number(cardEl.getAttribute('data-entry-id')) : null
     }
   }
 }
 
-function onTabPointerUp(_event: PointerEvent) {
-  clearLongPressTimer()
+function onTabPointerUp(e: PointerEvent) {
   removeTabDragGhost()
   const state = tabInteraction.value
-  tabInteraction.value = null
-  if (!state) return
-  if (state.isDragging) {
+  if (state?.isDragging) {
+    // Drag completion: commit the drop then clean up drag state.
+    tabInteraction.value = null
     if (dragOverDeleteZone.value) {
       deleteTab(state.tabId)
     } else if (dragOverTabId.value !== null && dragOverTabId.value !== state.tabId) {
@@ -2074,8 +2120,8 @@ function onTabPointerUp(_event: PointerEvent) {
       // the entry reorder logic in onCardDrop.
       groupsStore.reorderTabs(state.tabId, dragOverTabId.value)
     } else if (dragOverId.value !== null) {
-      groupsStore.assignEntry(dragOverId.value, state.tabId).catch((e: unknown) => {
-        toast.error(extractErrorMessage(e, 'Failed to assign group'))
+      groupsStore.assignEntry(dragOverId.value, state.tabId).catch((err: unknown) => {
+        toast.error(extractErrorMessage(err, 'Failed to assign group'))
       })
     }
     draggedTabId.value = null
@@ -2084,22 +2130,20 @@ function onTabPointerUp(_event: PointerEvent) {
     dragOverDeleteZone.value = false
     return
   }
-  // Elapsed check is the second half of the two-step tab long-press (see
-  // onTabPointerDown). The timer already showed the visual preview; this
-  // commits the rename (or falls back to select) on release.
-  const elapsed = Date.now() - state.startTime
-  if (state.onDeleteButton) {
+  if (state?.onDeleteButton) {
+    // Delete-button presses always delete, regardless of hold duration.
+    tabInteraction.value = null
     deleteTab(state.tabId)
-  } else if (elapsed < LONG_PRESS_MS) {
-    selectTab(state.tabId)
-  } else {
-    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
-    if (tab) startTabEdit(tab)
+    return
   }
+  // Normal tap: composable fires onShortPress (select) or onLongPressConfirmed (rename)
+  // based on whether the timer had fired.  Those callbacks clear tabInteraction.
+  _tabLpUp(e)
 }
 
-function onTabPointerCancel() {
-  clearLongPressTimer()
+function onTabPointerCancel(e: PointerEvent) {
+  _tabLpCancel(e)
+  longPressReadyTabId.value = null
   removeTabDragGhost()
   tabInteraction.value = null
   draggedTabId.value = null
@@ -2122,35 +2166,20 @@ function onCardGridPointerDown(e: PointerEvent) {
   if (!cardEl) return
   const entryId = Number(cardEl.getAttribute('data-entry-id'))
   if (isNaN(entryId)) return
-  const entry = filteredEntries.value.find((en) => en.id === entryId)
-  if (!entry) return
-  const groupId = entry.group.id
   // Touch only: long-press on an unfocused card reorders the focused card here.
   if (e.pointerType !== 'touch') return
-  const focusedId = uiStore.getFocusedEntry(groupId)
-  if (!focusedId) return
+  const entry = filteredEntries.value.find((en) => en.id === entryId)
+  if (!entry) return
+  if (!uiStore.getFocusedEntry(entry.group.id)) return
   clearCardLongPress()
-  cardLongPressState.value = { entryId, pointerId: e.pointerId, startX: e.clientX, startY: e.clientY }
-  cardLongPressTimer = setTimeout(() => {
-    cardLongPressTimer = null
-    const state = cardLongPressState.value
-    if (!state || state.entryId !== entryId) return
-    const currentFocused = uiStore.getFocusedEntry(groupId)
-    if (!currentFocused || currentFocused === entryId) { clearCardLongPress(); return }
-    // Guard: focused entry must still be visible in the current filter.
-    if (!filteredEntries.value.some((en) => en.id === currentFocused)) { clearCardLongPress(); return }
-    performCardReorder(currentFocused, entryId)
-    _reorderFocusRestore = { entryId: currentFocused, groupId: groupId as number | null }
-    clearCardLongPress()
-  }, LONG_PRESS_MS)
+  cardLongPressState.value = { entryId, pointerId: e.pointerId }
+  _cardGridLpDown(e)
 }
 
 function onCardGridPointerMove(e: PointerEvent) {
-  const state = cardLongPressState.value
-  if (!state || state.pointerId !== e.pointerId) return
-  const dx = e.clientX - state.startX
-  const dy = e.clientY - state.startY
-  if (Math.abs(dx) > DRAG_THRESHOLD || Math.abs(dy) > DRAG_THRESHOLD) clearCardLongPress()
+  // Guard by pointerId so multi-touch doesn't cancel the tracked gesture.
+  if (!cardLongPressState.value || cardLongPressState.value.pointerId !== e.pointerId) return
+  _cardGridLpMove(e)
 }
 
 function onCardGridPointerUpOrCancel(e: PointerEvent) {
@@ -2160,8 +2189,19 @@ function onCardGridPointerUpOrCancel(e: PointerEvent) {
     uiStore.setFocusedEntry(_reorderFocusRestore.entryId, _reorderFocusRestore.groupId)
     _reorderFocusRestore = null
   }
-  const state = cardLongPressState.value
-  if (state && state.pointerId === e.pointerId) clearCardLongPress()
+  if (!cardLongPressState.value || cardLongPressState.value.pointerId !== e.pointerId) return
+  clearCardLongPress()
+  if (e.type === 'pointercancel') _cardGridLpCancel(e)
+  else _cardGridLpUp(e)
+}
+
+/** Suppress the Android native context menu on card-body long-presses.
+ *  Our touch reorder fires at 500 ms; without this the browser's context menu
+ *  would appear shortly after.  Text selection inside the details overlay is
+ *  left intact so the user can still copy definitions or examples. */
+function onCardGridContextMenu(e: MouseEvent) {
+  if ((e.target as Element | null)?.closest('[data-details-overlay]')) return
+  e.preventDefault()
 }
 
 function onDragStart(event: DragEvent, entryId: number) {
@@ -2282,16 +2322,25 @@ function _updateEntryContextPopupPosition() {
   }
 }
 
+/** Window-level scroll handler while the entry context popup is open.
+ *  Ignores scroll events from inside the popup itself — the popup has
+ *  overflow-y-auto and a maxHeight, so the user may scroll its result list;
+ *  that internal scroll must not close the popup. Page-level scrolls still do. */
+function _onWindowScrollWhileContextPopupOpen(e: Event) {
+  if (entryContextPopupEl.value?.contains(e.target as Node)) return
+  closeEntryContextPopup()
+}
+
 // Watch the open/closed boolean rather than the object reference so position
 // updates (which replace the object) don't re-register the same listeners.
 watch(() => !!entryContextPopup.value, (open) => {
   if (open) {
     document.addEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
-    window.addEventListener('scroll', closeEntryContextPopup, { passive: true, capture: true })
+    window.addEventListener('scroll', _onWindowScrollWhileContextPopupOpen, { passive: true, capture: true })
     window.addEventListener('resize', _updateEntryContextPopupPosition)
   } else {
     document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
-    window.removeEventListener('scroll', closeEntryContextPopup, { capture: true } as EventListenerOptions)
+    window.removeEventListener('scroll', _onWindowScrollWhileContextPopupOpen, { capture: true } as EventListenerOptions)
     window.removeEventListener('resize', _updateEntryContextPopupPosition)
   }
 })
@@ -2512,7 +2561,6 @@ onBeforeUnmount(() => {
   portraitMq?.removeEventListener('change', onPortraitChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
-  clearPopupLongPressTimer()
   _disconnectOverlayObs()
   cardsAreaEl.value?.removeEventListener('scroll', checkSpacerShrink)
   document.removeEventListener('click', onColorFilterOutsideClick, true)
@@ -2520,7 +2568,7 @@ onBeforeUnmount(() => {
   document.removeEventListener('click', onGroupsPopupOutsideClick, true)
   document.removeEventListener('click', onSidePanelOutsideClick, true)
   document.removeEventListener('pointerdown', onEntryContextPopupOutsidePointerDown, true)
-  window.removeEventListener('scroll', closeEntryContextPopup, { capture: true } as EventListenerOptions)
+  window.removeEventListener('scroll', _onWindowScrollWhileContextPopupOpen, { capture: true } as EventListenerOptions)
   window.removeEventListener('resize', _updateEntryContextPopupPosition)
   document.removeEventListener('keydown', onNavHistoryKeyDown)
   cancelSearch()
@@ -2577,7 +2625,6 @@ onDeactivated(() => {
   uiStore.closeActive()
   uiStore.activeMenuId = null
   clearCardLongPress()
-  clearLongPressTimer()
   tabInteraction.value = null
   _reorderFocusRestore = null
   cancelSearch()

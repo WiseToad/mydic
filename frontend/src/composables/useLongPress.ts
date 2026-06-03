@@ -62,6 +62,7 @@ export function useLongPress(
   let timer: ReturnType<typeof setTimeout> | null = null
   let clickGuard: ((e: MouseEvent) => void) | null = null
   let _triggerEl: HTMLElement | null = null
+  let _capturedPointerId: number | null = null
 
   function _clearTimer() {
     if (timer !== null) { clearTimeout(timer); timer = null }
@@ -95,10 +96,10 @@ export function useLongPress(
 
   function onPointerDown(e: PointerEvent) {
     if (e.button !== 0) return
-    // Explicit pointer capture ensures pointerleave doesn't fire if the touch
-    // drifts slightly outside the element during the hold (browsers may skip
-    // implicit capture when preventDefault() has been called on pointerdown).
     _triggerEl = e.currentTarget as HTMLElement | null
+    _capturedPointerId = e.pointerId
+    // Explicit pointer capture ensures pointerup/pointercancel are always
+    // received even when the touch drifts outside the element boundary.
     _triggerEl?.setPointerCapture(e.pointerId)
     _clearTimer()
     timer = setTimeout(() => {
@@ -109,6 +110,7 @@ export function useLongPress(
   }
 
   function onPointerUp() {
+    _capturedPointerId = null
     if (timer !== null) {
       _clearTimer()
       onShortPress?.()
@@ -116,6 +118,16 @@ export function useLongPress(
   }
 
   function onCancel() {
+    // The Pointer Events spec fires pointerleave based on the pointer's
+    // *position*, even when explicit capture is active — so pointerleave
+    // fires whenever the touch/cursor drifts outside the element's boundary.
+    // While capture is still held the pointer is logically still "ours", so
+    // we ignore the cancel signal and let the timer run to completion.
+    // pointercancel releases capture before the event is dispatched, so
+    // hasPointerCapture() returns false for that case and we do cancel.
+    if (_capturedPointerId !== null && _triggerEl?.hasPointerCapture(_capturedPointerId)) {
+      return
+    }
     _clearTimer()
   }
 

@@ -770,7 +770,15 @@ watch(showProviderPopup, async (open) => {
   }
 })
 
-function _closeActionsMenuOnScroll() { showActionsMenu.value = false }
+/** Window-level scroll handler while the actions menu is open.
+ *  Ignores scroll events from inside the actions container itself —
+ *  specifically the auto-scroll done by toggleMoveToSubmenu() when it
+ *  scrolls the Move-to submenu list to show the current group, which
+ *  would otherwise close the actions menu immediately. */
+function _closeActionsMenuOnScroll(e: Event) {
+  if (actionsContainerRef.value?.contains(e.target as Node)) return
+  showActionsMenu.value = false
+}
 
 watch(showActionsMenu, (open) => {
   if (open) {

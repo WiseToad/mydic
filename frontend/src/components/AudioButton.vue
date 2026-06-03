@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!settings.loaded || choices.length > 0" class="relative inline-flex" ref="rootRef" data-audio-button draggable="false">
+  <div v-if="!settings.loaded || choices.length > 0" class="relative inline-flex touch-none" ref="rootRef" data-audio-button draggable="false">
     <button
       :title="buttonTitle"
       :disabled="!text"
@@ -18,7 +18,6 @@
       @click.stop
       @pointerdown.stop.prevent="onPointerDown"
       @pointerup.stop="onPointerUp"
-      @pointerleave="cancelPress"
       @pointercancel="cancelPress"
       @contextmenu.prevent
     >
@@ -326,16 +325,27 @@ function _repositionPopupToButton() {
   positionPopup(rootRef.value.getBoundingClientRect())
 }
 
+/** Window-level scroll handler while the popup is open.
+ *  Uses capture=true to catch page scrolls that should dismiss the popup, but
+ *  ignores scroll events originating from inside the popup itself — specifically
+ *  the auto-scroll triggered by scrollToSelectedVoice() in nextTick, which fires
+ *  a scroll event on the popup's inner overflow div and would otherwise close the
+ *  popup immediately after opening it for any selected voice beyond the first few. */
+function _onWindowScrollWhilePopupOpen(e: Event) {
+  if (popupRef.value?.contains(e.target as Node)) return
+  closePopup()
+}
+
 watch(popupVisible, (open) => {
   if (open) {
     document.addEventListener('pointerdown', onOutsidePointerDown, true)
     document.addEventListener('dragstart', onDocumentDragStart, true)
-    window.addEventListener('scroll', closePopup, { passive: true, capture: true })
+    window.addEventListener('scroll', _onWindowScrollWhilePopupOpen, { passive: true, capture: true })
     window.addEventListener('resize', _repositionPopupToButton)
   } else {
     document.removeEventListener('pointerdown', onOutsidePointerDown, true)
     document.removeEventListener('dragstart', onDocumentDragStart, true)
-    window.removeEventListener('scroll', closePopup, { capture: true } as EventListenerOptions)
+    window.removeEventListener('scroll', _onWindowScrollWhilePopupOpen, { capture: true } as EventListenerOptions)
     window.removeEventListener('resize', _repositionPopupToButton)
   }
 })
@@ -371,7 +381,7 @@ onBeforeUnmount(() => {
   _cleanLongPressPointerUpGuard()
   document.removeEventListener('pointerdown', onOutsidePointerDown, true)
   document.removeEventListener('dragstart', onDocumentDragStart, true)
-  window.removeEventListener('scroll', closePopup, { capture: true } as EventListenerOptions)
+  window.removeEventListener('scroll', _onWindowScrollWhilePopupOpen, { capture: true } as EventListenerOptions)
   window.removeEventListener('resize', _repositionPopupToButton)
   if (isPlaying.value || _inFlight) stopTts()
   if (isSlowOwner(buttonId)) clearSlow()

@@ -6,15 +6,12 @@
         <button
           type="button"
           class="shrink-0 mt-1 inline-flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-surface-800 transition-colors"
-          :title="canGoBack ? 'Back' : 'Close'"
-          :aria-label="canGoBack ? 'Back' : 'Close'"
+          title="Back"
+          aria-label="Back"
           @click="goBack"
         >
-          <svg v-if="canGoBack" xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
             <path d="M15.41 7.41 14 6l-6 6 6 6 1.41-1.41L10.83 12z"/>
-          </svg>
-          <svg v-else xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
           </svg>
         </button>
         <div>
