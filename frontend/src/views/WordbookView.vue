@@ -170,7 +170,7 @@
           </div>
           <!-- No-results state -->
           <div
-            v-else-if="searchDone && !searchLoading && searchQuery.length >= 2"
+            v-else-if="searchDone && searchQuery.length >= 2"
             class="absolute top-full left-0 right-0 mt-1 z-40 bg-surface-900 border border-surface-700 rounded-xl shadow-xl px-3 py-2 text-xs text-gray-500"
           >
             No results
@@ -1830,9 +1830,10 @@ watch(() => uiStore.swapDisplay, (newVal) => {
   }
 })
 // Re-search when any search toggler changes while search is active.
+// Do NOT clear searchResults here — keep old results visible until the new
+// API response lands so the dropdown doesn't flicker through an empty state.
 watch([searchUseLangFilter, searchUseColorFilter, searchIn], () => {
   if (searchActive.value && searchQuery.value.trim().length >= 2) {
-    searchResults.value = []
     runSearch()
   }
 })
