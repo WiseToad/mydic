@@ -888,7 +888,7 @@ function ensureDetailsVisible() {
   // Use the scroll container's bounds (not the window) — the container
   // ends above innerHeight and starts below the app header.
   if (overlayRect.bottom <= scrollParentRect.bottom) return  // already fully visible
-  const overflow = overlayRect.bottom - scrollParentRect.bottom
+  const overflow = Math.ceil(overlayRect.bottom - scrollParentRect.bottom)
   const headroom = Math.max(0, wrapperRect.top - scrollParentRect.top - WORDBOOK_DETAILS_TOP_MARGIN_PX)
   const delta = Math.min(overflow, headroom)
   if (delta <= 0) return
@@ -924,6 +924,28 @@ async function startDetailsAutoScroll() {
     detailsResizeObserver.observe(overlay)
     detailsResizeTimer = setTimeout(stopDetailsResizeObserver, DETAILS_RESIZE_OBSERVE_MS)
   }
+}
+
+/** Scrolls the card into view when entering edit mode. */
+function ensureEditVisible() {
+  if (!editing.value) return
+  const wrapper = entryRootRef.value
+  if (!wrapper) return
+  const wrapperRect = wrapper.getBoundingClientRect()
+  const scrollParent = _findScrollParent(wrapper) as HTMLElement
+  const scrollParentRect = scrollParent.getBoundingClientRect()
+  if (wrapperRect.bottom <= scrollParentRect.bottom) return  // already fully visible
+  const overflow = Math.ceil(wrapperRect.bottom - scrollParentRect.bottom)
+  const headroom = Math.max(0, wrapperRect.top - scrollParentRect.top - WORDBOOK_DETAILS_TOP_MARGIN_PX)
+  const delta = Math.min(overflow, headroom)
+  if (delta <= 0) return
+  scrollParent.scrollBy({ top: delta, behavior: 'smooth' })
+}
+
+async function startEditAutoScroll() {
+  await nextTick()
+  await new Promise<void>((r) => requestAnimationFrame(() => r()))
+  ensureEditVisible()
 }
 
 // ── Details panel close logic ────────────────────────────────────────────────
@@ -1022,8 +1044,12 @@ function _onEditKeyDown(e: KeyboardEvent) {
 }
 
 watch(editing, (isEditing) => {
-  if (isEditing) document.addEventListener('keydown', _onEditKeyDown)
-  else document.removeEventListener('keydown', _onEditKeyDown)
+  if (isEditing) {
+    document.addEventListener('keydown', _onEditKeyDown)
+    startEditAutoScroll()
+  } else {
+    document.removeEventListener('keydown', _onEditKeyDown)
+  }
 })
 
 async function retranslateEdit() {
