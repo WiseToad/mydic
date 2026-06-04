@@ -54,6 +54,20 @@ export const ENTRY_COLOR_SWATCH_BG: Record<EntryColor, string> = {
   purple: 'bg-purple-500/60',
 }
 
+/**
+ * Input/textarea background for card edit mode.
+ * Solid opaques computed as surface-950 (#09090f) blended with 10% of each
+ * color-500, so inputs are visibly darker than the card's transparent overlay
+ * (surface-950 + 15% color) while carrying a matching subtle color tint.
+ */
+export const ENTRY_COLOR_INPUT_BG: Record<EntryColor, string> = {
+  red:    '!bg-[#200f14]',
+  yellow: '!bg-[#201a0e]',
+  green:  '!bg-[#0c1c17]',
+  blue:   '!bg-[#0e1526]',
+  purple: '!bg-[#191126]',
+}
+
 /** Human-readable labels for the filter popup. */
 export const ENTRY_COLOR_LABEL: Record<EntryColor, string> = {
   red: 'Red',
