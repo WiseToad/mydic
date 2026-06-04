@@ -1091,7 +1091,10 @@ function restoreDetailsIfEntryExists(entryId: number | undefined): void {
 // onDeactivated runs.
 onBeforeRouteLeave(() => {
   if (cardsAreaEl.value) {
-    groupScrollPositions.set(uiStore.activeGroupId ?? null, cardsAreaEl.value.scrollTop)
+    const groupId = uiStore.activeGroupId ?? null
+    const scrollTop = cardsAreaEl.value.scrollTop
+    groupScrollPositions.set(groupId, scrollTop)
+    uiStore.saveScrollForGroup(groupId, scrollTop)
   }
   closeEntryContextPopup()
 })
@@ -1101,7 +1104,9 @@ watch(
   async (newGroupId, oldGroupId) => {
     if (!viewIsActive.value) return
     if (cardsAreaEl.value) {
-      groupScrollPositions.set(oldGroupId ?? null, cardsAreaEl.value.scrollTop)
+      const oldScrollTop = cardsAreaEl.value.scrollTop
+      groupScrollPositions.set(oldGroupId ?? null, oldScrollTop)
+      uiStore.saveScrollForGroup(oldGroupId ?? null, oldScrollTop)
     }
     uiStore.saveOpenDetailsForGroup(oldGroupId ?? null)
     uiStore.closeActive()
@@ -2704,6 +2709,20 @@ watch(
 // has actually been activated and is ready to scroll.
 const viewIsActive = ref(false)
 
+/**
+ * Persist the current scroll position when the page becomes hidden (tab
+ * switch, app background, or browser close). Guards on viewIsActive so we
+ * only act when WordbookView is the active kept-alive route.
+ */
+function onVisibilityChange() {
+  if (!viewIsActive.value || !document.hidden) return
+  const groupId = uiStore.activeGroupId ?? null
+  if (cardsAreaEl.value) {
+    uiStore.saveScrollForGroup(groupId, cardsAreaEl.value.scrollTop)
+  }
+  uiStore.saveOpenDetailsForGroup(groupId)
+}
+
 onMounted(() => {
   // Portrait detection
   if (window.matchMedia) {
@@ -2723,6 +2742,7 @@ onMounted(() => {
   nextTick(() => checkHeaderLayout())
   cardsAreaEl.value?.addEventListener('scroll', checkSpacerShrink, { passive: true })
   document.addEventListener('keydown', onNavHistoryKeyDown)
+  document.addEventListener('visibilitychange', onVisibilityChange)
 })
 
 onBeforeUnmount(() => {
@@ -2739,6 +2759,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('scroll', _onWindowScrollWhileContextPopupOpen, { capture: true } as EventListenerOptions)
   window.removeEventListener('resize', _updateEntryContextPopupPosition)
   document.removeEventListener('keydown', onNavHistoryKeyDown)
+  document.removeEventListener('visibilitychange', onVisibilityChange)
   cancelSearch()
   closeEntryContextPopup()
 })
@@ -2751,18 +2772,23 @@ onActivated(async () => {
   // switches a group tab before the fetches below complete, the stale check
   // below ensures we don't prune the wrong group's in-memory map.
   const activatedGroupId = uiStore.activeGroupId
-  // Restore scroll immediately so the view appears at the saved position
-  // from the first visible frame, rather than jumping from 0 after the
-  // async fetch below completes. KeepAlive guarantees the DOM (and therefore
-  // cardsAreaEl) is already mounted when onActivated fires.
-  if (cardsAreaEl.value) {
-    const saved = groupScrollPositions.get(activatedGroupId ?? null)
-    if (saved !== undefined) cardsAreaEl.value.scrollTop = saved
+  // On within-session activation stableEntries already holds the previous
+  // group's content — restore immediately so the first visible frame is
+  // already at the right scroll position and details state.
+  // On cold start (page reload) stableEntries is empty; the grid has no
+  // content yet so deferring to after fetchEntries is required.
+  const hasStaleEntries = stableEntries.value.length > 0
+  if (hasStaleEntries) {
+    if (cardsAreaEl.value) {
+      const saved = groupScrollPositions.get(activatedGroupId ?? null)
+        ?? uiStore.getScrollForGroup(activatedGroupId ?? null)
+      if (saved > 0) cardsAreaEl.value.scrollTop = saved
+    }
+    // Restore the open card immediately using stale entries — eliminates the
+    // visible close/reopen flicker. prune() will clear activeCardId if the
+    // entry was deleted while away.
+    restoreDetailsIfEntryExists(uiStore.getOpenDetailsForGroup(activatedGroupId ?? null))
   }
-  // Restore the open card immediately using stale entries — eliminates the
-  // visible close/reopen flicker. prune() will clear activeCardId if the
-  // entry was deleted while away.
-  restoreDetailsIfEntryExists(uiStore.getOpenDetailsForGroup(activatedGroupId ?? null))
   // Run all three fetches in parallel — they are independent. Old entries
   // remain visible while the refresh is in flight (stale-while-revalidate),
   // so no loading skeleton is shown on activation.
@@ -2776,6 +2802,18 @@ onActivated(async () => {
     // doesn't run against the wrong group's in-memory map.
     if (uiStore.activeGroupId === activatedGroupId) {
       uiStore.prune(store.entries.map((e) => e.id))
+      // Cold start: restore scroll and open details now that entries are in
+      // the DOM. nextTick is a microtask so the browser renders the restored
+      // position on the very first frame it paints with the loaded entries.
+      if (!hasStaleEntries) {
+        restoreDetailsIfEntryExists(uiStore.getOpenDetailsForGroup(activatedGroupId ?? null))
+        await nextTick()
+        if (cardsAreaEl.value) {
+          const saved = groupScrollPositions.get(activatedGroupId ?? null)
+            ?? uiStore.getScrollForGroup(activatedGroupId ?? null)
+          if (saved > 0) cardsAreaEl.value.scrollTop = saved
+        }
+      }
     }
   }
   await Promise.all([langPairsTask, groupsTask])

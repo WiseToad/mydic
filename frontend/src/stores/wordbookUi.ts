@@ -46,6 +46,9 @@ interface StorageNode {
   showTranslations?: boolean
   sidePanelVisible?: boolean
   swapDisplay?: boolean
+  scrollByGroup?: Record<string, number>        // scroll offset per group; 'null' key = all-groups view
+  focusedEntryByGroup?: Record<string, number>  // focused entry id per group; 'null' key = all-groups view
+  openDetailsEntryByGroup?: Record<string, number>  // open-details card id per group; 'null' key = all-groups view
 }
 
 /** Namespaced localStorage key for the current user's wordbook UI state. */
@@ -91,10 +94,12 @@ function deleteStoredGroupEntries(groupId: number): void {
   try {
     const key = _storageKey()
     const node = _readNode()
-    if (node.entriesByGroup) {
-      delete node.entriesByGroup[String(groupId)]
-      localStorage.setItem(key, JSON.stringify(node))
-    }
+    const k = String(groupId)
+    if (node.entriesByGroup) delete node.entriesByGroup[k]
+    if (node.scrollByGroup) delete node.scrollByGroup[k]
+    if (node.focusedEntryByGroup) delete node.focusedEntryByGroup[k]
+    if (node.openDetailsEntryByGroup) delete node.openDetailsEntryByGroup[k]
+    localStorage.setItem(key, JSON.stringify(node))
   } catch {}
 }
 
@@ -130,8 +135,42 @@ function savePrefs(p: GlobalPrefs) {
   try {
     const key = _storageKey()
     const node = _readNode()
-    localStorage.setItem(key, JSON.stringify({ entriesByGroup: node.entriesByGroup, ...p }))
+    localStorage.setItem(key, JSON.stringify({
+      entriesByGroup: node.entriesByGroup,
+      scrollByGroup: node.scrollByGroup,
+      focusedEntryByGroup: node.focusedEntryByGroup,
+      openDetailsEntryByGroup: node.openDetailsEntryByGroup,
+      ...p,
+    }))
   } catch {}
+}
+
+/** Load the persisted focused-entry-per-group map for `userId` (or the current user). */
+function _loadFocusedByGroup(userId?: number): Map<number | null, number> {
+  try {
+    const obj = _readNode(userId).focusedEntryByGroup ?? {}
+    const result = new Map<number | null, number>()
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number') result.set(k === 'null' ? null : Number(k), v)
+    }
+    return result
+  } catch {
+    return new Map()
+  }
+}
+
+/** Load the persisted open-details-per-group map for `userId` (or the current user). */
+function _loadOpenDetailsByGroup(userId?: number): Map<number | null, number> {
+  try {
+    const obj = _readNode(userId).openDetailsEntryByGroup ?? {}
+    const result = new Map<number | null, number>()
+    for (const [k, v] of Object.entries(obj)) {
+      if (typeof v === 'number') result.set(k === 'null' ? null : Number(k), v)
+    }
+    return result
+  } catch {
+    return new Map()
+  }
 }
 
 export const useWordbookUiStore = defineStore('wordbookUi', () => {
@@ -241,19 +280,49 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
    */
   const pendingHighlightId = ref<number | null>(null)
 
-  // ── Per-group focused entry and open-details (in-memory only) ─────────────────
+  // ── Per-group focused entry and open-details ───────────────────────────────────
   /**
    * Tracks the focused entry id per group. Key = group id (null = ungrouped).
-   * At most one focused entry per group. Not persisted.
+   * At most one focused entry per group. Seeded from localStorage on store init;
+   * persisted on every change via _persistFocusedByGroup().
    */
-  const focusedByGroup = reactive(new Map<number | null, number>())
+  const focusedByGroup = reactive(_loadFocusedByGroup())
+
+  /** Persist the current focusedByGroup map to localStorage. */
+  function _persistFocusedByGroup(): void {
+    try {
+      const key = _storageKey()
+      const node = _readNode()
+      const obj: Record<string, number> = {}
+      for (const [gid, eid] of focusedByGroup) {
+        obj[gid === null ? 'null' : String(gid)] = eid
+      }
+      node.focusedEntryByGroup = obj
+      localStorage.setItem(key, JSON.stringify(node))
+    } catch {}
+  }
 
   /**
    * Tracks which card's details panel was open per group. Populated by
    * saveOpenDetailsForGroup on navigation / tab-switch; read by
-   * getOpenDetailsForGroup on return. Not persisted.
+   * getOpenDetailsForGroup on return. Seeded from localStorage on store init;
+   * persisted on every change via _persistOpenDetailsByGroup().
    */
-  const openDetailsByGroup = reactive(new Map<number | null, number>())
+  const openDetailsByGroup = reactive(_loadOpenDetailsByGroup())
+
+  /** Persist the current openDetailsByGroup map to localStorage. */
+  function _persistOpenDetailsByGroup(): void {
+    try {
+      const key = _storageKey()
+      const node = _readNode()
+      const obj: Record<string, number> = {}
+      for (const [gid, eid] of openDetailsByGroup) {
+        obj[gid === null ? 'null' : String(gid)] = eid
+      }
+      node.openDetailsEntryByGroup = obj
+      localStorage.setItem(key, JSON.stringify(node))
+    } catch {}
+  }
 
   function getState(id: number): EntryUiState {
     return map.value[id] ?? {}
@@ -338,6 +407,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   /** Mark `entryId` as the focused entry for the given group. */
   function setFocusedEntry(entryId: number, groupId: number | null): void {
     focusedByGroup.set(groupId, entryId)
+    _persistFocusedByGroup()
   }
 
   /**
@@ -357,6 +427,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     for (const [gid, eid] of focusedByGroup) {
       if (eid === entryId) {
         focusedByGroup.delete(gid)
+        _persistFocusedByGroup()
         break
       }
     }
@@ -374,6 +445,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     } else {
       openDetailsByGroup.delete(groupId)
     }
+    _persistOpenDetailsByGroup()
   }
 
   /** Return the saved open-card id for `groupId`, or undefined if none. */
@@ -444,7 +516,13 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
       }
     }
     try {
-      localStorage.setItem(_storageKey(), JSON.stringify({ entriesByGroup: groups, ...prefs.value }))
+      localStorage.setItem(_storageKey(), JSON.stringify({
+        entriesByGroup: groups,
+        scrollByGroup: node.scrollByGroup,
+        focusedEntryByGroup: node.focusedEntryByGroup,
+        openDetailsEntryByGroup: node.openDetailsEntryByGroup,
+        ...prefs.value,
+      }))
     } catch {}
     _bumpHintSeq()
     return true
@@ -573,6 +651,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     const focusedInCurrentGroup = focusedByGroup.get(currentGid)
     if (focusedInCurrentGroup !== undefined && !set.has(focusedInCurrentGroup)) {
       focusedByGroup.delete(currentGid)
+      _persistFocusedByGroup()
     }
   }
 
@@ -607,6 +686,32 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     }
   }
 
+  /** Persist `scrollTop` for `groupId` to localStorage. */
+  function saveScrollForGroup(groupId: number | null, scrollTop: number): void {
+    try {
+      const key = _storageKey()
+      const node = _readNode()
+      if (!node.scrollByGroup) node.scrollByGroup = {}
+      const k = groupId === null ? 'null' : String(groupId)
+      if (scrollTop > 0) {
+        node.scrollByGroup[k] = Math.round(scrollTop)
+      } else {
+        delete node.scrollByGroup[k]
+      }
+      localStorage.setItem(key, JSON.stringify(node))
+    } catch {}
+  }
+
+  /** Return the persisted scroll offset for `groupId`, or 0 if not stored. */
+  function getScrollForGroup(groupId: number | null): number {
+    try {
+      const k = groupId === null ? 'null' : String(groupId)
+      return _readNode().scrollByGroup?.[k] ?? 0
+    } catch {
+      return 0
+    }
+  }
+
   function reinitialize(userId: number): void {
     _currentGroupId.value = null
     map.value = {}
@@ -619,7 +724,9 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightSeq.value = 0
     pendingHighlightId.value = null
     focusedByGroup.clear()
+    for (const [gid, eid] of _loadFocusedByGroup(userId)) focusedByGroup.set(gid, eid)
     openDetailsByGroup.clear()
+    for (const [gid, eid] of _loadOpenDetailsByGroup(userId)) openDetailsByGroup.set(gid, eid)
     _bumpHintSeq()
   }
 
@@ -636,6 +743,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
     setFocusedEntry, getFocusedEntry, clearFocusedEntryById,
     saveOpenDetailsForGroup, getOpenDetailsForGroup,
+    saveScrollForGroup, getScrollForGroup,
     initActiveGroup,
     switchGroup, deleteGroupEntries, reinitialize,
   }
