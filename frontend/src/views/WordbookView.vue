@@ -2460,6 +2460,29 @@ function closeEntryContextPopup() {
 function onEntryContextPopupOutsidePointerDown(e: PointerEvent) {
   const target = e.target as Node | null
   if (!target || entryContextPopupEl.value?.contains(target)) return
+  // Locate the anchor card's wrapper so we can scope per-element exemptions.
+  const entryId = entryContextPopup.value?.entry.id
+  const cardWrapper = entryId != null
+    ? document.querySelector(`[data-entry-id="${entryId}"]:not([data-details-overlay])`)
+    : null
+  // Audio popup (voice selector) anywhere in the document → keep popup open.
+  if ((target as Element).closest?.('[data-audio-popup]')) return
+  if (cardWrapper?.contains(target as Node)) {
+    // Audio button on same card → keep popup open.
+    if ((target as Element).closest?.('[data-audio-button]')) return
+    // Source text (hint-toggle) on same card → keep popup open.
+    if ((target as Element).closest?.('[data-hint-toggle]')) return
+    // Details button on same card → close popup but prevent details from opening.
+    // stopPropagation in capture phase keeps the pointerdown from reaching the
+    // button's useLongPress handler, so its timer is never set and pointerup
+    // becomes a no-op (timer === null → onShortPress not called).
+    if ((target as Element).closest?.('[data-details-toggle]')) {
+      closeEntryContextPopup()
+      e.stopPropagation()
+      return
+    }
+    // Actions menu container on same card → close popup and let the menu open.
+  }
   closeEntryContextPopup()
 }
 

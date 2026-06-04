@@ -18,12 +18,13 @@ Some non-obvious UI features:
 - You may tap the word in a wordbook card to show/hide translation hint
 - On PC, you may drag cards in the Wordbook to reorder them
 - On Android, you may long-press non-focused card to move focused one in place of it
-- Long-pressing details button in wordbook card behaves the same way as the "Find Similar" action
+- Long-pressing details button in wordbook card activates the "Find Similar" action
 - Long-pressing a group tip in the Wordbook allows you to change it's name
 - The same applies for item in the "more ..." button popup menu, when groups are collapsed
 - You may drag group tips in the Wordbook to reorder them
 - Dragging a group tip onto some word moves this word into that group
 - Long-pressing, or Ctrl-pressing an item in multi-select filters prevents their immediate dismissal
+- Long-pressing the "Hide all translations" button hides them globally, not only in active group
 - Entries in search results and find-similar popups are dimmed, if they're affected by filters
 - Pressing Ctrl-Z and Ctrl-Y/Ctrl-Shift-Z in Wordbook navigates the search transitions history
 - Long-pressing the search button moves back the search transitions history

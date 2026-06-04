@@ -932,6 +932,7 @@ async function startDetailsAutoScroll() {
 //
 // Never close when pointerup lands on:
 //  • overlay, [data-details-toggle], [data-audio-button], [data-hint-toggle] on this card
+//  • the actions menu container (trigger + popup) on this card
 //  • [data-audio-popup] anywhere in the document
 //  • a group tab or top-nav route that will preserve/restore details state
 //  • dragstart from within this entry's root
@@ -944,6 +945,7 @@ function onDetailsOutsidePointerUp(e: PointerEvent) {
   if (target.closest('[data-audio-popup]')) return
   if (entryRootRef.value?.contains(target) && target.closest('[data-audio-button]')) return
   if (entryRootRef.value?.contains(target) && target.closest('[data-hint-toggle]')) return
+  if (actionsContainerRef.value?.contains(target)) return
   if (target.closest('[data-tab-id]')) return
   if (target.closest('[data-floating-translate-button]')) return
   if (target.closest('a[href]')) return
