@@ -116,18 +116,21 @@
             <!-- Already saved: click to jump to the wordbook card -->
             <button
               v-else-if="store.result && isAlreadyInWordbook && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'idle'"
-              title="Already in Wordbook — show it"
-              class="inline-flex items-center justify-center w-8 h-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-full transition-colors"
+              title="Show in Wordbook"
+              class="inline-flex items-center h-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-full transition-colors"
+              :class="wordbookGroupName ? 'gap-1.5 px-2' : 'w-8 justify-center'"
               @click="openInWordbook"
             >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              <span v-if="wordbookGroupName" class="text-xs text-gray-500 truncate max-w-[6rem]">{{ wordbookGroupName }}</span>
             </button>
             <!-- Not yet saved: add button (long-press to pick a group) -->
             <button
               v-else-if="store.result && hasEnabledAvailableTranslationProvider && !isSwapDisabled && wordbookLookupState === 'idle'"
               ref="addToWordbookBtnRef"
               title="Add to Wordbook · Hold to pick group"
-              class="inline-flex items-center justify-center w-8 h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors touch-none"
+              class="inline-flex items-center h-8 text-primary-400 hover:text-primary-300 hover:bg-primary-500/10 rounded-full transition-colors touch-none"
+              :class="wordbookGroupName ? 'gap-1.5 px-2' : 'w-8 justify-center'"
               @pointerdown.stop.prevent="onAddWordbookPointerDown"
               @pointerup.stop="onAddWordbookPointerUp"
               @pointerleave="onAddWordbookCancelPress"
@@ -135,7 +138,8 @@
               @click.stop
               @contextmenu.prevent
             >
-              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H7v-2h4V7h2v4h4v2z"/></svg>
+              <span v-if="wordbookGroupName" class="text-xs text-gray-500 truncate max-w-[6rem]">{{ wordbookGroupName }}</span>
             </button>
             <button
               v-if="store.inputText"
@@ -510,6 +514,10 @@ onMounted(async () => {
   if (store.historyIndex < 0 && langStore.enabledLangs.length > 0) {
     store.targetLang = langStore.enabledLangs[0].code
   }
+  // Fetch groups in the background so the group name label can resolve.
+  if (wordbookGroupsStore.tabs.length === 0) {
+    wordbookGroupsStore.fetchGroups().catch(() => {})
+  }
 })
 
 // Source lang resolved to a concrete code (auto-detect → detected lang, or first enabled lang as fallback).
@@ -640,6 +648,19 @@ watch(
 )
 
 const isAlreadyInWordbook = computed(() => wordbookLookup.value !== null)
+
+/** Group name to display next to the wordbook button.
+ * - Word in wordbook: the group it belongs to.
+ * - Word not in wordbook: the current active group (where it will be added).
+ * Returns null when group info is unavailable. */
+const wordbookGroupName = computed<string | null>(() => {
+  if (isAlreadyInWordbook.value && wordbookLookup.value !== null) {
+    return wordbookGroupsStore.tabs.find(g => g.id === wordbookLookup.value!.group_id)?.name ?? null
+  }
+  const activeId = wordbookUiStore.activeGroupId
+  if (activeId === null) return null
+  return wordbookGroupsStore.tabs.find(g => g.id === activeId)?.name ?? null
+})
 
 const ctxExamplesRef = ref<InstanceType<typeof ContextExamples> | null>(null)
 const inputTextareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -1223,7 +1244,13 @@ async function addToWordbook(groupId?: number) {
       wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'lex', cur.lexProviderCode)
     // Reflect the new entry in the lookup cache so the button switches to the ✓ state.
     wordbookLookup.value = { entry_id: entry.id, group_id: entry.group.id, color: entry.color ?? null }
-    toast.success(`Added to group: ${entry.group.name}`)
+    toast.undo(`Added to group: ${entry.group.name}`, async () => {
+      try {
+        await wordbookStore.deleteEntry(entry.id)
+      } catch (e: unknown) {
+        toast.error(extractErrorMessage(e, 'Failed to undo'))
+      }
+    })
   } catch (e: unknown) {
     toast.error(extractErrorMessage(e, 'Failed to save to wordbook'))
   }
@@ -1258,8 +1285,8 @@ function _openGroupMenu() {
   const btn = addToWordbookBtnRef.value
   if (!btn) return
   const rect = btn.getBoundingClientRect()
-  // First-pass: right-align below the button
-  groupMenuLeft.value = Math.max(8, rect.right - 160)
+  // First-pass: left-align below the button
+  groupMenuLeft.value = rect.left
   groupMenuTop.value = rect.bottom + 4
   groupMenuVisible.value = true
   // Click swallowing is handled by useLongPress (groupMenuPopupRef guard).
@@ -1287,12 +1314,11 @@ function _repositionGroupMenu(buttonRect: DOMRect) {
   } else {
     groupMenuTop.value = buttonRect.bottom + margin
   }
-  // Horizontal: right-align to the button; flip left-align when near the left edge
-  if (buttonRect.right - popupRect.width < margin) {
-    groupMenuLeft.value = Math.max(margin, buttonRect.left)
-  } else {
-    groupMenuLeft.value = buttonRect.right - popupRect.width
-  }
+  // Horizontal: left-align to the button; clamp so it doesn't overflow the right edge
+  groupMenuLeft.value = Math.min(
+    Math.max(margin, buttonRect.left),
+    window.innerWidth - popupRect.width - margin,
+  )
 }
 
 function closeGroupMenu() {
