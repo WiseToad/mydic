@@ -281,20 +281,34 @@
             </div>
           </div>
 
-          <!-- Translation toggle (icon) -->
+          <!-- Translation toggle (icon): 3 states -->
+          <!-- active:  open eye, blue  — current group has hints visible -->
+          <!-- ghost:   open eye, gray  — no hints in current group, but other groups have some -->
+          <!-- striked: crossed eye     — no hints anywhere -->
+          <!-- long-press in any state resets all hintVisible flags across all groups -->
           <button
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="store.entries.length === 0
+            :class="store.entries.length === 0 && !uiStore.anyHintInOtherGroups
               ? 'text-gray-700 cursor-not-allowed'
-              : anyHintVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
-            :disabled="store.entries.length === 0"
-            @click="toggleAllHints"
-            :title="store.entries.length === 0 ? 'No entries' : anyHintVisible ? 'Hide all translations' : 'Show all translations'"
+              : translateBtnState === 'active' ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
+            :disabled="store.entries.length === 0 && !uiStore.anyHintInOtherGroups"
+            @pointerdown="onTranslateBtnPointerDown"
+            @pointerup="onTranslateBtnPointerUp"
+            @pointerleave="onTranslateBtnCancel"
+            @pointercancel="onTranslateBtnCancel"
+            @click.stop
+            :title="store.entries.length === 0 && !uiStore.anyHintInOtherGroups
+              ? 'No entries'
+              : translateBtnState === 'active'
+                ? 'Hide all translations · Hold to hide globally'
+                : 'Show all translations'"
           >
-            <svg v-if="anyHintVisible" viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <!-- active or ghost: plain open eye -->
+            <svg v-if="translateBtnState !== 'striked'" viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z"/>
               <circle cx="8" cy="8" r="2"/>
             </svg>
+            <!-- striked: eye with diagonal cross-out -->
             <svg v-else viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 2l12 12M6.5 6.6a2 2 0 0 0 2.9 2.9M3.3 5.2C2.2 6.3 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1 0 1.9-.3 2.7-.7M13.1 10.4c.9-1 1.4-2.4 1.4-2.4s-2.5-4.5-6.5-4.5c-.5 0-1 .1-1.4.2"/>
             </svg>
@@ -1029,6 +1043,24 @@ const anyHintVisible = computed(() =>
 function toggleAllHints() {
   uiStore.setAllHints(!anyHintVisible.value)
 }
+
+const translateBtnState = computed((): 'active' | 'ghost' | 'striked' => {
+  if (anyHintVisible.value) return 'active'
+  if (uiStore.anyHintInOtherGroups) return 'ghost'
+  return 'striked'
+})
+
+const {
+  onPointerDown: onTranslateBtnPointerDown,
+  onPointerUp: onTranslateBtnPointerUp,
+  onCancel: onTranslateBtnCancel,
+} = useLongPress(
+  () => { if (uiStore.clearAllHintsGlobal()) toast.success('All translation hidden globally') },
+  {
+    onShortPress: toggleAllHints,
+    suppressClickAfterLongPress: true,
+  },
+)
 
 // ─── Scroll position memory per group ───────────────────────────────────────
 
@@ -2235,7 +2267,15 @@ function onTabPointerUp(e: PointerEvent) {
     } else if (dragOverTabId.value !== null && dragOverTabId.value !== state.tabId) {
       // Reorder tabs: insert dragged tab at the target's position. Mirrors
       // the entry reorder logic in onCardDrop.
+      const prevTabIds = groupsStore.tabs.map((t) => t.id)
+      const prevIdx = prevTabIds.indexOf(state.tabId)
+      const undoTargetId = prevIdx + 1 < prevTabIds.length
+        ? prevTabIds[prevIdx + 1]
+        : prevTabIds[prevIdx - 1]
       groupsStore.reorderTabs(state.tabId, dragOverTabId.value)
+      toast.undo('Groups reordered', () => {
+        groupsStore.restoreTabsOrder(prevTabIds, state.tabId, undoTargetId)
+      })
     } else if (dragOverId.value !== null) {
       groupsStore.assignEntry(dragOverId.value, state.tabId).catch((err: unknown) => {
         toast.error(extractErrorMessage(err, 'Failed to assign group'))

@@ -87,6 +87,26 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     wordbookApi.reorderGroups({ source_id: sourceId, target_id: targetId }).catch(() => {})
   }
 
+  /**
+   * Restore tabs to the given full ordered ID list. Used by the undo callback
+   * after a reorderTabs call. Mirrors the reorderEntries pattern.
+   */
+  function restoreTabsOrder(orderedIds: number[], sourceId: number, targetId: number): void {
+    const map = new Map(tabs.value.map((t) => [t.id, t]))
+    const reordered: WordGroup[] = []
+    for (const id of orderedIds) {
+      const t = map.get(id)
+      if (t) reordered.push(t)
+    }
+    const seen = new Set(orderedIds)
+    for (const t of tabs.value) {
+      if (!seen.has(t.id)) reordered.push(t)
+    }
+    reordered.forEach((t, i) => { t.position = (i + 1) * 1000 })
+    tabs.value = reordered
+    wordbookApi.reorderGroups({ source_id: sourceId, target_id: targetId }).catch(() => {})
+  }
+
   /** Groups that matched the last lang-pair filter (in_filter=true). When no
    * filter was supplied all groups qualify. Use this in the Wordbook view to
    * show only relevant groups; the Translator popup uses `tabs` directly so
@@ -98,5 +118,5 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     langPairs.value = []
   }
 
-  return { tabs, filteredTabs, langPairs, fetchGroups, fetchLangPairs, addTab, renameTab, deleteTab, assignEntry, reorderTabs, reset }
+  return { tabs, filteredTabs, langPairs, fetchGroups, fetchLangPairs, addTab, renameTab, deleteTab, assignEntry, reorderTabs, restoreTabsOrder, reset }
 })

@@ -138,6 +138,8 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   const _currentGroupId = ref<number | null>(null)
   const map = ref<UiMap>({})
   const prefs = ref<GlobalPrefs>(loadPrefs())
+  const _hintStoreSeq = ref(0)
+  function _bumpHintSeq() { _hintStoreSeq.value++ }
 
   // ── In-memory details content cache (not persisted) ─────────────────────────
   const _detailsContent = new Map<number, EntryDetailsContent>()
@@ -299,6 +301,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
   function setState(id: number, patch: Partial<EntryUiState>) {
     map.value[id] = { ...map.value[id], ...patch }
     if (_currentGroupId.value !== null) saveGroupEntries(_currentGroupId.value, map.value)
+    if ('hintVisible' in patch) _bumpHintSeq()
   }
 
   /**
@@ -317,6 +320,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
       otherMap[id] = { ...otherMap[id], ...patch }
       saveGroupEntries(groupId, otherMap)
     }
+    if ('hintVisible' in patch) _bumpHintSeq()
   }
 
   function setProvider(id: number, key: 'def' | 'ctx' | 'lex', code: string | null): void {
@@ -397,7 +401,71 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
       delete prefs.value.showTranslations
     }
     savePrefs(prefs.value)
+    _bumpHintSeq()
   }
+
+  /**
+   * Delete every per-entry `hintVisible` flag across ALL groups in localStorage
+   * and also clear the global `showTranslations` override. Single read+write.
+   * Returns true if anything was actually deleted; false when nothing needed clearing.
+   */
+  function clearAllHintsGlobal(): boolean {
+    // --- Detection pass (single localStorage read shared with clear pass) ---
+    let hadAny = prefs.value.showTranslations === true
+    if (!hadAny) {
+      for (const state of Object.values(map.value)) {
+        if (state.hintVisible === true) { hadAny = true; break }
+      }
+    }
+    const node = _readNode()
+    const groups = node.entriesByGroup ?? {}
+    if (!hadAny) {
+      outer: for (const uiMap of Object.values(groups)) {
+        for (const state of Object.values(uiMap as Record<string, EntryUiState>)) {
+          if (state.hintVisible === true) { hadAny = true; break outer }
+        }
+      }
+    }
+    if (!hadAny) return false
+
+    // --- Clear pass ---
+    for (const k of Object.keys(map.value)) {
+      const n = Number(k)
+      const entry = map.value[n]
+      if (entry && 'hintVisible' in entry) delete entry.hintVisible
+    }
+    delete prefs.value.showTranslations
+    if (_currentGroupId.value !== null) {
+      groups[String(_currentGroupId.value)] = map.value
+    }
+    for (const uiMap of Object.values(groups)) {
+      for (const state of Object.values(uiMap as Record<string, EntryUiState>)) {
+        delete state.hintVisible
+      }
+    }
+    try {
+      localStorage.setItem(_storageKey(), JSON.stringify({ entriesByGroup: groups, ...prefs.value }))
+    } catch {}
+    _bumpHintSeq()
+    return true
+  }
+
+  /**
+   * True when any entry in any group OTHER than the currently active one has
+   * `hintVisible: true` stored in localStorage. Reactive via _hintStoreSeq.
+   */
+  const anyHintInOtherGroups = computed(() => {
+    void _hintStoreSeq.value  // reactive dependency
+    const activeId = prefs.value.activeGroupId
+    const node = _readNode()
+    for (const [gid, uiMap] of Object.entries(node.entriesByGroup ?? {})) {
+      if (activeId !== null && String(activeId) === gid) continue
+      for (const state of Object.values(uiMap as Record<string, EntryUiState>)) {
+        if (state.hintVisible === true) return true
+      }
+    }
+    return false
+  })
 
   const showTranslations = computed(() => prefs.value.showTranslations ?? false)
 
@@ -552,6 +620,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     pendingHighlightId.value = null
     focusedByGroup.clear()
     openDetailsByGroup.clear()
+    _bumpHintSeq()
   }
 
   return {
@@ -561,7 +630,7 @@ export const useWordbookUiStore = defineStore('wordbookUi', () => {
     activeCardId, activeCardMode,
     toggleDetails, openDetails, openEditing, closeActive,
     activeMenuId,
-    setAllHints, showTranslations,
+    setAllHints, showTranslations, clearAllHintsGlobal, anyHintInOtherGroups,
     density, activeLangs, activeColors, activeGroupId, sidePanelVisible, swapDisplay,
     highlightId, highlightSeq, pendingHighlightId,
     highlightEntry, clearHighlight, requestShowEntry, consumePendingHighlight,
