@@ -18,6 +18,7 @@
             @pointerup="onSearchBtnPointerUp"
             @pointerleave="onSearchBtnCancel"
             @pointercancel="onSearchBtnCancel"
+            @contextmenu.prevent
             @click.stop
           >
             <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -292,11 +293,12 @@
               ? 'text-gray-700 cursor-not-allowed'
               : translateBtnState === 'active' ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
             :disabled="store.entries.length === 0 && !uiStore.anyHintInOtherGroups"
-            @pointerdown="onTranslateBtnPointerDown"
-            @pointerup="onTranslateBtnPointerUp"
-            @pointerleave="onTranslateBtnCancel"
-            @pointercancel="onTranslateBtnCancel"
-            @click.stop
+          @pointerdown="onTranslateBtnPointerDown"
+          @pointerup="onTranslateBtnPointerUp"
+          @pointerleave="onTranslateBtnCancel"
+          @pointercancel="onTranslateBtnCancel"
+          @contextmenu.prevent
+          @click.stop
             :title="store.entries.length === 0 && !uiStore.anyHintInOtherGroups
               ? 'No entries'
               : translateBtnState === 'active'

@@ -114,6 +114,7 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (e: 'longpress'): void
+  (e: 'press'): void
 }>()
 
 const buttonId = Symbol('AudioButton')
@@ -261,6 +262,7 @@ const { onPointerDown: _lpPointerDown, onPointerUp, onCancel: cancelPress } = us
 
 function onPointerDown(e: PointerEvent) {
   _longPressPointerId = e.pointerId
+  emit('press')
   _lpPointerDown(e)
 }
 

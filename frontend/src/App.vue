@@ -147,6 +147,18 @@ const _initialUserId = (() => {
   return isNaN(n) ? null : n
 })()
 
+// ── Global context-menu guard ───────────────────────────────────────────────
+// Prevents the Android system long-press menu on all UI elements that have no
+// business showing it. Inputs, textareas, and .select-text regions are exempt
+// so paste (in form fields) and copy (in content panels) still work.
+function onGlobalContextMenu(e: Event) {
+  const target = e.target as Element | null
+  if (!target) return
+  if (target.closest('input, textarea, [contenteditable]')) return
+  if (target.closest('.select-text')) return
+  e.preventDefault()
+}
+
 // Close dropdown when clicking outside
 function onClickOutside(e: MouseEvent) {
   if (menuRef.value && !menuRef.value.contains(e.target as Node)) {
@@ -186,6 +198,7 @@ onMounted(() => {
     settingsStore.load()
     languageSettingsStore.load()
   }
+  document.addEventListener('contextmenu', onGlobalContextMenu)
   document.addEventListener('click', onClickOutside)
   canGoFullscreen.value = !isStandalone && !!document.fullscreenEnabled
   if (canGoFullscreen.value) {
@@ -197,6 +210,7 @@ onMounted(() => {
   window.addEventListener('popstate', _onBackButton)
 })
 onUnmounted(() => {
+  document.removeEventListener('contextmenu', onGlobalContextMenu)
   document.removeEventListener('click', onClickOutside)
   document.removeEventListener('fullscreenchange', onFullscreenChange)
   window.visualViewport?.removeEventListener('resize', updateAppHeight)

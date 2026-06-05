@@ -23,8 +23,8 @@ Tests:
 - Make test set for disabled, unavailable, filtered out providers and influences in frontend if provider state changes back and forth
 
 Prepare to promotion:
-- UI localization
 - Light theme, theming in general
+- UI localization
 - Definition providers with non-English output (non-English Wikitionary alternatives)
 - Share group feature
 - Store user requested provider along with cached results in db

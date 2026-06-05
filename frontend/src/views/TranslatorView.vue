@@ -166,7 +166,7 @@
             @keydown.ctrl.enter.prevent="onCtrlEnter"
           />
           <div class="flex items-center justify-between h-8">
-            <AudioButton v-if="store.inputText" :text="store.inputText" :lang="resolvedSourceLang" title="Pronounce input · Hold to select voice" />
+            <AudioButton v-if="store.inputText" :text="store.inputText" :lang="resolvedSourceLang" title="Pronounce input · Hold to select voice" @press="blurInput" />
 <p v-if="store.inputText" class="text-xs text-gray-600 ml-auto">{{ store.inputText.length }} / 100</p>
           </div>
         </div>
@@ -280,7 +280,7 @@
           />
 
           <div v-if="store.result && hasEnabledAvailableTranslationProvider && (!settingsStore.loaded || settingsStore.ttsChoicesForLang(store.targetLang).length > 0)" class="flex items-center h-8">
-            <AudioButton :text="store.result.translated_text" :lang="store.targetLang" title="Pronounce translation · Hold to select voice" />
+            <AudioButton :text="store.result.translated_text" :lang="store.targetLang" title="Pronounce translation · Hold to select voice" @press="blurInput" />
           </div>
         </div>
       </div>
@@ -1182,6 +1182,10 @@ const { onPointerDown: onSwapPointerDown, onPointerUp: onSwapPointerUp, onCancel
   { onShortPress: _onSwapShortPress },
 )
 
+function blurInput() {
+  inputTextareaRef.value?.blur()
+}
+
 function clearInput() {
   store.inputText = ''
   store.clearResult()
@@ -1244,7 +1248,7 @@ async function addToWordbook(groupId?: number) {
       wordbookUiStore.setProviderForGroup(entry.id, entry.group.id, 'lex', cur.lexProviderCode)
     // Reflect the new entry in the lookup cache so the button switches to the ✓ state.
     wordbookLookup.value = { entry_id: entry.id, group_id: entry.group.id, color: entry.color ?? null }
-    toast.undo(`Added to group: ${entry.group.name}`, async () => {
+    toast.undo('Added to Wordbook', async () => {
       try {
         await wordbookStore.deleteEntry(entry.id)
       } catch (e: unknown) {
@@ -1263,7 +1267,7 @@ const groupMenuScrollRef = ref<HTMLElement | null>(null)
 const groupMenuVisible = ref(false)
 const groupMenuLeft = ref(0)
 const groupMenuTop = ref(0)
-const { onPointerDown: onAddWordbookPointerDown, onPointerUp: onAddWordbookPointerUp, onCancel: onAddWordbookCancelPress } = useLongPress(
+const { onPointerDown: _onAddWordbookPointerDown, onPointerUp: onAddWordbookPointerUp, onCancel: onAddWordbookCancelPress } = useLongPress(
   async () => {
     // Open the menu immediately while the button element is guaranteed to be
     // mounted (addToWordbookBtnRef.value is valid here, before any awaits).
@@ -1280,6 +1284,11 @@ const { onPointerDown: onAddWordbookPointerDown, onPointerUp: onAddWordbookPoint
   },
   { onShortPress: () => void addToWordbook(), popupRef: groupMenuPopupRef },
 )
+
+function onAddWordbookPointerDown(e: PointerEvent) {
+  blurInput()
+  _onAddWordbookPointerDown(e)
+}
 
 function _openGroupMenu() {
   const btn = addToWordbookBtnRef.value
