@@ -20,7 +20,6 @@ Some non-obvious UI features:
 - On Android, you may long-press non-focused card to move focused one in place of it
 - Long-pressing details button in wordbook card activates the "Find Similar" action
 - Long-pressing a group tip in the Wordbook allows you to change it's name
-- The same applies for item in the "more ..." button popup menu, when groups are collapsed
 - You may drag group tips in the Wordbook to reorder them
 - Dragging a group tip onto some word moves this word into that group
 - Long-pressing, or Ctrl-pressing an item in multi-select filters prevents their immediate dismissal

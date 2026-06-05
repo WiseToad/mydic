@@ -120,3 +120,9 @@ class WordbookLookupResult(BaseModel):
     entry_id: int
     group_id: int
     color: str | None = None
+
+
+class WordGroupCount(BaseModel):
+    id: int
+    total: int
+    filtered: int  # equals total when no lang-pair filter was applied

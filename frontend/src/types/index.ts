@@ -97,6 +97,13 @@ export interface WordbookMoveItem {
   target_id: number
 }
 
+export interface WordGroupCount {
+  id: number
+  total: number
+  /** Equals total when no lang-pair filter was applied. */
+  filtered: number
+}
+
 export interface ContextExample {
   source: string
   target: string

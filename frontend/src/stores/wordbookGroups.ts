@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { wordbookApi } from '@/api/wordbook'
 import { useWordbookStore } from '@/stores/wordbook'
-import type { WordGroup } from '@/types'
+import type { WordGroup, WordGroupCount } from '@/types'
 
 export type { WordGroup }
 
@@ -12,6 +12,8 @@ try { localStorage.removeItem('lb_wordbook_groups') } catch { /* ignore */ }
 export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   const tabs = ref<WordGroup[]>([])
   const langPairs = ref<string[]>([])
+  /** Per-group entry counts, keyed by group id. Populated on demand (popup open). */
+  const groupCounts = ref<Map<number, WordGroupCount>>(new Map())
 
   async function fetchGroups(filterLangPairs?: string[]): Promise<void> {
     tabs.value = await wordbookApi.listGroups(
@@ -21,6 +23,14 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
 
   async function fetchLangPairs(): Promise<void> {
     langPairs.value = await wordbookApi.listLangPairs()
+  }
+
+  async function fetchGroupCounts(filterLangPairs?: string[], filterColors?: string[]): Promise<void> {
+    const rows = await wordbookApi.listGroupCounts(
+      filterLangPairs && filterLangPairs.length > 0 ? filterLangPairs : undefined,
+      filterColors && filterColors.length > 0 ? filterColors : undefined,
+    )
+    groupCounts.value = new Map(rows.map((r) => [r.id, r]))
   }
 
   async function addTab(name: string): Promise<WordGroup> {
@@ -116,7 +126,8 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   function reset() {
     tabs.value = []
     langPairs.value = []
+    groupCounts.value = new Map()
   }
 
-  return { tabs, filteredTabs, langPairs, fetchGroups, fetchLangPairs, addTab, renameTab, deleteTab, assignEntry, reorderTabs, restoreTabsOrder, reset }
+  return { tabs, filteredTabs, langPairs, groupCounts, fetchGroups, fetchLangPairs, fetchGroupCounts, addTab, renameTab, deleteTab, assignEntry, reorderTabs, restoreTabsOrder, reset }
 })

@@ -8,6 +8,7 @@ import type {
   WordbookMoveItem,
   WordbookSearchResponse,
   WordGroup,
+  WordGroupCount,
   WordGroupUpdate,
 } from '@/types'
 
@@ -87,6 +88,18 @@ export const wordbookApi = {
       for (const p of langPairs) params.append('lang_pair', p)
     }
     const { data } = await apiClient.get<WordGroup[]>('/wordbook/groups', { params })
+    return data
+  },
+
+  async listGroupCounts(langPairs?: string[], colors?: string[]): Promise<WordGroupCount[]> {
+    const params = new URLSearchParams()
+    if (langPairs && langPairs.length > 0) {
+      for (const p of langPairs) params.append('lang_pair', p)
+    }
+    if (colors && colors.length > 0) {
+      for (const c of colors) params.append('colors', c)
+    }
+    const { data } = await apiClient.get<WordGroupCount[]>('/wordbook/groups/counts', { params })
     return data
   },
 

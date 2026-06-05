@@ -33,6 +33,7 @@ from app.schemas.wordbook import (
     WordbookSearchEntry,
     WordbookSearchGroup,
     WordbookSearchResponse,
+    WordGroupCount,
     WordGroupCreate,
     WordGroupResponse,
     WordGroupUpdate,
@@ -434,6 +435,94 @@ async def reorder_entries(
 # ---------------------------------------------------------------------------
 # Word groups
 # ---------------------------------------------------------------------------
+
+@router.get("/groups/counts", response_model=list[WordGroupCount])
+async def list_group_counts(
+    lang_pair: list[str] = Query(default=[]),
+    colors: list[str] = Query(default=[]),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Return total and filtered entry counts per group.
+
+    When lang_pair or colors are supplied, `filtered` reflects entries
+    matching ALL active filter dimensions (AND logic across dimensions,
+    OR logic within each dimension).
+    """
+    # All group IDs for this user (preserving display order).
+    all_group_ids = (
+        await db.execute(
+            select(WordGroup.id)
+            .where(WordGroup.user_id == current_user.id)
+            .order_by(WordGroup.position, WordGroup.id)
+        )
+    ).scalars().all()
+
+    # Total entry count per group (no filters).
+    total_rows = (
+        await db.execute(
+            select(WordbookEntry.group_id, func.count().label("cnt"))
+            .where(WordbookEntry.user_id == current_user.id)
+            .group_by(WordbookEntry.group_id)
+        )
+    ).all()
+    totals: dict[int, int] = {row.group_id: row.cnt for row in total_rows}
+
+    # Build per-dimension filter clauses (AND-combined across dimensions).
+    any_filter = bool(lang_pair) or bool(colors)
+    filtered: dict[int, int] = {}
+
+    if any_filter:
+        filter_clauses = []
+
+        if lang_pair:
+            pairs = [
+                (parts[0], parts[1])
+                for p in lang_pair
+                if len(parts := p.split(":", 1)) == 2
+            ]
+            if pairs:
+                filter_clauses.append(or_(*[
+                    and_(
+                        WordbookEntry.source_lang == src,
+                        WordbookEntry.target_lang == tgt,
+                    )
+                    for src, tgt in pairs
+                ]))
+
+        if colors:
+            has_none = "none" in colors
+            real_colors = [c for c in colors if c != "none"]
+            color_conditions = []
+            if has_none:
+                color_conditions.append(WordbookEntry.color.is_(None))
+            for c in real_colors:
+                color_conditions.append(WordbookEntry.color == c)
+            if color_conditions:
+                filter_clauses.append(or_(*color_conditions))
+
+        if filter_clauses:
+            filtered_rows = (
+                await db.execute(
+                    select(WordbookEntry.group_id, func.count().label("cnt"))
+                    .where(
+                        WordbookEntry.user_id == current_user.id,
+                        *filter_clauses,
+                    )
+                    .group_by(WordbookEntry.group_id)
+                )
+            ).all()
+            filtered = {row.group_id: row.cnt for row in filtered_rows}
+
+    return [
+        WordGroupCount(
+            id=gid,
+            total=totals.get(gid, 0),
+            filtered=filtered.get(gid, 0) if any_filter else totals.get(gid, 0),
+        )
+        for gid in all_group_ids
+    ]
+
 
 @router.get("/groups", response_model=list[WordGroupResponse])
 async def list_groups(

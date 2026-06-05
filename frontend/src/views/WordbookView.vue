@@ -453,70 +453,50 @@
           <button
             ref="addGroupBtnEl"
             class="px-2.5 py-1 text-xs border border-dashed rounded-full transition-colors"
-            :class="groupsOverflow
-              ? 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'
-              : 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'"
-            @click="groupsOverflow ? toggleGroupsPopup() : addNewTab()"
-            :title="groupsOverflow ? 'Show all groups' : 'Add group'"
-          >{{ groupsOverflow ? 'more ...' : groupsStore.filteredTabs.length === 0 ? 'New group' : 'New' }}</button>
+            :class="groupsStore.filteredTabs.length === 0
+              ? 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'
+              : 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'"
+            @click="groupsStore.filteredTabs.length === 0 ? addNewTab() : toggleGroupsPopup()"
+            :title="groupsStore.filteredTabs.length === 0 ? 'Add group' : 'Show all groups'"
+          >{{ groupsStore.filteredTabs.length === 0 ? 'New group' : 'more ...' }}</button>
 
-          <!-- Groups overflow popup -->
+          <!-- Groups popup -->
           <div
             v-if="showGroupsPopup"
             ref="groupsPopupEl"
-            class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-64 overflow-y-auto"
+            class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[180px]"
             @click.stop
           >
-          <div
-          v-for="tab in groupsStore.filteredTabs"
-            :key="tab.id"
-          :data-popup-group-item="tab.id"
-            class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none touch-none"
-            :class="[
-              uiStore.activeGroupId === tab.id
-                ? 'text-primary-400 bg-primary-500/10'
-                : 'text-gray-300 hover:bg-surface-800',
-              longPressReadyPopupTabId === tab.id ? 'cursor-text' : 'cursor-default',
-            ]"
-            @mouseenter="hoveredPopupTabId = tab.id"
-            @mouseleave="hoveredPopupTabId = null"
-            @pointerdown.prevent="onPopupItemPointerDown($event, tab.id)"
-            @pointermove="onPopupItemPointerMove"
-            @pointerup="onPopupItemPointerUp"
-            @pointercancel="onPopupItemPointerCancel"
-            @contextmenu.prevent
-          >
-            <template v-if="editingPopupTabId !== tab.id">
-              <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
-              <span
-                v-if="uiStore.activeGroupId === tab.id && hoveredPopupTabId !== tab.id"
-                class="shrink-0 pr-3 text-primary-400"
-              >✓</span>
-              <button
-                v-if="hoveredPopupTabId === tab.id"
-                class="shrink-0 pr-3 pl-2 py-1.5 text-gray-600 hover:text-red-400 transition-colors leading-none"
-                title="Delete group"
-                @pointerdown.stop
-                @click.stop="deleteTabFromPopup(tab.id)"
-              >×</button>
-            </template>
-            <template v-else>
-              <span class="flex-1 px-3 py-1.5 invisible pointer-events-none" aria-hidden="true">{{ tabEditName }}</span>
-              <input
-                v-focus-select
-                type="text"
-                v-model="tabEditName"
-                :maxlength="GROUP_NAME_MAX_LEN"
-                class="absolute inset-0 px-3 py-1.5 text-xs bg-transparent text-gray-200 outline-none"
-                @blur="saveTabEdit(tab.id)"
-                @keydown.enter.prevent="saveTabEdit(tab.id)"
-                @keydown.escape.prevent="cancelTabEdit"
-                @pointerdown.stop
-                @click.stop
-              />
-            </template>
-          </div>
-            <div class="border-t border-surface-700 mt-1 pt-1">
+            <!-- Scrollable group list only -->
+            <div class="overflow-y-auto max-h-52 py-1">
+              <div
+                v-for="tab in groupsStore.filteredTabs"
+                :key="tab.id"
+                :data-popup-group-item="tab.id"
+                class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none cursor-default"
+                :class="uiStore.activeGroupId === tab.id
+                  ? 'text-primary-400 bg-primary-500/10'
+                  : 'text-gray-300 hover:bg-surface-800'"
+                @mouseenter="hoveredPopupTabId = tab.id"
+                @mouseleave="hoveredPopupTabId = null"
+                @click.stop="selectTabFromPopup(tab.id)"
+              >
+                <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
+                <span class="shrink-0 w-14 py-1.5 text-right text-gray-500 tabular-nums">{{ groupCountLabel(tab.id) }}</span>
+                <!-- Fixed-width slot keeps count at a stable position -->
+                <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
+                  <button
+                    v-if="hoveredPopupTabId === tab.id"
+                    class="text-gray-600 hover:text-red-400 transition-colors leading-none"
+                    title="Delete group"
+                    @click.stop="deleteTabFromPopup(tab.id)"
+                  >×</button>
+                  <span v-else-if="uiStore.activeGroupId === tab.id" class="text-primary-400">✓</span>
+                </span>
+              </div>
+            </div>
+            <!-- Fixed bottom panel: always visible, not scrollable -->
+            <div class="border-t border-surface-700 py-1">
               <button
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
                 @click="addNewTabFromPopup"
@@ -527,11 +507,16 @@
         <div
           v-else
           data-delete-tab-zone
-          class="px-2.5 py-1 text-xs rounded-full border border-dashed transition-colors select-none"
+          class="flex items-center gap-1 px-2.5 py-1 text-xs rounded-full border border-dashed transition-colors select-none"
           :class="dragOverDeleteZone
             ? 'text-red-400 bg-red-500/10 border-red-500/50'
             : 'text-gray-500 border-surface-600'"
-        >Delete</div>
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="w-3 h-3 shrink-0" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+          </svg>
+          Delete
+        </div>
         </div>
 
         <!-- Entry count, right-aligned -->
@@ -1140,7 +1125,6 @@ const vFocusSelect = {
 }
 
 const editingTabId = ref<number | null>(null)
-const editingPopupTabId = ref<number | null>(null)
 const tabEditName = ref('')
 
 function selectTab(id: number) {
@@ -1150,21 +1134,13 @@ function selectTab(id: number) {
 
 function startTabEdit(tab: WordGroup) {
   editingTabId.value = tab.id
-  editingPopupTabId.value = null
-  tabEditName.value = tab.name
-}
-
-function startPopupTabEdit(tab: WordGroup) {
-  editingPopupTabId.value = tab.id
-  editingTabId.value = null
   tabEditName.value = tab.name
 }
 
 async function saveTabEdit(id: number) {
-  if (editingTabId.value !== id && editingPopupTabId.value !== id) return
+  if (editingTabId.value !== id) return
   const name = tabEditName.value.trim()
   editingTabId.value = null
-  editingPopupTabId.value = null
   if (name) {
     try {
       await groupsStore.renameTab(id, name)
@@ -1176,7 +1152,6 @@ async function saveTabEdit(id: number) {
 
 function cancelTabEdit() {
   editingTabId.value = null
-  editingPopupTabId.value = null
 }
 
 async function addNewTab() {
@@ -1270,10 +1245,6 @@ watch(showGroupsPopup, (open) => {
   } else {
     document.removeEventListener('click', onGroupsPopupOutsideClick, true)
     hoveredPopupTabId.value = null
-    _cancelPopupLp()
-    longPressReadyPopupTabId.value = null
-    popupItemInteraction.value = null
-    if (editingPopupTabId.value !== null) cancelTabEdit()
   }
 })
 
@@ -1528,6 +1499,11 @@ function checkTabsFit() {
 async function toggleGroupsPopup() {
   if (showGroupsPopup.value) { showGroupsPopup.value = false; return }
   showGroupsPopup.value = true
+  // Fetch fresh per-group counts each time the popup opens.
+  groupsStore.fetchGroupCounts(
+    uiStore.activeLangs.length > 0 ? [...uiStore.activeLangs] : undefined,
+    uiStore.activeColors.length > 0 ? [...uiStore.activeColors] : undefined,
+  ).catch(() => {})
   await nextTick()
   const popup = groupsPopupEl.value
   if (!popup) return
@@ -1538,7 +1514,9 @@ async function toggleGroupsPopup() {
   const items = Array.from(popup.querySelectorAll<HTMLElement>('[data-popup-group-item]'))
   if (items.length === 0 || activeIndex >= items.length) return
   const activeItem = items[activeIndex]
-  popup.scrollTop = activeItem.offsetTop - popup.clientHeight / 2 + activeItem.offsetHeight / 2
+  // Scroll the inner scrollable list (first child) rather than the popup container.
+  const scrollEl = popup.firstElementChild as HTMLElement | null
+  if (scrollEl) scrollEl.scrollTop = activeItem.offsetTop - scrollEl.clientHeight / 2 + activeItem.offsetHeight / 2
 }
 
 function selectTabFromPopup(id: number) {
@@ -1554,67 +1532,15 @@ async function addNewTabFromPopup() {
 // ─── Groups popup item interactions ──────────────────────────────────────────
 const hoveredPopupTabId = ref<number | null>(null)
 
-// popupItemInteraction holds only the tabId — startX/Y/startTime are tracked
-// internally by the composable.
-interface PopupItemInteraction { tabId: number }
-const popupItemInteraction = ref<PopupItemInteraction | null>(null)
-const longPressReadyPopupTabId = ref<number | null>(null)
-
-const {
-  onPointerDown: _popupLpDown,
-  onPointerMove: _popupLpMove,
-  onPointerUp:   _popupLpUp,
-  onPointerCancel: _popupLpCancel,
-  cancel: _cancelPopupLp,
-} = useLongPressWithDrag({
-  onTimerFired: () => {
-    const state = popupItemInteraction.value
-    if (state) longPressReadyPopupTabId.value = state.tabId
-  },
-  onShortPress: () => {
-    const state = popupItemInteraction.value
-    popupItemInteraction.value = null
-    longPressReadyPopupTabId.value = null
-    if (state) selectTabFromPopup(state.tabId)
-  },
-  onLongPressConfirmed: () => {
-    const state = popupItemInteraction.value
-    popupItemInteraction.value = null
-    longPressReadyPopupTabId.value = null
-    if (!state) return
-    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
-    if (tab) startPopupTabEdit(tab)
-  },
-  onDragStart: () => {
-    // Movement during a hold cancels the rename; just dismiss the interaction.
-    popupItemInteraction.value = null
-    longPressReadyPopupTabId.value = null
-  },
-})
-
-function onPopupItemPointerDown(event: PointerEvent, tabId: number) {
-  if (editingPopupTabId.value === tabId || editingTabId.value === tabId) return
-  event.preventDefault()
-  if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
-  if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
-  popupItemInteraction.value = { tabId }
-  _popupLpDown(event)
-}
-
-function onPopupItemPointerMove(event: PointerEvent) {
-  if (!popupItemInteraction.value) return
-  _popupLpMove(event)
-}
-
-function onPopupItemPointerUp(event: PointerEvent) {
-  if (!popupItemInteraction.value) return
-  _popupLpUp(event)
-}
-
-function onPopupItemPointerCancel(event: PointerEvent) {
-  _popupLpCancel(event)
-  popupItemInteraction.value = null
-  longPressReadyPopupTabId.value = null
+/** Returns the formatted entry count string for a group popup item. */
+function groupCountLabel(groupId: number): string {
+  const count = groupsStore.groupCounts.get(groupId)
+  if (count === undefined) return ''
+  const anyFilterActive = uiStore.activeLangs.length > 0 || uiStore.activeColors.length > 0
+  if (anyFilterActive && count.filtered < count.total) {
+    return `${count.filtered}/${count.total}`
+  }
+  return `${count.total}`
 }
 
 function deleteTabFromPopup(id: number) {
@@ -1651,11 +1577,8 @@ watch(
 )
 // Re-check when label text changes (width may change: "42" vs "42 entries")
 watch(entryCountLabel, () => { nextTick(() => checkTabsFit()) })
-// Re-check when the overflow flag flips: the button text toggles between
-// "New" and "more...", which have different widths. The first checkTabsFit
-// call that sets groupsOverflow uses the old button width; this watch fires
-// after Vue re-renders the button so the follow-up call measures the new
-// width and updates _maxSeenBtnW before the browser paints.
+// Re-check when the overflow flag flips so overflowedTabIds stays accurate
+// after tab count or container width changes.
 watch(groupsOverflow, () => { nextTick(() => checkTabsFit()) })
 
 // ─── Search ──────────────────────────────────────────────────────────────────
@@ -2212,7 +2135,6 @@ const {
 function onTabPointerDown(event: PointerEvent, tabId: number) {
   if (editingTabId.value === tabId) return
   if (editingTabId.value !== null) saveTabEdit(editingTabId.value)
-  if (editingPopupTabId.value !== null) saveTabEdit(editingPopupTabId.value)
   event.preventDefault()
   const sourceEl = event.currentTarget as HTMLElement
   sourceEl.setPointerCapture(event.pointerId)
