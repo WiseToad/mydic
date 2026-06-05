@@ -458,7 +458,7 @@
               : 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'"
             @click="groupsStore.filteredTabs.length === 0 ? addNewTab() : toggleGroupsPopup()"
             :title="groupsStore.filteredTabs.length === 0 ? 'Add group' : 'Show all groups'"
-          >{{ groupsStore.filteredTabs.length === 0 ? 'New group' : 'more ...' }}</button>
+          >{{ groupsStore.filteredTabs.length === 0 ? 'Add group' : 'more ...' }}</button>
 
           <!-- Groups popup -->
           <div
@@ -1406,6 +1406,8 @@ const HEADER_GROUPS_GAP_PX = 4
 // causes each checkTabsFit call to flip groupsOverflow, which triggers
 // another call, which flips again — an infinite resize feedback loop.
 let _maxSeenBtnW = 0
+// Last successfully computed visible window (start index + count).
+let _currentLayout: { start: number; count: number } | null = null
 
 function measureTabWidths() {
   const rowEl = groupsRowEl.value
@@ -1422,6 +1424,18 @@ function measureTabWidths() {
  * Simulate flex-wrap placement of all tabs + the add/more button.
  * Hides tabs (via overflowedTabIds) that would push the button beyond
  * maxLines (1 for landscape, 2 for portrait).
+ *
+ * Step 1 — try the previously used start position: render from
+ * _currentLayout.start and check whether the active group still falls
+ * within the resulting window. If so, keep that window and only slide
+ * the start leftward when unused available width allows extra tabs from
+ * the front to be shown. This keeps the layout stable across resize
+ * events that do not affect the active group’s visibility.
+ *
+ * Step 2 — full centering pass: runs only when the active group has
+ * moved outside the window (or no prior layout exists). Finds the
+ * contiguous window that maximises visible tabs and centres the active
+ * group by minimising pixel-width imbalance on each side.
  */
 function checkTabsFit() {
   measureTabWidths()
@@ -1452,48 +1466,116 @@ function checkTabsFit() {
     }
   }
 
+  const activeId = uiStore.activeGroupId
+  const activeIdx = activeId !== null ? tabs.findIndex(t => t.id === activeId) : -1
+
   /**
-   * Place tab[i] at cursor position x (on line `line`), then simulate where
-   * the button would land. Returns true if the button would exceed maxLines.
+   * Simulate placing tabs[startIdx..] in order and return how many fit
+   * (i.e. the button still fits on a row <= maxLines after each placement).
    */
-  function wouldOverflow(x: number, line: number, w: number): boolean {
-    if (x > 0 && x + gap + w > containerWidth) { line++; x = w }
-    else { x = x === 0 ? w : x + gap + w }
-    const btnLine = (x + gap + btnW <= containerWidth) ? line : line + 1
-    return btnLine > maxLines
-  }
-
-  let x = 0, line = 1
-  for (let i = 0; i < tabs.length; i++) {
-    const w = tabWidths.get(tabs[i].id)!
-    if (wouldOverflow(x, line, w)) {
-      overflowedTabIds.value = new Set(tabs.slice(i).map(t => t.id))
-      groupsOverflow.value = true
-      visibleTabCount.value = i
-      return
+  function countFitting(startIdx: number): number {
+    let x = 0, line = 1
+    for (let i = startIdx; i < tabs.length; i++) {
+      const w = tabWidths.get(tabs[i].id)!
+      let nx = x, nl = line
+      if (nx > 0 && nx + gap + w > containerWidth) { nl++; nx = w }
+      else { nx = nx === 0 ? w : nx + gap + w }
+      const btnLine = (nx + gap + btnW <= containerWidth) ? nl : nl + 1
+      if (btnLine > maxLines) return i - startIdx
+      x = nx; line = nl
     }
-    // Actually advance x/line for real.
-    if (x > 0 && x + gap + w > containerWidth) { line++; x = w }
-    else { x = x === 0 ? w : x + gap + w }
-  }
-
-  // Post-loop: verify button fits after all visible tabs.
-  // This also handles the zero-tabs case where the loop body never ran.
-  {
+    // Post-loop: guard against the button not fitting after all tabs are placed.
     const btnLine = (x === 0 || x + gap + btnW <= containerWidth) ? line : line + 1
-    if (btnLine > maxLines && tabs.length > 0) {
-      // This shouldn't happen if the loop above is correct, but guard anyway.
-      const lastIdx = tabs.length - 1
-      overflowedTabIds.value = new Set([tabs[lastIdx].id])
-      groupsOverflow.value = true
-      visibleTabCount.value = lastIdx
+    if (btnLine > maxLines && tabs.length > startIdx) return tabs.length - startIdx - 1
+    return tabs.length - startIdx
+  }
+
+  /** Commit a window [start, start+count) to reactive state. */
+  function applyWindow(start: number, count: number) {
+    const end = start + count
+    overflowedTabIds.value = new Set(
+      tabs.filter((_, i) => i < start || i >= end).map(t => t.id)
+    )
+    groupsOverflow.value = overflowedTabIds.value.size > 0
+    visibleTabCount.value = count
+    _currentLayout = { start, count }
+  }
+
+  // Fast path: all tabs fit — no overflow.
+  if (countFitting(0) >= tabs.length) {
+    applyWindow(0, tabs.length)
+    return
+  }
+
+  // ── Step 1: try the previously used start position ───────────────────────
+  if (_currentLayout !== null) {
+    const trialStart = _currentLayout.start
+    const trialCount = countFitting(trialStart)
+    const activeInWindow =
+      activeIdx < 0 || (activeIdx >= trialStart && activeIdx < trialStart + trialCount)
+
+    if (activeInWindow) {
+      // Active group is still visible — keep the layout.
+      // Slide start toward the front only when doing so strictly increases
+      // the visible count (i.e. there is genuine unused width to fill).
+      // Using strict > avoids shifting the window at the tail of the list:
+      // when the window already ends at the last group, countFitting(start-1)
+      // returns the same count (the tail tab drops off, a front tab appears),
+      // which would falsely register as "no change" with >=, sliding the
+      // active group to the right edge.
+      let start = trialStart
+      let count = trialCount
+      for (let s = start - 1; s >= 0; s--) {
+        const c = countFitting(s)
+        if (activeIdx >= 0 && activeIdx >= s + c) break  // active fell off right edge
+        if (c > count) { start = s; count = c }
+        else break  // no gain or window would shrink — stop
+      }
+      applyWindow(start, count)
       return
     }
   }
 
-  overflowedTabIds.value = new Set()
-  groupsOverflow.value = false
-  visibleTabCount.value = tabs.length
+  // ── Step 2: full centering pass ──────────────────────────────────────────
+  // Active group is outside the window or no prior layout exists.
+  // Iterate BACKWARD from the active group — not forward from index 0 — so
+  // the algorithm converges in O(window_size) steps regardless of list length.
+  const initStart = activeIdx >= 0 ? activeIdx : 0
+  let bestStart = initStart
+  let bestCount = countFitting(initStart)
+  let bestCenterScore = Infinity
+
+  for (let s = initStart; s >= 0; s--) {
+    const c = countFitting(s)
+    // Skip positions where the active tab falls outside the window [s, s+c-1].
+    if (activeIdx >= 0 && s + c <= activeIdx) continue
+
+    // Width-based centering: sum pixel widths on each side of the active tab.
+    // leftW: (tab_width + gap) for each left tab, including the gap before active.
+    // rightW: (gap + tab_width) for each right tab, including the gap after active.
+    // |leftW − rightW| = 0 means the active tab is at the visual midpoint.
+    let leftW = 0
+    for (let i = s; i < activeIdx; i++) leftW += (tabWidths.get(tabs[i].id) ?? 0) + gap
+    let rightW = 0
+    for (let i = activeIdx + 1; i < s + c; i++) rightW += gap + (tabWidths.get(tabs[i].id) ?? 0)
+    const centerScore = activeIdx >= 0 ? Math.abs(leftW - rightW) : 0
+
+    if (c > bestCount || (c === bestCount && centerScore < bestCenterScore)) {
+      bestStart = s
+      bestCount = c
+      bestCenterScore = centerScore
+    }
+
+    // Early stopping: left side is strictly heavier AND count has dropped —
+    // the window can no longer grow leftward, so continuing only worsens balance.
+    // Using strict < (not <=) so a plateau in count doesn’t stop iteration:
+    // when rightW = 0 (active is last/near-last), leftW > rightW fires immediately
+    // but count keeps growing as we add tabs left, so we must not stop until
+    // count actually falls.
+    if (activeIdx >= 0 && leftW > rightW && c < bestCount) break
+  }
+
+  applyWindow(bestStart, bestCount)
 }
 
 async function toggleGroupsPopup() {
@@ -1580,6 +1662,14 @@ watch(entryCountLabel, () => { nextTick(() => checkTabsFit()) })
 // Re-check when the overflow flag flips so overflowedTabIds stays accurate
 // after tab count or container width changes.
 watch(groupsOverflow, () => { nextTick(() => checkTabsFit()) })
+// Re-check when the active group changes.
+// flush:'sync' runs the callback synchronously inside the same reactive mutation
+// that changed activeGroupId — before Vue queues a render — so activeGroupId and
+// overflowedTabIds are both updated in one synchronous block and Vue batches them
+// into a single paint, eliminating the flicker frame.
+watch(() => uiStore.activeGroupId, () => {
+  checkTabsFit()
+}, { flush: 'sync' })
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
