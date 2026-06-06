@@ -1378,11 +1378,12 @@ function _repositionGroupMenu(buttonRect: DOMRect) {
   } else {
     groupMenuTop.value = buttonRect.bottom + margin
   }
-  // Horizontal: left-align to the button; clamp so it doesn't overflow the right edge
-  groupMenuLeft.value = Math.min(
-    Math.max(margin, buttonRect.left),
-    window.innerWidth - popupRect.width - margin,
-  )
+  // Horizontal: left-align to the button when there is room; otherwise right-align
+  if (buttonRect.left + popupRect.width + margin <= window.innerWidth) {
+    groupMenuLeft.value = Math.max(margin, buttonRect.left)
+  } else {
+    groupMenuLeft.value = Math.max(margin, buttonRect.right - popupRect.width)
+  }
 }
 
 function closeGroupMenu() {

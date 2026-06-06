@@ -456,7 +456,8 @@
           <div
             v-if="showGroupsPopup"
             ref="groupsPopupEl"
-            class="absolute top-full left-0 mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[180px]"
+            class="absolute top-full mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[180px]"
+            :class="groupsPopupAlignRight ? 'right-0' : 'left-0'"
             @click.stop
           >
             <!-- Scrollable group list only -->
@@ -1247,6 +1248,7 @@ const visibleTabCount = ref(0)
 // Groups popup
 const showGroupsPopup = ref(false)
 const groupsPopupEl = ref<HTMLElement | null>(null)
+const groupsPopupAlignRight = ref(false)
 
 function onGroupsPopupOutsideClick(e: MouseEvent) {
   if (!(e.target as Node | null)) return
@@ -1603,6 +1605,13 @@ async function toggleGroupsPopup() {
   await nextTick()
   const popup = groupsPopupEl.value
   if (!popup) return
+  // Align right when left-aligning would overflow the viewport right edge.
+  const container = addGroupBtnContainerEl.value
+  if (container) {
+    const cRect = container.getBoundingClientRect()
+    const pWidth = popup.getBoundingClientRect().width
+    groupsPopupAlignRight.value = cRect.left + pWidth + 4 > window.innerWidth
+  }
   const activeId = uiStore.activeGroupId
   const tabs = popupVisibleTabs.value
   const activeIndex = tabs.findIndex(t => t.id === activeId)
