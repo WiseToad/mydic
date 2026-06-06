@@ -459,17 +459,17 @@
       @click.stop
     >
       <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Add to group</p>
-      <div ref="groupMenuScrollRef" class="overflow-auto py-1">
+      <div ref="groupMenuScrollRef" class="overflow-y-auto py-1">
         <button
           v-for="group in wordbookGroupsStore.tabs.filter(g => !g.hidden)"
           :key="group.id"
           type="button"
-          class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
+          class="w-full text-left text-xs whitespace-nowrap transition-colors flex items-center select-none"
           :class="group.in_filter === false
-            ? 'text-gray-500 hover:bg-surface-700'
+            ? 'text-gray-500 hover:bg-surface-800'
             : wordbookUiStore.activeGroupId === group.id
-              ? 'text-primary-300 bg-primary-500/10 hover:bg-primary-500/15'
-              : 'text-gray-200 hover:bg-surface-700'"
+              ? 'text-primary-400 bg-primary-500/10 hover:bg-primary-500/15'
+              : 'text-gray-300 hover:bg-surface-800'"
           :data-selected="(group.in_filter !== false && wordbookUiStore.activeGroupId === group.id) || undefined"
           @pointerdown.stop.prevent="onGroupMenuPointerDown($event, group.id)"
           @pointerup.stop="onGroupMenuPointerUp"
@@ -478,17 +478,20 @@
           @click.stop
           @contextmenu.prevent
         >
-          <span class="flex-1">{{ group.name }}</span>
-          <svg
-            v-if="wordbookUiStore.activeGroupId === group.id"
-            xmlns="http://www.w3.org/2000/svg"
-            class="w-3.5 h-3.5 text-primary-400 shrink-0"
-            viewBox="0 0 24 24"
-            fill="currentColor"
-            aria-hidden="true"
-          ><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          <span class="flex-1 px-3 py-1.5 truncate">{{ group.name }}</span>
+          <span class="shrink-0 w-10 py-1.5 text-right text-gray-500 tabular-nums">{{ wordbookGroupsStore.groupCounts.get(group.id)?.total ?? '' }}</span>
+          <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
+            <svg
+              v-if="wordbookUiStore.activeGroupId === group.id"
+              xmlns="http://www.w3.org/2000/svg"
+              class="w-3.5 h-3.5 text-primary-400"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              aria-hidden="true"
+            ><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+          </span>
         </button>
-        <p v-if="wordbookGroupsStore.tabs.length === 0" class="px-3 py-1.5 text-sm text-gray-500 italic">No groups yet</p>
+        <p v-if="wordbookGroupsStore.tabs.length === 0" class="px-3 py-1.5 text-xs text-gray-500 italic">No groups yet</p>
       </div>
     </div>
   </Teleport>
@@ -1355,6 +1358,8 @@ function _openGroupMenu() {
   groupMenuVisible.value = true
   // Click swallowing is handled by useLongPress (groupMenuPopupRef guard).
   nextTick(() => { _repositionGroupMenu(rect); _scrollToActiveGroup() })
+  // Fetch unfiltered entry counts in the background; updates reactively.
+  wordbookGroupsStore.fetchGroupCounts().catch(() => {})
 }
 
 function _scrollToActiveGroup() {

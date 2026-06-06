@@ -79,6 +79,18 @@
               @input="onSearchInput"
               @keydown="onSearchKeydown"
             />
+            <!-- Translate search query in Translator -->
+            <button
+              :disabled="!searchQuery.trim()"
+              class="p-1.5 transition-colors shrink-0"
+              :class="searchQuery.trim() ? 'text-gray-500 hover:text-gray-300' : 'text-gray-700 cursor-not-allowed'"
+              title="Translate in Translator"
+              @click.stop="translateSearchQuery"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12.87 15.07l-2.54-2.51.03-.03A17.52 17.52 0 0 0 14.07 6H17V4h-7V2H8v2H1v2h11.17C11.5 7.92 10.44 9.75 9 11.35 8.07 10.32 7.3 9.19 6.69 8h-2c.73 1.63 1.73 3.17 2.98 4.56l-5.09 5.02L4 19l5-5 3.11 3.11.76-2.04zM18.5 10h-2L12 22h2l1.12-3h4.75L21 22h2l-4.5-12zm-2.62 7l1.62-4.33L19.12 17h-3.24z"/>
+              </svg>
+            </button>
             <!-- Clear search query button -->
             <button
               class="p-1.5 mr-0.5 transition-colors text-gray-500 hover:text-gray-300 shrink-0"
@@ -702,7 +714,7 @@
 
 <script setup lang="ts">
 import { computed, nextTick, onActivated, onBeforeUnmount, onDeactivated, onMounted, ref, watch } from 'vue'
-import { onBeforeRouteLeave } from 'vue-router'
+import { onBeforeRouteLeave, useRouter } from 'vue-router'
 import { useWordbookStore } from '@/stores/wordbook'
 import { useWordbookUiStore, type DensityLevel } from '@/stores/wordbookUi'
 import { useWordbookGroupsStore, type WordGroup } from '@/stores/wordbookGroups'
@@ -724,11 +736,14 @@ import {
 } from '@/utils/entryColors'
 import { wordbookApi } from '@/api/wordbook'
 import type { WordbookEntry as WordbookEntryData, WordbookSearchEntry } from '@/types'
+import { useTranslatorStore } from '@/stores/translator'
 
 const store = useWordbookStore()
 const toast = useToastStore()
 const uiStore = useWordbookUiStore()
 const groupsStore = useWordbookGroupsStore()
+const translatorStore = useTranslatorStore()
+const router = useRouter()
 // Tab row shows only non-hidden groups (hidden groups are managed via the More… popup)
 const tabRowTabs = computed(() => groupsStore.filteredTabs.filter((t) => !t.hidden))
 
@@ -1264,8 +1279,10 @@ function onGroupsPopupOutsideClick(e: MouseEvent) {
 watch(showGroupsPopup, (open) => {
   if (open) {
     document.addEventListener('click', onGroupsPopupOutsideClick, true)
+    window.addEventListener('resize', _realignGroupsPopup)
   } else {
     document.removeEventListener('click', onGroupsPopupOutsideClick, true)
+    window.removeEventListener('resize', _realignGroupsPopup)
     hoveredPopupTabId.value = null
   }
 })
@@ -1608,6 +1625,16 @@ function checkTabsFit() {
   applyWindow(bestStart, bestCount)
 }
 
+/** Recomputes left/right alignment of the groups popup; safe to call on resize. */
+function _realignGroupsPopup() {
+  const popup = groupsPopupEl.value
+  const container = addGroupBtnContainerEl.value
+  if (!popup || !container) return
+  const cRect = container.getBoundingClientRect()
+  const pWidth = popup.getBoundingClientRect().width
+  groupsPopupAlignRight.value = cRect.left + pWidth + 4 > window.innerWidth
+}
+
 async function toggleGroupsPopup() {
   if (showGroupsPopup.value) { showGroupsPopup.value = false; return }
   showGroupsPopup.value = true
@@ -1619,13 +1646,7 @@ async function toggleGroupsPopup() {
   await nextTick()
   const popup = groupsPopupEl.value
   if (!popup) return
-  // Align right when left-aligning would overflow the viewport right edge.
-  const container = addGroupBtnContainerEl.value
-  if (container) {
-    const cRect = container.getBoundingClientRect()
-    const pWidth = popup.getBoundingClientRect().width
-    groupsPopupAlignRight.value = cRect.left + pWidth + 4 > window.innerWidth
-  }
+  _realignGroupsPopup()
   const activeId = uiStore.activeGroupId
   const tabs = popupVisibleTabs.value
   const activeIndex = tabs.findIndex(t => t.id === activeId)
@@ -1752,7 +1773,7 @@ watch(() => uiStore.activeGroupId, () => {
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-const SEARCH_FIXED_WIDTH = 250  // px — fixed width of the search input box
+const SEARCH_FIXED_WIDTH = 280  // px — fixed width of the search input box
 const SEARCH_RESULT_LIMIT = 10  // max results returned by the search API
 
 const searchActive = ref(false)
@@ -1816,6 +1837,14 @@ function clearSearchQuery() {
   searchDone.value = false
   focusedResultIndex.value = -1
   searchInputEl.value?.focus()
+}
+
+function translateSearchQuery() {
+  const query = searchQuery.value.trim()
+  if (!query) return
+  cancelSearch()
+  translatorStore.translateWord(query, 'auto')
+  router.push({ name: 'translator' })
 }
 
 async function activateSearch() {
