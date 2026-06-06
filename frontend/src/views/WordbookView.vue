@@ -1716,18 +1716,6 @@ const hoveredPopupTabId = ref<number | null>(null)
 const popupVisibleTabs = computed(() =>
   groupsStore.filteredTabs.filter(t => !t.hidden || groupsStore.showHiddenGroups)
 )
-
-/** Returns the formatted entry count string for a group popup item. */
-function groupCountLabel(groupId: number): string {
-  const count = groupsStore.groupCounts.get(groupId)
-  if (count === undefined) return ''
-  const anyFilterActive = uiStore.activeLangs.length > 0 || uiStore.activeColors.length > 0
-  if (anyFilterActive && count.filtered < count.total) {
-    return `${count.filtered}/${count.total}`
-  }
-  return `${count.total}`
-}
-
 const hasHiddenGroups = computed(() => groupsStore.filteredTabs.some(t => t.hidden))
 watch(hasHiddenGroups, (has) => { if (!has) groupsStore.showHiddenGroups = false })
 
