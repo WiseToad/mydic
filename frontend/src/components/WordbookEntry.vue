@@ -268,14 +268,17 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     <button
                       v-for="tab in groupsStore.tabs.filter(t => !t.hidden)"
                       :key="tab.id"
-                      class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
+                      class="w-full text-left text-xs whitespace-nowrap transition-colors flex items-center"
                       :class="entry.group.id === tab.id
                         ? 'text-primary-400 bg-primary-500/10'
                         : 'text-gray-300 hover:bg-surface-800'"
                       @click="handleMoveToGroup(tab.id)"
                     >
-                      <span class="flex-1 truncate">{{ tab.name }}</span>
-                      <span v-if="entry.group.id === tab.id" class="shrink-0 text-primary-400">✓</span>
+                      <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
+                      <span class="shrink-0 w-10 py-1.5 text-right text-gray-500 tabular-nums">{{ groupsStore.groupCounts.get(tab.id)?.total ?? '' }}</span>
+                      <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
+                        <svg v-if="entry.group.id === tab.id" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                      </span>
                     </button>
                   </div>
                   <button
@@ -695,6 +698,8 @@ async function toggleMoveToSubmenu() {
         : 'left'
     showColorSubmenu.value = false
     showMoveToSubmenu.value = true
+    // Fetch group counts in the background; updates reactively.
+    groupsStore.fetchGroupCounts().catch(() => {})
     await nextTick()
     const submenu = moveToSubmenuEl.value
     if (!submenu) return
