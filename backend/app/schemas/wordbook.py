@@ -128,3 +128,9 @@ class WordGroupCount(BaseModel):
     id: int
     total: int
     filtered: int  # equals total when no lang-pair filter was applied
+
+
+class WordGroupCountsResponse(BaseModel):
+    entries: list[WordGroupCount]
+    total_groups: int
+    non_hidden_groups: int

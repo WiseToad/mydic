@@ -14,6 +14,9 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   const langPairs = ref<string[]>([])
   /** Per-group entry counts, keyed by group id. Populated on demand (popup open). */
   const groupCounts = ref<Map<number, WordGroupCount>>(new Map())
+  /** Aggregate group counts from the last fetchGroupCounts / fetchGroupCountsOnly call. */
+  const totalGroups = ref(0)
+  const nonHiddenGroups = ref(0)
   /** In-memory toggle: when true, hidden groups appear in the "more…" popup. */
   const showHiddenGroups = ref(false)
 
@@ -28,11 +31,23 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   }
 
   async function fetchGroupCounts(filterLangPairs?: string[], filterColors?: string[]): Promise<void> {
-    const rows = await wordbookApi.listGroupCounts(
+    const resp = await wordbookApi.listGroupCounts(
       filterLangPairs && filterLangPairs.length > 0 ? filterLangPairs : undefined,
       filterColors && filterColors.length > 0 ? filterColors : undefined,
     )
-    groupCounts.value = new Map(rows.map((r) => [r.id, r]))
+    groupCounts.value = new Map(resp.entries.map((r) => [r.id, r]))
+    totalGroups.value = resp.total_groups
+    nonHiddenGroups.value = resp.non_hidden_groups
+  }
+
+  async function fetchGroupCountsOnly(filterLangPairs?: string[]): Promise<void> {
+    const resp = await wordbookApi.listGroupCounts(
+      filterLangPairs && filterLangPairs.length > 0 ? filterLangPairs : undefined,
+      undefined,
+      true,
+    )
+    totalGroups.value = resp.total_groups
+    nonHiddenGroups.value = resp.non_hidden_groups
   }
 
   async function addTab(name: string): Promise<WordGroup> {
@@ -137,7 +152,9 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     tabs.value = []
     langPairs.value = []
     groupCounts.value = new Map()
+    totalGroups.value = 0
+    nonHiddenGroups.value = 0
   }
 
-  return { tabs, filteredTabs, langPairs, groupCounts, showHiddenGroups, fetchGroups, fetchLangPairs, fetchGroupCounts, addTab, renameTab, deleteTab, toggleHidden, assignEntry, reorderTabs, restoreTabsOrder, reset }
+  return { tabs, filteredTabs, langPairs, groupCounts, totalGroups, nonHiddenGroups, showHiddenGroups, fetchGroups, fetchLangPairs, fetchGroupCounts, fetchGroupCountsOnly, addTab, renameTab, deleteTab, toggleHidden, assignEntry, reorderTabs, restoreTabsOrder, reset }
 })

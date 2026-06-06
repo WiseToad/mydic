@@ -34,6 +34,7 @@ from app.schemas.wordbook import (
     WordbookSearchGroup,
     WordbookSearchResponse,
     WordGroupCount,
+    WordGroupCountsResponse,
     WordGroupCreate,
     WordGroupResponse,
     WordGroupUpdate,
@@ -436,28 +437,70 @@ async def reorder_entries(
 # Word groups
 # ---------------------------------------------------------------------------
 
-@router.get("/groups/counts", response_model=list[WordGroupCount])
+@router.get("/groups/counts", response_model=WordGroupCountsResponse)
 async def list_group_counts(
     lang_pair: list[str] = Query(default=[]),
     colors: list[str] = Query(default=[]),
+    groups_only: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Return total and filtered entry counts per group.
+    """Return total and filtered entry counts per group, plus aggregate group counts.
 
     When lang_pair or colors are supplied, `filtered` reflects entries
     matching ALL active filter dimensions (AND logic across dimensions,
     OR logic within each dimension).
+
+    When groups_only=True, per-group entry counts are skipped (entries=[])
+    and only total_groups / non_hidden_groups are returned.
     """
-    # All group IDs for this user (preserving display order).
-    all_group_ids = (
+    # All groups for this user with hidden flag (preserving display order).
+    all_groups_meta = (
         await db.execute(
-            select(WordGroup.id)
+            select(WordGroup.id, WordGroup.hidden)
             .where(WordGroup.user_id == current_user.id)
             .order_by(WordGroup.position, WordGroup.id)
         )
-    ).scalars().all()
+    ).all()
+    all_group_ids = [row.id for row in all_groups_meta]
+    hidden_by_id: dict[int, bool] = {row.id: row.hidden for row in all_groups_meta}
 
+    # Parse lang-pair filter (shared by group-level summary and entry counts).
+    pairs: list[tuple[str, str]] = [
+        (parts[0], parts[1])
+        for p in lang_pair
+        if len(parts := p.split(":", 1)) == 2
+    ]
+
+    # Group-level summary: count groups visible under the current lang-pair filter.
+    if pairs:
+        lp_conditions = [
+            and_(WordbookEntry.source_lang == src, WordbookEntry.target_lang == tgt)
+            for src, tgt in pairs
+        ]
+        in_filter_gids = set(
+            (await db.execute(
+                select(distinct(WordbookEntry.group_id)).where(
+                    WordbookEntry.user_id == current_user.id,
+                    or_(*lp_conditions),
+                )
+            )).scalars().all()
+        )
+        visible_ids = [gid for gid in all_group_ids if gid in in_filter_gids]
+    else:
+        visible_ids = list(all_group_ids)
+
+    total_groups = len(visible_ids)
+    non_hidden_groups = sum(1 for gid in visible_ids if not hidden_by_id.get(gid, False))
+
+    if groups_only:
+        return WordGroupCountsResponse(
+            entries=[],
+            total_groups=total_groups,
+            non_hidden_groups=non_hidden_groups,
+        )
+
+    # Per-group entry counts.
     # Total entry count per group (no filters).
     total_rows = (
         await db.execute(
@@ -475,20 +518,14 @@ async def list_group_counts(
     if any_filter:
         filter_clauses = []
 
-        if lang_pair:
-            pairs = [
-                (parts[0], parts[1])
-                for p in lang_pair
-                if len(parts := p.split(":", 1)) == 2
-            ]
-            if pairs:
-                filter_clauses.append(or_(*[
-                    and_(
-                        WordbookEntry.source_lang == src,
-                        WordbookEntry.target_lang == tgt,
-                    )
-                    for src, tgt in pairs
-                ]))
+        if pairs:
+            filter_clauses.append(or_(*[
+                and_(
+                    WordbookEntry.source_lang == src,
+                    WordbookEntry.target_lang == tgt,
+                )
+                for src, tgt in pairs
+            ]))
 
         if colors:
             has_none = "none" in colors
@@ -514,7 +551,7 @@ async def list_group_counts(
             ).all()
             filtered = {row.group_id: row.cnt for row in filtered_rows}
 
-    return [
+    entries = [
         WordGroupCount(
             id=gid,
             total=totals.get(gid, 0),
@@ -522,6 +559,11 @@ async def list_group_counts(
         )
         for gid in all_group_ids
     ]
+    return WordGroupCountsResponse(
+        entries=entries,
+        total_groups=total_groups,
+        non_hidden_groups=non_hidden_groups,
+    )
 
 
 @router.get("/groups", response_model=list[WordGroupResponse])

@@ -106,6 +106,12 @@ export interface WordGroupCount {
   filtered: number
 }
 
+export interface WordGroupCountsResponse {
+  entries: WordGroupCount[]
+  total_groups: number
+  non_hidden_groups: number
+}
+
 export interface ContextExample {
   source: string
   target: string

@@ -483,7 +483,7 @@
                 <!-- Fixed-width slot keeps count at a stable position -->
                 <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
                   <button
-                    v-if="hoveredPopupTabId === tab.id"
+                    v-if="hoveredPopupTabId === tab.id || isNoPointer"
                     class="transition-colors leading-none"
                     :class="tab.hidden ? 'text-gray-600 hover:text-emerald-400' : 'text-gray-600 hover:text-amber-400'"
                     :title="tab.hidden ? 'Show group' : 'Hide group'"
@@ -506,14 +506,20 @@
             <!-- Fixed bottom panel: always visible, not scrollable -->
             <div class="border-t border-surface-700 py-1">
               <button
+                class="w-full text-left text-xs hover:bg-surface-800 transition-colors flex items-center"
+                :class="groupsStore.showHiddenGroups ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
+                @click.stop="groupsStore.showHiddenGroups = !groupsStore.showHiddenGroups"
+              >
+                <span class="flex-1 px-3 py-1.5 whitespace-nowrap">Show hidden</span>
+                <span v-if="showHiddenGroupCountLabel" class="shrink-0 w-14 py-1.5 text-right text-gray-500 tabular-nums">{{ showHiddenGroupCountLabel }}</span>
+                <span class="shrink-0 w-8 py-1.5 flex items-center justify-center">
+                  <span v-if="groupsStore.showHiddenGroups">✓</span>
+                </span>
+              </button>
+              <button
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
                 @click="addNewTabFromPopup"
               >Add group</button>
-              <button
-                class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-800 transition-colors flex items-center"
-                :class="groupsStore.showHiddenGroups ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
-                @click.stop="groupsStore.showHiddenGroups = !groupsStore.showHiddenGroups"
-              >Show Hidden<span v-if="groupsStore.showHiddenGroups" class="ml-auto shrink-0">✓</span></button>
             </div>
           </div>
         </div>
@@ -1269,6 +1275,14 @@ const isPortrait = ref(false)
 const isVeryNarrow = ref(false)
 let portraitMq: MediaQueryList | null = null
 
+// No-pointer (touch-only) detection — used to always show the hide-eye button on Android.
+const isNoPointer = ref(false)
+let noPointerMq: MediaQueryList | null = null
+
+function onNoPointerChange(e: MediaQueryListEvent) {
+  isNoPointer.value = e.matches
+}
+
 function onPortraitChange() {
   const newPortrait = portraitMq?.matches ?? false
   if (isPortrait.value !== newPortrait) {
@@ -1652,9 +1666,20 @@ function groupCountLabel(groupId: number): string {
   return `${count.total}`
 }
 
+/** Group count label for the "Show hidden" menu item. */
+const showHiddenGroupCountLabel = computed(() => {
+  const total = groupsStore.filteredTabs.length
+  if (total === 0) return ''
+  const visible = groupsStore.filteredTabs.filter(t => !t.hidden).length
+  return groupsStore.showHiddenGroups ? `${visible}/${total}` : `${visible}`
+})
+
 async function toggleHideTabFromPopup(id: number) {
   const wasActive = uiStore.activeGroupId === id
   const idxBefore = tabRowTabs.value.findIndex((t) => t.id === id)
+  const tab = groupsStore.tabs.find((t) => t.id === id)
+  const wasHidden = tab?.hidden ?? false
+  const tabName = tab?.name ?? ''
   try {
     await groupsStore.toggleHidden(id)
   } catch (e: unknown) {
@@ -1666,6 +1691,21 @@ async function toggleHideTabFromPopup(id: number) {
     const visible = tabRowTabs.value
     const next = visible[idxBefore] ?? visible[visible.length - 1] ?? null
     uiStore.activeGroupId = next?.id ?? null
+  }
+  // Show undo toast when hiding a group while "Show hidden" mode is off.
+  if (!wasHidden && !groupsStore.showHiddenGroups) {
+    toast.undo(`"${tabName}" hidden`, async () => {
+      try {
+        await groupsStore.toggleHidden(id)
+        if (wasActive) uiStore.activeGroupId = id
+      } catch (e: unknown) {
+        toast.error(extractErrorMessage(e, 'Failed to restore group'))
+        return
+      }
+      // Re-open the popup so the user can see the restored group.
+      await nextTick()
+      await toggleGroupsPopup()
+    })
   }
 }
 
@@ -2783,6 +2823,10 @@ onMounted(() => {
     portraitMq = window.matchMedia('(orientation: portrait)')
     isPortrait.value = portraitMq.matches
     portraitMq.addEventListener('change', onPortraitChange)
+    // No-pointer (touch-only) detection for Android
+    noPointerMq = window.matchMedia('(hover: none) and (pointer: coarse)')
+    isNoPointer.value = noPointerMq.matches
+    noPointerMq.addEventListener('change', onNoPointerChange)
   }
   // ResizeObserver on header rows + toolbar for layout re-checks
   if (typeof ResizeObserver !== 'undefined') {
@@ -2801,6 +2845,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   portraitMq?.removeEventListener('change', onPortraitChange)
+  noPointerMq?.removeEventListener('change', onNoPointerChange)
   headerResizeObserver?.disconnect()
   clearCardLongPress()
   _disconnectOverlayObs()
