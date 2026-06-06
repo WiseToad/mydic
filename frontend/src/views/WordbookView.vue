@@ -289,21 +289,16 @@
           <!-- long-press in any state resets all hintVisible flags across all groups -->
           <button
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="store.entries.length === 0 && !uiStore.anyHintInOtherGroups
-              ? 'text-gray-700 cursor-not-allowed'
-              : translateBtnState === 'active' ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
-            :disabled="store.entries.length === 0 && !uiStore.anyHintInOtherGroups"
+            :class="translateBtnState === 'active' ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
           @pointerdown="onTranslateBtnPointerDown"
           @pointerup="onTranslateBtnPointerUp"
           @pointerleave="onTranslateBtnCancel"
           @pointercancel="onTranslateBtnCancel"
           @contextmenu.prevent
           @click.stop
-            :title="store.entries.length === 0 && !uiStore.anyHintInOtherGroups
-              ? 'No entries'
-              : translateBtnState === 'active'
-                ? 'Hide all translations · Hold to hide globally'
-                : 'Show all translations'"
+            :title="translateBtnState === 'active'
+              ? 'Hide all translations · Hold to hide globally'
+              : 'Show all translations'"
           >
             <!-- active or ghost: plain open eye -->
             <svg v-if="translateBtnState !== 'striked'" viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -320,12 +315,9 @@
           <button
             ref="swapDisplayBtnEl"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="store.entries.length === 0
-              ? 'text-gray-700 cursor-not-allowed'
-              : uiStore.swapDisplay ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
-            :disabled="store.entries.length === 0"
+            :class="uiStore.swapDisplay ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
             @click="uiStore.swapDisplay = !uiStore.swapDisplay"
-            :title="store.entries.length === 0 ? 'No entries' : uiStore.swapDisplay ? 'Disable swap display' : 'Enable swap display'"
+            :title="uiStore.swapDisplay ? 'Disable swap display' : 'Enable swap display'"
           >
             <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <path d="M2 5h9"/>
@@ -339,12 +331,12 @@
           <button
             ref="sidePanelToggleBtnEl"
             class="p-1.5 transition-colors rounded-lg border border-surface-700"
-            :class="store.entries.length === 0
+            :class="filteredEntries.length === 0
               ? 'text-gray-700 cursor-not-allowed'
               : uiStore.sidePanelVisible ? 'text-primary-400 bg-primary-500/10' : 'text-gray-500 hover:text-gray-300'"
-            :disabled="store.entries.length === 0"
+            :disabled="filteredEntries.length === 0"
             @click="uiStore.sidePanelVisible = !uiStore.sidePanelVisible"
-            :title="store.entries.length === 0 ? 'No entries' : uiStore.sidePanelVisible ? 'Hide word list' : 'Show word list'"
+            :title="filteredEntries.length === 0 ? 'No entries' : uiStore.sidePanelVisible ? 'Hide word list' : 'Show word list'"
           >
             <svg viewBox="0 0 16 16" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
               <rect x="1.5" y="2.5" width="13" height="11" rx="1.5"/>
@@ -397,7 +389,7 @@
 
         <!-- Each group tab -->
         <div
-        v-for="tab in groupsStore.filteredTabs"
+        v-for="tab in tabRowTabs"
           v-show="!overflowedTabIds.has(tab.id)"
           :key="tab.id"
           :data-tab-id="tab.id"
@@ -453,12 +445,12 @@
           <button
             ref="addGroupBtnEl"
             class="px-2.5 py-1 text-xs border border-dashed rounded-full transition-colors"
-            :class="groupsStore.filteredTabs.length === 0
+            :class="tabRowTabs.length === 0
               ? 'text-gray-600 hover:text-gray-300 border-surface-700 hover:border-surface-500'
               : 'text-gray-400 border-surface-600 hover:text-gray-300 hover:border-surface-500'"
-            @click="groupsStore.filteredTabs.length === 0 ? addNewTab() : toggleGroupsPopup()"
-            :title="groupsStore.filteredTabs.length === 0 ? 'Add group' : 'Show all groups'"
-          >{{ groupsStore.filteredTabs.length === 0 ? 'Add group' : 'more ...' }}</button>
+            @click="tabRowTabs.length === 0 ? addNewTab() : toggleGroupsPopup()"
+            :title="tabRowTabs.length === 0 ? 'Add group' : 'Show all groups'"
+          >{{ tabRowTabs.length === 0 ? 'Add group' : 'more ...' }}</button>
 
           <!-- Groups popup -->
           <div
@@ -470,27 +462,42 @@
             <!-- Scrollable group list only -->
             <div class="overflow-y-auto max-h-52 py-1">
               <div
-                v-for="tab in groupsStore.filteredTabs"
+                v-for="tab in popupVisibleTabs"
                 :key="tab.id"
                 :data-popup-group-item="tab.id"
                 class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none cursor-default"
                 :class="uiStore.activeGroupId === tab.id
                   ? 'text-primary-400 bg-primary-500/10'
+                  : tab.hidden ? 'text-gray-500 hover:bg-surface-800'
                   : 'text-gray-300 hover:bg-surface-800'"
                 @mouseenter="hoveredPopupTabId = tab.id"
                 @mouseleave="hoveredPopupTabId = null"
-                @click.stop="selectTabFromPopup(tab.id)"
+                @click.stop="!tab.hidden && selectTabFromPopup(tab.id)"
               >
-                <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
+                <span
+                  class="flex-1 px-3 py-1.5 truncate"
+                  :class="tab.hidden ? 'line-through' : ''"
+                >{{ tab.name }}</span>
                 <span class="shrink-0 w-14 py-1.5 text-right text-gray-500 tabular-nums">{{ groupCountLabel(tab.id) }}</span>
                 <!-- Fixed-width slot keeps count at a stable position -->
                 <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
                   <button
                     v-if="hoveredPopupTabId === tab.id"
-                    class="text-gray-600 hover:text-red-400 transition-colors leading-none"
-                    title="Delete group"
-                    @click.stop="deleteTabFromPopup(tab.id)"
-                  >×</button>
+                    class="transition-colors leading-none"
+                    :class="tab.hidden ? 'text-gray-600 hover:text-emerald-400' : 'text-gray-600 hover:text-amber-400'"
+                    :title="tab.hidden ? 'Show group' : 'Hide group'"
+                    @click.stop="toggleHideTabFromPopup(tab.id)"
+                  >
+                    <!-- Open eye: group is hidden → click to unhide -->
+                    <svg v-if="tab.hidden" viewBox="0 0 16 16" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8s-2.5 4.5-6.5 4.5S1.5 8 1.5 8z"/>
+                      <circle cx="8" cy="8" r="2"/>
+                    </svg>
+                    <!-- Striked eye: group is visible → click to hide -->
+                    <svg v-else viewBox="0 0 16 16" class="w-3 h-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 2l12 12M6.5 6.6a2 2 0 0 0 2.9 2.9M3.3 5.2C2.2 6.3 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1 0 1.9-.3 2.7-.7M13.1 10.4c.9-1 1.4-2.4 1.4-2.4s-2.5-4.5-6.5-4.5c-.5 0-1 .1-1.4.2"/>
+                    </svg>
+                  </button>
                   <span v-else-if="uiStore.activeGroupId === tab.id" class="text-primary-400">✓</span>
                 </span>
               </div>
@@ -501,6 +508,11 @@
                 class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:text-gray-300 hover:bg-surface-800 transition-colors"
                 @click="addNewTabFromPopup"
               >Add group</button>
+              <button
+                class="w-full text-left px-3 py-1.5 text-xs hover:bg-surface-800 transition-colors flex items-center"
+                :class="groupsStore.showHiddenGroups ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
+                @click.stop="groupsStore.showHiddenGroups = !groupsStore.showHiddenGroups"
+              >Show Hidden<span v-if="groupsStore.showHiddenGroups" class="ml-auto shrink-0">✓</span></button>
             </div>
           </div>
         </div>
@@ -710,6 +722,8 @@ const store = useWordbookStore()
 const toast = useToastStore()
 const uiStore = useWordbookUiStore()
 const groupsStore = useWordbookGroupsStore()
+// Tab row shows only non-hidden groups (hidden groups are managed via the More… popup)
+const tabRowTabs = computed(() => groupsStore.filteredTabs.filter((t) => !t.hidden))
 
 // ─── Skeleton delay + display freeze ────────────────────────────────────────
 // stableEntries holds the last committed entry list. During the pre-skeleton
@@ -781,7 +795,7 @@ watch(
     if (!viewIsActive.value) return
     await groupsStore.fetchGroups(newLangs.length > 0 ? [...newLangs] : undefined)
     const groupIdBefore = uiStore.activeGroupId
-    uiStore.initActiveGroup(groupsStore.filteredTabs)
+    uiStore.initActiveGroup(tabRowTabs.value)
     // If initActiveGroup changed the active group, the activeGroupId watcher
     // will fetch entries for the new group — skip here to avoid a duplicate fetch.
     if (uiStore.activeGroupId !== groupIdBefore) return
@@ -1156,7 +1170,7 @@ function cancelTabEdit() {
 
 async function addNewTab() {
   const existingNames = new Set(groupsStore.tabs.map((t) => t.name))
-  let n = groupsStore.filteredTabs.length + 1
+  let n = tabRowTabs.value.length + 1
   while (existingNames.has(`Group ${n}`)) n++
   try {
     const tab = await groupsStore.addTab(`Group ${n}`)
@@ -1180,12 +1194,12 @@ async function confirmDeleteTab() {
   const id = pendingDeleteTabId.value
   pendingDeleteTabId.value = null
   const wasActive = uiStore.activeGroupId === id
-  const deletedIndex = groupsStore.filteredTabs.findIndex((t) => t.id === id)
+  const deletedIndex = tabRowTabs.value.findIndex((t) => t.id === id)
   try {
     await groupsStore.deleteTab(id)
     uiStore.deleteGroupEntries(id)
     if (wasActive) {
-      const next = groupsStore.filteredTabs[deletedIndex] ?? groupsStore.filteredTabs[groupsStore.filteredTabs.length - 1] ?? null
+      const next = tabRowTabs.value[deletedIndex] ?? tabRowTabs.value[tabRowTabs.value.length - 1] ?? null
       uiStore.activeGroupId = next?.id ?? null  // the activeGroupId watcher handles the rest
     }
   } catch (e: unknown) {
@@ -1443,7 +1457,7 @@ function checkTabsFit() {
   const addBtn = addGroupBtnEl.value
   if (!rowEl || !addBtn) return
 
-  const tabs = groupsStore.filteredTabs
+  const tabs = tabRowTabs.value
   const containerWidth = getWidth(rowEl)
   let btnW = getWidth(addBtn)
   if (btnW === 0) btnW = 64
@@ -1590,7 +1604,7 @@ async function toggleGroupsPopup() {
   const popup = groupsPopupEl.value
   if (!popup) return
   const activeId = uiStore.activeGroupId
-  const tabs = groupsStore.filteredTabs
+  const tabs = popupVisibleTabs.value
   const activeIndex = tabs.findIndex(t => t.id === activeId)
   if (activeIndex === -1) return
   const items = Array.from(popup.querySelectorAll<HTMLElement>('[data-popup-group-item]'))
@@ -1614,6 +1628,10 @@ async function addNewTabFromPopup() {
 // ─── Groups popup item interactions ──────────────────────────────────────────
 const hoveredPopupTabId = ref<number | null>(null)
 
+const popupVisibleTabs = computed(() =>
+  groupsStore.filteredTabs.filter(t => !t.hidden || groupsStore.showHiddenGroups)
+)
+
 /** Returns the formatted entry count string for a group popup item. */
 function groupCountLabel(groupId: number): string {
   const count = groupsStore.groupCounts.get(groupId)
@@ -1625,9 +1643,21 @@ function groupCountLabel(groupId: number): string {
   return `${count.total}`
 }
 
-function deleteTabFromPopup(id: number) {
-  showGroupsPopup.value = false
-  deleteTab(id)
+async function toggleHideTabFromPopup(id: number) {
+  const wasActive = uiStore.activeGroupId === id
+  const idxBefore = tabRowTabs.value.findIndex((t) => t.id === id)
+  try {
+    await groupsStore.toggleHidden(id)
+  } catch (e: unknown) {
+    toast.error(extractErrorMessage(e, 'Failed to update group'))
+    return
+  }
+  // If we just hid the active group, auto-select a replacement.
+  if (wasActive && groupsStore.tabs.find((t) => t.id === id)?.hidden) {
+    const visible = tabRowTabs.value
+    const next = visible[idxBefore] ?? visible[visible.length - 1] ?? null
+    uiStore.activeGroupId = next?.id ?? null
+  }
 }
 
 // ─── Combined header layout check ────────────────────────────────────────────
@@ -1650,11 +1680,11 @@ function checkHeaderLayout() {
 let headerResizeObserver: ResizeObserver | null = null
 
 watch(
-  [() => groupsStore.filteredTabs.map((t) => t.name).join('|'), tabEditName],
+  [() => tabRowTabs.value.map((t) => t.name).join('|'), tabEditName],
   () => { nextTick(() => checkHeaderLayout()) },
 )
 watch(
-  () => groupsStore.filteredTabs.length,
+  () => tabRowTabs.value.length,
   () => { nextTick(() => checkTabsFit()) },
 )
 // Re-check when label text changes (width may change: "42" vs "42 entries")
@@ -1740,6 +1770,7 @@ function clearSearchQuery() {
 }
 
 async function activateSearch() {
+  showGroupsPopup.value = false
   searchActive.value = true
   await nextTick()
   searchInputEl.value?.focus()
@@ -2202,7 +2233,7 @@ const {
     longPressReadyTabId.value = null
     if (!state) return
     if (state.onDeleteButton) { deleteTab(state.tabId); return }
-    const tab = groupsStore.filteredTabs.find(t => t.id === state.tabId)
+    const tab = groupsStore.tabs.find(t => t.id === state.tabId)
     if (tab) startTabEdit(tab)
   },
   // onDragStart: sets isDragging, creates the ghost, and starts draggedTabId.
@@ -2831,7 +2862,7 @@ onActivated(async () => {
     }
   }
   await Promise.all([langPairsTask, groupsTask])
-  uiStore.initActiveGroup(groupsStore.filteredTabs)
+  uiStore.initActiveGroup(tabRowTabs.value)
   handlePendingHighlight()
 })
 

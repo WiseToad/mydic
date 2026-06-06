@@ -14,6 +14,8 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
   const langPairs = ref<string[]>([])
   /** Per-group entry counts, keyed by group id. Populated on demand (popup open). */
   const groupCounts = ref<Map<number, WordGroupCount>>(new Map())
+  /** In-memory toggle: when true, hidden groups appear in the "more…" popup. */
+  const showHiddenGroups = ref(false)
 
   async function fetchGroups(filterLangPairs?: string[]): Promise<void> {
     tabs.value = await wordbookApi.listGroups(
@@ -57,6 +59,14 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     tabs.value = tabs.value.filter((t) => t.id !== id)
     // Entries are deleted server-side via CASCADE; refresh lang-pairs.
     fetchLangPairs().catch(() => {})
+  }
+
+  async function toggleHidden(id: number): Promise<void> {
+    const tab = tabs.value.find((t) => t.id === id)
+    if (!tab) return
+    const updated = await wordbookApi.updateGroup(id, { hidden: !tab.hidden })
+    const idx = tabs.value.findIndex((t) => t.id === id)
+    if (idx !== -1) tabs.value[idx] = updated
   }
 
   /**
@@ -129,5 +139,5 @@ export const useWordbookGroupsStore = defineStore('wordbookGroups', () => {
     groupCounts.value = new Map()
   }
 
-  return { tabs, filteredTabs, langPairs, groupCounts, fetchGroups, fetchLangPairs, fetchGroupCounts, addTab, renameTab, deleteTab, assignEntry, reorderTabs, restoreTabsOrder, reset }
+  return { tabs, filteredTabs, langPairs, groupCounts, showHiddenGroups, fetchGroups, fetchLangPairs, fetchGroupCounts, addTab, renameTab, deleteTab, toggleHidden, assignEntry, reorderTabs, restoreTabsOrder, reset }
 })

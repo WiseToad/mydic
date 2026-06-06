@@ -142,7 +142,7 @@ async def search_entries(
             wg.id   AS wg_id,
             wg.name AS wg_name
         FROM wordbook_entries we
-        JOIN word_groups wg ON wg.id = we.group_id
+        JOIN word_groups wg ON wg.id = we.group_id AND wg.hidden = false
         WHERE we.user_id = :uid
           {lang_pair_clause}
           {color_clause}
@@ -576,6 +576,7 @@ async def list_groups(
             name=g.name,
             position=g.position,
             in_filter=True if in_filter_ids is None else (g.id in in_filter_ids),
+            hidden=g.hidden,
         )
         for g in all_groups
     ]
@@ -633,6 +634,8 @@ async def update_group(
         group.name = data["name"].strip()
     if "position" in data and data["position"] is not None:
         group.position = data["position"]
+    if "hidden" in data and data["hidden"] is not None:
+        group.hidden = data["hidden"]
 
     try:
         await db.commit()

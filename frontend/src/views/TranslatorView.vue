@@ -113,15 +113,32 @@
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"/>
               </svg>
             </button>
-            <!-- Already saved: click to jump to the wordbook card -->
+            <!-- Already saved and group is visible: click to jump to the wordbook card -->
             <button
-              v-else-if="store.result && isAlreadyInWordbook && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'idle'"
+              v-else-if="store.result && isAlreadyInWordbook && !isInHiddenGroup && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'idle'"
               title="Show in Wordbook"
               class="inline-flex items-center h-8 text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/10 rounded-full transition-colors"
               :class="wordbookGroupName ? 'gap-1.5 px-2' : 'w-8 justify-center'"
               @click="openInWordbook"
             >
               <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z"/></svg>
+              <span v-if="wordbookGroupName" class="text-xs text-gray-500 truncate max-w-[6rem]">{{ wordbookGroupName }}</span>
+            </button>
+            <!-- Already saved but in a hidden group: disabled eye · long-press to unhide -->
+            <button
+              v-else-if="store.result && isAlreadyInWordbook && isInHiddenGroup && hasEnabledAvailableTranslationProvider && wordbookLookupState === 'idle'"
+              ref="hiddenGroupBtnRef"
+              title="Word is in a hidden group · Hold to unhide"
+              class="inline-flex items-center h-8 text-gray-500 rounded-full opacity-60 cursor-default touch-none"
+              :class="wordbookGroupName ? 'gap-1.5 px-2' : 'w-8 justify-center'"
+              @pointerdown.stop.prevent="onHiddenGroupEyePointerDown"
+              @pointerup.stop="onHiddenGroupEyePointerUp"
+              @pointerleave="onHiddenGroupEyeCancel"
+              @pointercancel="onHiddenGroupEyeCancel"
+              @click.stop
+              @contextmenu.prevent
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 shrink-0" viewBox="0 0 24 24" fill="currentColor"><path d="M12 7c2.76 0 5 2.24 5 5 0 .65-.13 1.26-.36 1.83l2.92 2.92c1.51-1.26 2.7-2.89 3.43-4.75-1.73-4.39-6-7.5-11-7.5-1.4 0-2.74.25-3.98.7l2.16 2.16C10.74 7.13 11.35 7 12 7zM2 4.27l2.28 2.28.46.46C3.08 8.3 1.78 10.02 1 12c1.73 4.39 6 7.5 11 7.5 1.55 0 3.03-.3 4.38-.84l.42.42L19.73 22 21 20.73 3.27 3 2 4.27zM7.53 9.8l1.55 1.55c-.05.21-.08.43-.08.65 0 1.66 1.34 3 3 3 .22 0 .44-.03.65-.08l1.55 1.55c-.67.33-1.41.53-2.2.53-2.76 0-5-2.24-5-5 0-.79.2-1.53.53-2.2zm4.31-.78l3.15 3.15.02-.16c0-1.66-1.34-3-3-3l-.17.01z"/></svg>
               <span v-if="wordbookGroupName" class="text-xs text-gray-500 truncate max-w-[6rem]">{{ wordbookGroupName }}</span>
             </button>
             <!-- Not yet saved: add button (long-press to pick a group) -->
@@ -408,6 +425,15 @@
     @confirm="onClearHistory"
   />
 
+  <ConfirmDialog
+    v-model="showUnhideConfirmDialog"
+    title="Unhide Group"
+    :message="`The word is in the hidden group «${hiddenGroupName}». Do you want to unhide it?`"
+    confirm-text="Unhide"
+    cancel-text="Cancel"
+    @confirm="confirmUnhideGroup"
+  />
+
   <Teleport to="body">
     <button
       v-if="resultButtonVisible"
@@ -435,7 +461,7 @@
       <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Add to group</p>
       <div ref="groupMenuScrollRef" class="overflow-auto py-1">
         <button
-          v-for="group in wordbookGroupsStore.tabs"
+          v-for="group in wordbookGroupsStore.tabs.filter(g => !g.hidden)"
           :key="group.id"
           type="button"
           class="w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2"
@@ -648,6 +674,17 @@ watch(
 )
 
 const isAlreadyInWordbook = computed(() => wordbookLookup.value !== null)
+
+const isInHiddenGroup = computed<boolean>(() => {
+  if (!wordbookLookup.value) return false
+  const group = wordbookGroupsStore.tabs.find(g => g.id === wordbookLookup.value!.group_id)
+  return group?.hidden === true
+})
+
+const hiddenGroupName = computed<string>(() => {
+  if (!wordbookLookup.value) return ''
+  return wordbookGroupsStore.tabs.find(g => g.id === wordbookLookup.value!.group_id)?.name ?? ''
+})
 
 /** Group name to display next to the wordbook button.
  * - Word in wordbook: the group it belongs to.
@@ -1260,7 +1297,25 @@ async function addToWordbook(groupId?: number) {
   }
 }
 
-// ─── Add-to-wordbook long-press: group picker ────────────────────
+// ─── Hidden-group eye button: long-press to unhide ────────────────────────
+const hiddenGroupBtnRef = ref<HTMLButtonElement | null>(null)
+const showUnhideConfirmDialog = ref(false)
+
+const { onPointerDown: onHiddenGroupEyePointerDown, onPointerUp: onHiddenGroupEyePointerUp, onCancel: onHiddenGroupEyeCancel } = useLongPress(
+  () => { showUnhideConfirmDialog.value = true },
+  { suppressClickAfterLongPress: true },
+)
+
+async function confirmUnhideGroup() {
+  if (!wordbookLookup.value) return
+  try {
+    await wordbookGroupsStore.toggleHidden(wordbookLookup.value.group_id)
+  } catch (e: unknown) {
+    toast.error(extractErrorMessage(e, 'Failed to unhide group'))
+  }
+}
+
+// ─── Add-to-wordbook long-press: group picker ────────────────────────
 const addToWordbookBtnRef = ref<HTMLButtonElement | null>(null)
 const groupMenuPopupRef = ref<HTMLElement | null>(null)
 const groupMenuScrollRef = ref<HTMLElement | null>(null)

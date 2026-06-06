@@ -14,6 +14,7 @@ class WordGroupCreate(BaseModel):
 class WordGroupUpdate(BaseModel):
     name: str | None = Field(default=None, max_length=GROUP_NAME_MAX_LEN)
     position: int | None = None
+    hidden: bool | None = None
 
 
 class WordGroupResponse(BaseModel):
@@ -21,6 +22,7 @@ class WordGroupResponse(BaseModel):
     name: str
     position: int
     in_filter: bool = True
+    hidden: bool = False
     model_config = {"from_attributes": True}
 
 

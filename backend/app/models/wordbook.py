@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import ForeignKey, Text, String, Integer, UniqueConstraint, func
+from sqlalchemy import Boolean, ForeignKey, Text, String, Integer, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -42,6 +42,7 @@ class WordGroup(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
     name: Mapped[str] = mapped_column(String(200))
     position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    hidden: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     user: Mapped["User"] = relationship(back_populates="wordbookGroups")
     entries: Mapped[list["WordbookEntry"]] = relationship(back_populates="group", cascade="all, delete-orphan")

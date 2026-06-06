@@ -266,7 +266,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                     :class="submenuPlacement === 'left' ? 'right-full mr-1' : 'left-full ml-1'"
                   >
                     <button
-                      v-for="tab in groupsStore.tabs"
+                      v-for="tab in groupsStore.tabs.filter(t => !t.hidden)"
                       :key="tab.id"
                       class="text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors flex items-center gap-2"
                       :class="entry.group.id === tab.id

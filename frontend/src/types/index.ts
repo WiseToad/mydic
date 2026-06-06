@@ -22,11 +22,13 @@ export interface WordGroup {
   name: string
   position: number
   in_filter: boolean
+  hidden: boolean
 }
 
 export interface WordGroupUpdate {
   name?: string
   position?: number
+  hidden?: boolean
 }
 
 export interface WordbookEntry {
