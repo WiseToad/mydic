@@ -477,17 +477,17 @@
           <div
             v-if="showGroupsPopup"
             ref="groupsPopupEl"
-            class="absolute top-full mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[180px]"
+            class="absolute top-full mt-1 z-30 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[10rem] max-w-[16rem]"
             :class="groupsPopupAlignRight ? 'right-0' : 'left-0'"
             @click.stop
           >
             <!-- Scrollable group list only -->
-            <div class="overflow-y-auto max-h-52 py-1">
+            <div class="overflow-y-auto max-h-52 py-1 grid [grid-template-columns:minmax(0,1fr)_auto_1.5rem]">
               <div
                 v-for="tab in popupVisibleTabs"
                 :key="tab.id"
                 :data-popup-group-item="tab.id"
-                class="relative flex items-center text-xs whitespace-nowrap transition-colors select-none cursor-default"
+                class="col-span-full grid [grid-template-columns:subgrid] text-xs transition-colors select-none cursor-default"
                 :class="uiStore.activeGroupId === tab.id
                   ? 'text-primary-400 bg-primary-500/10'
                   : tab.hidden ? 'text-gray-500 hover:bg-surface-800'
@@ -497,16 +497,21 @@
                 @click.stop="!tab.hidden && selectTabFromPopup(tab.id)"
               >
                 <span
-                  class="flex-1 px-3 py-1.5 truncate"
+                  class="min-w-0 px-3 py-1.5 truncate"
                   :class="tab.hidden ? 'line-through' : ''"
                 >{{ tab.name }}</span>
-                <span class="shrink-0 w-14 py-1.5 text-right text-gray-500 tabular-nums">{{ groupCountLabel(tab.id) }}</span>
-                <!-- Fixed-width slot keeps count at a stable position -->
-                <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
+                <span class="pl-2 pr-1 py-1.5 text-right text-gray-500 tabular-nums">{{ groupsStore.groupCounts.get(tab.id)?.total ?? '' }}</span>
+                <span class="relative flex items-center justify-center py-1.5 pr-2">
+                  <!--
+                    Eye button is always in the DOM so the 2rem action column
+                    never reflowing on hover. It is hidden via `invisible` when
+                    the row is not hovered, keeping its layout footprint intact.
+                  -->
                   <button
-                    v-if="hoveredPopupTabId === tab.id || isNoPointer"
-                    class="transition-colors leading-none"
-                    :class="tab.hidden ? 'text-gray-600 hover:text-emerald-400' : 'text-gray-600 hover:text-amber-400'"
+                    class="p-0 leading-none text-gray-600"
+                    :class="hoveredPopupTabId === tab.id || isNoPointer
+                      ? (tab.hidden ? 'hover:text-emerald-400' : 'hover:text-amber-400')
+                      : 'invisible pointer-events-none'"
                     :title="tab.hidden ? 'Show group' : 'Hide group'"
                     @click.stop="toggleHideTabFromPopup(tab.id)"
                   >
@@ -520,7 +525,14 @@
                       <path d="M2 2l12 12M6.5 6.6a2 2 0 0 0 2.9 2.9M3.3 5.2C2.2 6.3 1.5 8 1.5 8s2.5 4.5 6.5 4.5c1 0 1.9-.3 2.7-.7M13.1 10.4c.9-1 1.4-2.4 1.4-2.4s-2.5-4.5-6.5-4.5c-.5 0-1 .1-1.4.2"/>
                     </svg>
                   </button>
-                  <span v-else-if="uiStore.activeGroupId === tab.id" class="text-primary-400">✓</span>
+                  <!--
+                    Checkmark for the active group: absolutely overlaid so it
+                    takes no layout space and never competes with the eye button.
+                  -->
+                  <span
+                    v-if="uiStore.activeGroupId === tab.id && !(hoveredPopupTabId === tab.id || isNoPointer)"
+                    class="absolute inset-0 right-2 flex items-center justify-center text-xs text-primary-400"
+                  >✓</span>
                 </span>
               </div>
             </div>
@@ -532,8 +544,8 @@
                 @click.stop="groupsStore.showHiddenGroups = !groupsStore.showHiddenGroups"
               >
                 <span class="flex-1 px-3 py-1.5 whitespace-nowrap">Show hidden</span>
-                <span v-if="showHiddenGroupCountLabel" class="shrink-0 w-14 py-1.5 text-right text-gray-500 tabular-nums">{{ showHiddenGroupCountLabel }}</span>
-                <span class="shrink-0 w-8 py-1.5 flex items-center justify-center">
+                <span v-if="showHiddenGroupCountLabel" class="pl-2 pr-1 py-1.5 text-right text-gray-500 tabular-nums">{{ showHiddenGroupCountLabel }}</span>
+                <span class="w-6 py-1.5 flex items-center justify-center pr-2">
                   <span v-if="groupsStore.showHiddenGroups">✓</span>
                 </span>
               </button>

@@ -261,25 +261,29 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
                   -->
                   <div
                     v-if="showMoveToSubmenu"
-                    ref="moveToSubmenuEl"
-                    class="absolute top-0 bg-surface-900 border border-surface-700 rounded-xl shadow-lg py-1 flex flex-col min-w-[160px] max-h-56 overflow-y-auto"
+                    class="absolute top-0 bg-surface-900 border border-surface-700 rounded-xl shadow-lg flex flex-col min-w-[10rem] max-w-[14rem]"
                     :class="submenuPlacement === 'left' ? 'right-full mr-1' : 'left-full ml-1'"
                   >
-                    <button
-                      v-for="tab in groupsStore.tabs.filter(t => !t.hidden)"
-                      :key="tab.id"
-                      class="w-full text-left text-xs whitespace-nowrap transition-colors flex items-center"
-                      :class="entry.group.id === tab.id
-                        ? 'text-primary-400 bg-primary-500/10'
-                        : 'text-gray-300 hover:bg-surface-800'"
-                      @click="handleMoveToGroup(tab.id)"
+                    <div
+                      ref="moveToSubmenuEl"
+                      class="overflow-y-auto max-h-[14.5rem] py-1 grid [grid-template-columns:minmax(0,1fr)_auto_1.5rem]"
                     >
-                      <span class="flex-1 px-3 py-1.5 truncate">{{ tab.name }}</span>
-                      <span class="shrink-0 w-10 py-1.5 text-right text-gray-500 tabular-nums">{{ groupsStore.groupCounts.get(tab.id)?.total ?? '' }}</span>
-                      <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
-                        <svg v-if="entry.group.id === tab.id" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
-                      </span>
-                    </button>
+                      <button
+                        v-for="tab in groupsStore.tabs.filter(t => !t.hidden)"
+                        :key="tab.id"
+                        class="col-span-full grid [grid-template-columns:subgrid] text-left text-xs transition-colors"
+                        :class="entry.group.id === tab.id
+                          ? 'text-primary-400 bg-primary-500/10'
+                          : 'text-gray-300 hover:bg-surface-800'"
+                        @click="handleMoveToGroup(tab.id)"
+                      >
+                        <span class="min-w-0 px-3 py-1.5 truncate">{{ tab.name }}</span>
+                        <span class="pl-2 pr-1 py-1.5 text-right text-gray-500 tabular-nums">{{ groupsStore.groupCounts.get(tab.id)?.total ?? '' }}</span>
+                        <span class="flex items-center justify-center py-1.5 pr-2">
+                          <svg v-if="entry.group.id === tab.id" xmlns="http://www.w3.org/2000/svg" class="w-3.5 h-3.5 text-primary-400" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+                        </span>
+                      </button>
+                    </div>
                   </div>
                   <button
                     class="text-left px-3 py-1.5 text-xs whitespace-nowrap text-gray-300 hover:bg-surface-800 transition-colors flex items-center gap-2"
@@ -659,8 +663,8 @@ const submenuPlacement = ref<'left' | 'right'>('right')
 // Tuned to fit the longest label ("No color") at the current font.
 const SUBMENU_RIGHT_RESERVE_PX = 148
 // Approximate width of the move-to submenu plus its 4px gap.
-// Wider than the color submenu to accommodate group names (min-w-[160px]).
-const MOVE_TO_SUBMENU_RIGHT_RESERVE_PX = 172
+// Capped at max-w-[14rem] = 224px; use that as the conservative reserve.
+const MOVE_TO_SUBMENU_RIGHT_RESERVE_PX = 228
 
 /** Right edge of the nearest overflow-clipping ancestor, falling back to the viewport. */
 function _clipRight(el: HTMLElement): number {

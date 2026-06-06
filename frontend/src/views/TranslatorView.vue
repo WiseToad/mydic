@@ -454,17 +454,17 @@
       v-if="groupMenuVisible"
       ref="groupMenuPopupRef"
       :style="{ left: groupMenuLeft + 'px', top: groupMenuTop + 'px' }"
-      class="fixed z-50 max-h-72 bg-surface-900 border border-surface-700 rounded-xl shadow-2xl min-w-[160px] flex flex-col"
+      class="fixed z-50 max-h-[15.875rem] bg-surface-900 border border-surface-700 rounded-xl shadow-2xl min-w-[10rem] max-w-[14rem] flex flex-col"
       @pointerdown.stop
       @click.stop
     >
       <p class="px-3 pt-1 pb-0.5 text-xs text-gray-500 font-semibold uppercase tracking-wide shrink-0">Add to group</p>
-      <div ref="groupMenuScrollRef" class="overflow-y-auto py-1">
+      <div ref="groupMenuScrollRef" class="overflow-y-auto py-1 grid [grid-template-columns:minmax(0,1fr)_auto_1.5rem]">
         <button
           v-for="group in wordbookGroupsStore.tabs.filter(g => !g.hidden)"
           :key="group.id"
           type="button"
-          class="w-full text-left text-xs whitespace-nowrap transition-colors flex items-center select-none"
+          class="col-span-full grid [grid-template-columns:subgrid] text-left text-xs transition-colors select-none"
           :class="group.in_filter === false
             ? 'text-gray-500 hover:bg-surface-800'
             : wordbookUiStore.activeGroupId === group.id
@@ -478,9 +478,9 @@
           @click.stop
           @contextmenu.prevent
         >
-          <span class="flex-1 px-3 py-1.5 truncate">{{ group.name }}</span>
-          <span class="shrink-0 w-10 py-1.5 text-right text-gray-500 tabular-nums">{{ wordbookGroupsStore.groupCounts.get(group.id)?.total ?? '' }}</span>
-          <span class="shrink-0 w-8 flex items-center justify-center py-1.5">
+          <span class="min-w-0 px-3 py-1.5 truncate">{{ group.name }}</span>
+          <span class="pl-2 pr-1 py-1.5 text-right text-gray-500 tabular-nums">{{ wordbookGroupsStore.groupCounts.get(group.id)?.total ?? '' }}</span>
+          <span class="flex items-center justify-center py-1.5 pr-2">
             <svg
               v-if="wordbookUiStore.activeGroupId === group.id"
               xmlns="http://www.w3.org/2000/svg"
@@ -491,7 +491,7 @@
             ><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
           </span>
         </button>
-        <p v-if="wordbookGroupsStore.tabs.length === 0" class="px-3 py-1.5 text-xs text-gray-500 italic">No groups yet</p>
+        <p v-if="wordbookGroupsStore.tabs.length === 0" class="col-span-full px-3 py-1.5 text-xs text-gray-500 italic">No groups yet</p>
       </div>
     </div>
   </Teleport>
