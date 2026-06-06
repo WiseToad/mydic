@@ -9,12 +9,26 @@
           ref="titleEl"
           class="text-xl font-bold shrink-0 transition-colors select-none"
           :class="'text-gray-100 hover:text-gray-300'"
-          title="Search wordbook"
-          @click="searchActive ? cancelSearch() : activateSearch()"
+          :title="!searchActive && navHistoryCursor > 0 ? 'Toggle search · Hold to go back' : undefined"
+          @pointerdown="onTitlePointerDown"
+          @pointerup="onTitlePointerUp"
+          @pointerleave="onTitleCancel"
+          @pointercancel="onTitleCancel"
+          @click.stop
+          @contextmenu.prevent
         >Wordbook</h1>
 
         <!-- Clickable gap between title and nav cluster -->
-        <div ref="titleGapEl" class="-mx-2 self-stretch w-2" @click="searchActive ? cancelSearch() : activateSearch()" />
+        <div
+          ref="titleGapEl"
+          class="-mx-2 self-stretch w-2"
+          @pointerdown="onTitlePointerDown"
+          @pointerup="onTitlePointerUp"
+          @pointerleave="onTitleCancel"
+          @pointercancel="onTitleCancel"
+          @click.stop
+          @contextmenu.prevent
+        />
 
         <!-- Search · Back · Forward — medium-density borderless cluster -->
         <div class="flex items-center gap-1 shrink-0">
@@ -482,7 +496,7 @@
             @click.stop
           >
             <!-- Scrollable group list only -->
-            <div class="overflow-y-auto max-h-52 py-1 grid [grid-template-columns:minmax(0,1fr)_auto_1.5rem]">
+            <div class="overflow-y-auto max-h-[12.75rem] py-1 grid [grid-template-columns:minmax(0,1fr)_auto_1.5rem]">
               <div
                 v-for="tab in popupVisibleTabs"
                 :key="tab.id"
@@ -539,14 +553,19 @@
             <!-- Fixed bottom panel: always visible, not scrollable -->
             <div class="border-t border-surface-700 py-1">
               <button
-                class="w-full text-left text-xs hover:bg-surface-800 transition-colors flex items-center"
-                :class="groupsStore.showHiddenGroups ? 'text-primary-400' : 'text-gray-500 hover:text-gray-300'"
+                class="w-full text-left text-xs transition-colors flex items-center"
+                :class="!hasHiddenGroups
+                  ? 'text-gray-600 cursor-not-allowed'
+                  : groupsStore.showHiddenGroups
+                    ? 'text-primary-400 hover:bg-surface-800'
+                    : 'text-gray-500 hover:text-gray-300 hover:bg-surface-800'"
+                :disabled="!hasHiddenGroups"
                 @click.stop="groupsStore.showHiddenGroups = !groupsStore.showHiddenGroups"
               >
                 <span class="flex-1 px-3 py-1.5 whitespace-nowrap">Show hidden</span>
                 <span v-if="showHiddenGroupCountLabel" class="pl-2 pr-1 py-1.5 text-right text-gray-500 tabular-nums">{{ showHiddenGroupCountLabel }}</span>
                 <span class="w-6 py-1.5 flex items-center justify-center pr-2">
-                  <span v-if="groupsStore.showHiddenGroups">✓</span>
+                <span v-if="groupsStore.showHiddenGroups && hasHiddenGroups">✓</span>
                 </span>
               </button>
               <button
@@ -1709,12 +1728,15 @@ function groupCountLabel(groupId: number): string {
   return `${count.total}`
 }
 
+const hasHiddenGroups = computed(() => groupsStore.filteredTabs.some(t => t.hidden))
+watch(hasHiddenGroups, (has) => { if (!has) groupsStore.showHiddenGroups = false })
+
 /** Group count label for the "Show hidden" menu item. */
 const showHiddenGroupCountLabel = computed(() => {
   const total = groupsStore.filteredTabs.length
   if (total === 0) return ''
   const visible = groupsStore.filteredTabs.filter(t => !t.hidden).length
-  return groupsStore.showHiddenGroups && visible !== total ? `${visible}/${total}` : `${visible}`
+  return visible !== total ? `${visible}/${total}` : `${visible}`
 })
 
 async function toggleHideTabFromPopup(id: number) {
@@ -2023,6 +2045,21 @@ watch([searchUseLangFilter, searchUseColorFilter, searchIn], () => {
 })
 // Recompute search layout whenever search mode is toggled.
 watch(searchActive, () => { nextTick(() => checkLangFit()) })
+
+// ─── Title long-press ─────────────────────────────────────────────────────────
+// Short press (tap): cancel search if active, otherwise activate it.
+// Long press (hold): navigate history back if available.
+const {
+  onPointerDown: onTitlePointerDown,
+  onPointerUp: onTitlePointerUp,
+  onCancel: onTitleCancel,
+} = useLongPress(
+  () => { if (!searchActive.value) navigateHistoryBack() },
+  {
+    onShortPress: () => searchActive.value ? cancelSearch() : activateSearch(),
+    suppressClickAfterLongPress: true,
+  },
+)
 
 // ─── Search button long-press ─────────────────────────────────────────────────
 // Short press (tap): activate search as normal.

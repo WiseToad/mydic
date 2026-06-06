@@ -807,10 +807,11 @@ watch(showActionsMenu, (open) => {
   }
 })
 
-// ── Audio-button drag guard ──────────────────────────────────────────────────
-// On Android, a long-press on a draggable element fires pointercancel before
-// AudioButton's timer fires.  Fix: disable card draggable on pointerdown over
-// an AudioButton; restore on release.
+// ── Drag guard ───────────────────────────────────────────────────────────────
+// Disable card draggable on pointerdown over elements that should not start a
+// drag: AudioButton (long-press fires pointercancel on Android before the
+// timer fires) and the actions menu container (menu items inside a draggable
+// element would otherwise start a drag instead of registering as a click).
 let _restoreCardDraggable: (() => void) | null = null
 
 function onCardPointerUpCapture() {
@@ -819,7 +820,10 @@ function onCardPointerUpCapture() {
 
 function onCardPointerDownCapture(e: PointerEvent) {
   if (editing.value) return
-  if (!(e.target as Element | null)?.closest('[data-audio-button]')) return
+  const target = e.target as Element | null
+  const isAudio = target?.closest('[data-audio-button]')
+  const isActions = actionsContainerRef.value?.contains(target)
+  if (!isAudio && !isActions) return
   const card = cardRef.value
   if (!card) return
   card.draggable = false
