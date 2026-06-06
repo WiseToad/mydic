@@ -1692,7 +1692,7 @@ const showHiddenGroupCountLabel = computed(() => {
   const total = groupsStore.filteredTabs.length
   if (total === 0) return ''
   const visible = groupsStore.filteredTabs.filter(t => !t.hidden).length
-  return groupsStore.showHiddenGroups ? `${visible}/${total}` : `${visible}`
+  return groupsStore.showHiddenGroups && visible !== total ? `${visible}/${total}` : `${visible}`
 })
 
 async function toggleHideTabFromPopup(id: number) {
