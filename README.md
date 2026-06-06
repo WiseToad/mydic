@@ -22,6 +22,7 @@ Some non-obvious UI features:
 - Long-pressing a group tip in the Wordbook allows you to change it's name
 - You may drag group tips in the Wordbook to reorder them
 - Dragging a group tip onto some word moves this word into that group
+- Clicking the Wordbook title toggles search mode (similar to the search button nearby)
 - Long-pressing, or Ctrl-pressing an item in multi-select filters prevents their immediate dismissal
 - Long-pressing the "Hide all translations" button hides them globally, not only in active group
 - Entries in search results and find-similar popups are dimmed, if they're affected by filters

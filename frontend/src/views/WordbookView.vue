@@ -5,7 +5,16 @@
 
       <!-- Row 1: Wordbook title · [lang popup button] · toolbar buttons -->
       <div ref="headerRow1El" class="flex items-center gap-2 overflow-visible">
-        <h1 ref="titleEl" class="text-xl font-bold text-gray-100 shrink-0">Wordbook</h1>
+        <h1
+          ref="titleEl"
+          class="text-xl font-bold shrink-0 transition-colors select-none"
+          :class="'text-gray-100 hover:text-gray-300'"
+          title="Search wordbook"
+          @click="searchActive ? cancelSearch() : activateSearch()"
+        >Wordbook</h1>
+
+        <!-- Clickable gap between title and nav cluster -->
+        <div ref="titleGapEl" class="-mx-2 self-stretch w-2" @click="searchActive ? cancelSearch() : activateSearch()" />
 
         <!-- Search · Back · Forward — medium-density borderless cluster -->
         <div class="flex items-center gap-1 shrink-0">
@@ -54,7 +63,7 @@
         </div>
 
         <!-- Flex spacer (hidden when search active; search input is flex-1 instead) -->
-        <div v-if="!searchActive" class="flex-1 min-w-0" />
+        <div v-if="!searchActive" class="flex-1 min-w-0 cursor-pointer" @click="activateSearch()" />
 
         <!-- Search input + dropdown (shown when search mode is active) -->
         <div
@@ -1236,6 +1245,7 @@ const GROUP_NAME_MAX_LEN = 25
 // Row 1 refs
 const headerRow1El = ref<HTMLElement | null>(null)
 const titleEl = ref<HTMLElement | null>(null)
+const titleGapEl = ref<HTMLElement | null>(null)
 const toolbarEl = ref<HTMLElement | null>(null)
 // Nav history cluster: back-button ref + space-based visibility flags
 const navBackBtnEl = ref<HTMLElement | null>(null)
@@ -1773,7 +1783,7 @@ watch(() => uiStore.activeGroupId, () => {
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-const SEARCH_FIXED_WIDTH = 280  // px — fixed width of the search input box
+const SEARCH_FIXED_WIDTH = 250  // px — fixed width of the search input box
 const SEARCH_RESULT_LIMIT = 10  // max results returned by the search API
 
 const searchActive = ref(false)
@@ -1869,6 +1879,7 @@ function cancelSearch() {
 function onSearchOutsideClick(e: MouseEvent) {
   const target = e.target as Node | null
   if (!target || searchContainerEl.value?.contains(target)) return
+  if (titleEl.value?.contains(target) || titleGapEl.value?.contains(target)) return
   cancelSearch()
 }
 
