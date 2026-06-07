@@ -37,7 +37,7 @@
           <!-- Row 1: original word -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editSource" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Original" @input="onEditSourceInput" />
+              <input v-model="editSource" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Original" @input="onEditSourceInput" @keydown.enter="onEditEnterKey" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.source_lang }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -65,7 +65,7 @@
           <!-- Row 2: translation -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" />
+              <input v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" @keydown.enter="onEditEnterKey" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.target_lang }}</span>
             </div>
             <div class="flex items-center justify-end gap-1 shrink-0">
@@ -128,6 +128,7 @@ class="absolute top-full right-0 mt-1 z-30 bg-surface-900 border border-surface-
             class="input resize-none py-1 w-full"
             :class="editInputBgClass"
             placeholder="Notes (optional)"
+            @keydown.enter.prevent="onEditEnterKey"
           />
         </div>
       </template>
@@ -1054,6 +1055,11 @@ function cancelEdit() {
 
 function _onEditKeyDown(e: KeyboardEvent) {
   if (e.key === 'Escape') cancelEdit()
+}
+
+function onEditEnterKey() {
+  if (!editSource.value.trim() || !editTarget.value.trim()) return
+  saveEdit()
 }
 
 watch(editing, (isEditing) => {
