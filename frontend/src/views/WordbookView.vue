@@ -81,7 +81,7 @@
 
         <!-- Search input + dropdown (shown when search mode is active) -->
         <div
-          v-if="searchActive"
+          v-show="searchActive"
           ref="searchContainerEl"
           class="relative"
           :style="searchToolbarHidden
@@ -750,18 +750,6 @@
       @confirm="confirmDeleteTab"
     />
 
-    <!--
-      Android focus proxy: always in the DOM so focus() can be called
-      synchronously within a pointer event handler, before the real search
-      input is mounted via v-if.  position:fixed keeps it off-screen without
-      affecting layout.  aria-hidden + tabindex=-1 exclude it from a11y.
-    -->
-    <input
-      ref="proxyInputEl"
-      aria-hidden="true"
-      tabindex="-1"
-      style="position:fixed;top:-200%;left:-200%;width:1px;height:1px;opacity:0;pointer-events:none"
-    />
   </div>
 </template>
 
@@ -1828,7 +1816,6 @@ const searchLoading = ref(false)
 const searchDone = ref(false)
 const searchContainerEl = ref<HTMLElement | null>(null)
 const searchInputEl = ref<HTMLInputElement | null>(null)
-const proxyInputEl = ref<HTMLInputElement | null>(null)
 const searchResultsTableEl = ref<HTMLElement | null>(null)
 const searchToolbarHidden = ref(false)
 const focusedResultIndex = ref(-1)
@@ -1893,15 +1880,14 @@ function translateSearchQuery() {
   router.push({ name: 'translator' })
 }
 
-async function activateSearch() {
+function activateSearch() {
   showGroupsPopup.value = false
-  // On Android, focus() must be called synchronously within the touch event
-  // handler — awaiting nextTick() breaks the gesture context and the virtual
-  // keyboard never opens.  Focus a proxy input (always in DOM, off-screen) to
-  // claim the keyboard immediately, then transfer to the real input once it mounts.
-  proxyInputEl.value?.focus()
   searchActive.value = true
-  await nextTick()
+  // v-show hides the container with display:none, which blocks focus().
+  // Remove it synchronously — within the gesture handler — so Android opens
+  // the keyboard. Vue will clear display:none itself on the next flush
+  // (searchActive is now true), so this manual removal is safe to leave.
+  searchContainerEl.value?.style.removeProperty('display')
   searchInputEl.value?.focus()
   document.addEventListener('click', onSearchOutsideClick, true)
 }
