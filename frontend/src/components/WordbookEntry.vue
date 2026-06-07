@@ -65,7 +65,7 @@
           <!-- Row 2: translation -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" @keydown.enter="onEditEnterKey" />
+              <input ref="editTargetRef" v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" @keydown.enter="onEditEnterKey" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.target_lang }}</span>
             </div>
             <div class="flex items-center justify-end gap-1 shrink-0">
@@ -560,6 +560,7 @@ const editing = computed(
 
 const cardRef = ref<HTMLElement | null>(null)
 const overlayRef = ref<HTMLElement | null>(null)
+const editTargetRef = ref<HTMLInputElement | null>(null)
 
 // Restart the flash animation on whichever card elements exist. Uses a
 // synchronous reflow (void el.offsetWidth) instead of an async rAF so
@@ -962,6 +963,16 @@ async function startEditAutoScroll() {
   ensureEditVisible()
 }
 
+async function focusEditTarget() {
+  await nextTick()
+  await new Promise<void>((r) => requestAnimationFrame(() => r()))
+  const el = editTargetRef.value
+  if (!el) return
+  el.focus()
+  const len = el.value.length
+  el.setSelectionRange(len, len)
+}
+
 // ── Details panel close logic ────────────────────────────────────────────────
 // Listening on pointerup (capture) so scrolls (which fire pointercancel) never
 // dismiss the panel.  Also closes on dragstart from outside this entry's root.
@@ -1066,6 +1077,7 @@ watch(editing, (isEditing) => {
   if (isEditing) {
     document.addEventListener('keydown', _onEditKeyDown)
     startEditAutoScroll()
+    focusEditTarget()
   } else {
     document.removeEventListener('keydown', _onEditKeyDown)
   }
