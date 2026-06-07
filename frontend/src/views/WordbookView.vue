@@ -86,7 +86,7 @@
           class="relative"
           :style="searchToolbarHidden
             ? 'flex: 1 1 auto; min-width: 0'
-            : `flex: 0 0 ${SEARCH_FIXED_WIDTH}px`"
+            : `flex: 0 1 ${SEARCH_MAX_WIDTH}px; min-width: ${SEARCH_MIN_WIDTH}px`"
           @click.stop
         >
           <!-- Search input row with embedded togglers -->
@@ -1416,10 +1416,14 @@ function checkLangFit() {
 
   if (searchActive.value) {
     // In search mode: determine whether the toolbar must be hidden entirely.
-    // gap-2 between flex items = 8 px; account for two gaps (title|input, input|toolbar).
+    // gap-2 = 8 px. The row has 5 flex children when searching (title, titleGapEl,
+    // empty navCluster, searchBox, toolbar) → 4 inter-item gaps. titleGapEl and
+    // the empty navCluster are 0-width but still flex items, so they each consume
+    // one gap. Use SEARCH_MIN_WIDTH so the toolbar stays visible while the box
+    // shrinks between SEARCH_MIN_WIDTH and SEARCH_MAX_WIDTH.
     const ROW_GAP = 8
     searchToolbarHidden.value =
-      getContentWidth(title) + ROW_GAP + SEARCH_FIXED_WIDTH + ROW_GAP + effectiveToolbarW > containerWidth
+      getContentWidth(title) + 4 * ROW_GAP + SEARCH_MIN_WIDTH + effectiveToolbarW > containerWidth
   } else {
     searchToolbarHidden.value = false
   }
@@ -1806,7 +1810,8 @@ watch(() => uiStore.activeGroupId, () => {
 
 // ─── Search ──────────────────────────────────────────────────────────────────
 
-const SEARCH_FIXED_WIDTH = 250  // px — fixed width of the search input box
+const SEARCH_MAX_WIDTH = 300  // px — preferred (maximum) width of the search input box
+const SEARCH_MIN_WIDTH = 250  // px — minimum width before the toolbar is hidden
 const SEARCH_RESULT_LIMIT = 10  // max results returned by the search API
 
 const searchActive = ref(false)
