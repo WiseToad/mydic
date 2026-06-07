@@ -37,7 +37,7 @@
           <!-- Row 1: original word -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input v-model="editSource" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Original" @input="onEditSourceInput" @keydown.enter="onEditEnterKey" />
+              <input ref="editSourceRef" v-model="editSource" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Original" @input="onEditSourceInput" @keydown.enter="onEditEnterKey" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.source_lang }}</span>
             </div>
             <div class="flex items-center gap-1 shrink-0">
@@ -65,7 +65,7 @@
           <!-- Row 2: translation -->
           <div class="flex items-center gap-2">
             <div class="relative flex-1">
-              <input ref="editTargetRef" v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" @keydown.enter="onEditEnterKey" />
+              <input v-model="editTarget" class="input w-full py-1 pr-9" :class="editInputBgClass" placeholder="Translation" @input="onEditTargetInput" @keydown.enter="onEditEnterKey" />
               <span class="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-mono text-gray-500 pointer-events-none select-none">{{ entry.target_lang }}</span>
             </div>
             <div class="flex items-center justify-end gap-1 shrink-0">
@@ -560,7 +560,7 @@ const editing = computed(
 
 const cardRef = ref<HTMLElement | null>(null)
 const overlayRef = ref<HTMLElement | null>(null)
-const editTargetRef = ref<HTMLInputElement | null>(null)
+const editSourceRef = ref<HTMLInputElement | null>(null)
 
 // Restart the flash animation on whichever card elements exist. Uses a
 // synchronous reflow (void el.offsetWidth) instead of an async rAF so
@@ -963,10 +963,10 @@ async function startEditAutoScroll() {
   ensureEditVisible()
 }
 
-async function focusEditTarget() {
+async function focusEditSource() {
   await nextTick()
   await new Promise<void>((r) => requestAnimationFrame(() => r()))
-  const el = editTargetRef.value
+  const el = editSourceRef.value
   if (!el) return
   el.focus()
   const len = el.value.length
@@ -1077,7 +1077,7 @@ watch(editing, (isEditing) => {
   if (isEditing) {
     document.addEventListener('keydown', _onEditKeyDown)
     startEditAutoScroll()
-    focusEditTarget()
+    focusEditSource()
   } else {
     document.removeEventListener('keydown', _onEditKeyDown)
   }
