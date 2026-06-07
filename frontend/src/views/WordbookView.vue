@@ -10,7 +10,7 @@
           class="text-xl font-bold shrink-0 transition-colors select-none"
           :class="'text-gray-100 hover:text-gray-300'"
           :title="!searchActive && navHistoryCursor > 0 ? 'Toggle search · Hold to go back' : undefined"
-          @pointerdown="onTitlePointerDown"
+          @pointerdown.prevent="onTitlePointerDown"
           @pointerup="onTitlePointerUp"
           @pointerleave="onTitleCancel"
           @pointercancel="onTitleCancel"
@@ -22,7 +22,7 @@
         <div
           ref="titleGapEl"
           class="-mx-2 self-stretch w-2"
-          @pointerdown="onTitlePointerDown"
+          @pointerdown.prevent="onTitlePointerDown"
           @pointerup="onTitlePointerUp"
           @pointerleave="onTitleCancel"
           @pointercancel="onTitleCancel"
