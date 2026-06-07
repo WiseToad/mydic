@@ -8,14 +8,12 @@ Bugs:
 Features:
 - Add ability to select default voice in settings (e.g., mark a voice as default with checkmark)
 - Shuffle cards feature with undo toaster
-- Clicking in translator on some lexical provider result should pick that result into translation result as a new token; the translation result should become clickable after that to be able to remove tokens collected in such a way; tokens are separated by comma; add a retranslate button to revert to initial state - all of this needed to give the user an opportunity to prepare translated result before adding it into the wordbook
 
 Architectural:
+- Leverage Websockets to update UI on data change on other devices
 - Proactive speech generation for wordbook items by separate worker job
 - Search for correlations between word cards with llm using cached definitions
 - A voice repetitor, spelling the words from wordbook one-by-one and checking STT response from the user 
-- Leverage Websockets to update UI on data change on other devices
-- Implement Android app (the web-app already available)?
 
 Tests:
 - Cover all code with unit tests
@@ -36,7 +34,7 @@ Distant future:
 - Switch from mp3 to ogg Opus for tts cache storage in ~1–2 years (starting from 2026) when iOS 16+ reaches >99% adoption (to reduce compatibility issues)
 
 Questionable:
-- Multi-select wordbook entries for batch delete or for assigning a group or a color (not so demanded to be worth to complicate the code)
+- Multi-select wordbook entries for batch operations - delete, move to, assign color (not so demanded to be worth to complicate the code)
 - Leverage Kokoro TTS option of lozzy encoding immediately on pronunciation request (can increase response time)
 - Alternative voice on audio (by pressing Alt?), slow pronunciation (by pressing Ctrl? or by RMB) (poorly applicable on Android)
 - Batch import words into wordbook (not so demanded to be worth to complicate the code and workflow)
